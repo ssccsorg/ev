@@ -1,0 +1,17 @@
+[package]
+name = "ev"
+version = "0.1.0"
+edition = "2021"
+description = "exhaustive verification CLI for RISC‑V custom instructions"
+license = "Apache-2.0"
+repository = "https://github.com/ssccsorg/ev"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+anyhow = "1"
+tracing = "0.1"
+indicatif = "0.17"
+colored = "2"
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
