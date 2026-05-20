@@ -1,0 +1,137 @@
+name: Deploy Docs to GitHub Pages
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "docs/**/*.py"
+      - "docs/**/*.qmd"
+      - "docs/**/*.md"
+      - "docs/**/*.yml"
+      - "docs/**/*.txt"
+      - "docs/**/*.svg"
+      - "docs/**/*.bib"
+      - "docs/**/*.csl"
+      - "docs/**/*.c2pa_manifest.json"
+      - ".github/workflows/deploy-docs-ghpage.yml"
+      - "!docs/**/README.md"
+  workflow_dispatch:
+  repository_dispatch:
+    types: [publish-docs-image-complete]
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "docs/**/*.py"
+      - "docs/**/*.qmd"
+      - "docs/**/*.md"
+      - "docs/**/*.yml"
+      - "docs/**/*.txt"
+      - "docs/**/*.svg"
+      - "docs/**/*.bib"
+      - "docs/**/*.csl"
+      - "docs/**/*.c2pa_manifest.json"
+      - ".github/workflows/deploy-docs-ghpage.yml"
+      - "!docs/**/README.md"
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  packages: read
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Compute cache key
+        id: cache-key
+        run: |
+          cd ${{ github.workspace }}
+          find docs -type f \( -name "*.qmd" -o -name "*.md" -o -name "*.py" -o -name "*.txt" -o -name "*.yml" -o -name "*.svg" -o -name "*.bib" -o -name "*.csl" -o -name "*.c2pa_manifest.json" \) -not -path "*/_cached/*" -not -path "*/_site/*" | sort | xargs sha256sum | sha256sum | cut -d' ' -f1 > /tmp/cache_key.txt
+          echo "key=$(cat /tmp/cache_key.txt)" >> $GITHUB_OUTPUT
+
+      - name: Cache _cached directory
+        uses: actions/cache@v5
+        with:
+          path: _cached
+          key: ${{ runner.os }}-cached-${{ steps.cache-key.outputs.key }}
+          restore-keys: |
+            ${{ runner.os }}-cached-
+
+      - name: Cache _jupyter_cache directory
+        uses: actions/cache@v5
+        with:
+          path: _jupyter_cache
+          key: ${{ runner.os }}-jupyter-${{ steps.cache-key.outputs.key }}
+          restore-keys: |
+            ${{ runner.os }}-jupyter-
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull pre-built Docker image
+        run: docker pull ghcr.io/${{ github.repository }}-docs:latest
+
+      - name: Run documentation build
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/work \
+            -w /work \
+            -e QUARTO_PYTHON=python3 \
+            ghcr.io/${{ github.repository }}-docs:latest \
+            python docs/build.py --website
+
+      - name: Prepare Pages artifact
+        run: |
+          mkdir -p docs/_pages
+          cp -r docs/_site/. docs/_pages/
+
+      - name: Upload Pages artifact
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: docs/_pages
+
+      - name: Prepare agent artifact
+        run: |
+          mkdir -p _agent/docs
+          cp -r docs/_llms _agent/docs/
+
+      - name: Deploy to GitHub Pages
+        if: github.ref == 'refs/heads/main'
+        id: deployment
+        uses: actions/deploy-pages@v5
+
+      - name: Upload agent artifacts to R2-S3
+        if: ${{ github.ref == 'refs/heads/main' && github.actor != 'nektos/act' }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.CFR2_USR_API_S3_ACCID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CFR2_USR_API_S3_SECKEY }}
+        run: |
+          aws s3 sync _agent/docs s3://ssccs-nexus-af/ev/docs \
+            --endpoint-url ${{ secrets.CFR2_USR_API_HOST }} \
+            --delete
+        shell: bash
+
+      - name: Trigger Nexus Build
+        if: github.ref == 'refs/heads/main'
+        uses: peter-evans/repository-dispatch@v4
+        with:
+          token: ${{ secrets.SSCCS_NEXUS_ACTIONS_READWRITE_PAT }}
+          repository: ssccsorg/ssccs-nexus
+          event-type: ssccs-docs-agent-af
