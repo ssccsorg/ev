@@ -112,10 +112,12 @@ jobs:
           mkdir -p _agent/docs
           cp -r docs/_llms _agent/docs/
 
-      - name: Deploy to GitHub Pages
+      - name: Deploy to Cloudflare Pages
         if: github.ref == 'refs/heads/main'
-        id: deployment
-        uses: actions/deploy-pages@v5
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CFWORKERPAGE_EDIT }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CFACCOUNT_ID }}
+        run: npx wrangler pages deploy docs/_pages/ --project-name=ev-docs
 
       - name: Upload agent artifacts to R2-S3
         if: ${{ github.ref == 'refs/heads/main' && github.actor != 'nektos/act' }}
