@@ -83,18 +83,71 @@ digraph Position {
 """)
 ```
 
+## Vision: Let's Encrypt for RISC‑V
+
+RISC‑V's greatest asset is its openness. Anyone can build a processor. That promise is also its greatest vulnerability: can the resulting design be trusted? Every custom instruction, every pipeline decision, every hazard resolution must be verified, but today that verification is gated by expensive EDA tooling and deep domain expertise.
+
+ExaVerif answers this challenge by making verification a commodity — as accessible as obtaining an SSL certificate. The analogy is exact:
+
+| SSL/TLS | ExaVerif + C2PA |
+|:---|:---|
+| Let's Encrypt / VeriSign | SSCCS Foundation |
+| Domain ownership verification | Exhaustive RISC‑V design verification |
+| Certificate Signing Request | C2PA manifest (verification results + signing request) |
+| X.509 certificate issuance | C2PA signed certificate issuance |
+| Browser lock icon | "C2PA Verified" badge on RISC‑V core documentation |
+| HTTPS connection security | Design integrity guarantee |
+
+ExaVerif is the verification engine — the coreware. C2PA certificate issuance is a separate service built on top of it. This layering mirrors the SSCCS project model: the substrate grows as entities build on it.
+
+The mission is to transform RISC‑V verification from "is this design safe?" to "this design is C2PA certified" — just as Let's Encrypt transformed the web from "is this connection secure?" to "this connection is HTTPS."
+
 ## Business Model
 
-ExaVerif is distributed under an open‑core model. The CLI is open‑source (Apache 2.0) and free to use. Paid tiers provide advanced interpretation, collaboration features, and formal certification.
+Our initial focus is not monetization but establishing the technical and trust
+infrastructure that makes RISC‑V verification a commodity. The open‑core model
+separates public ecosystem propagation from private value capture.
 
-| Tier | Price | Scope |
+### Public Strategic Assets
+
+These assets are published openly to build community trust and accelerate adoption.
+They are the Let's Encrypt equivalent: free, accessible, and universally available.
+
+| Asset | Visibility | Role |
 |:---|:---|:---|
-| **ExaVerif CLI** | Free (Apache 2.0) | `ExaVerif check` — basic composition and evaluation |
-| **ExaVerif Pro** | draft | `--interpret` LLM analysis, history, blackboard access |
-| **ExaVerif Enterprise** | draft | Custom constraint templates, CI/CD integration, SLA |
-| **ExaVerif Certification** | draft | Signed verification certificate with on‑chain proof |
+| ExaVerif CLI (`ev`) | Public (Apache 2.0) | Core verification engine. Exhaustive constraint composition as a single binary. Anyone can install, run, and contribute. |
+| Technical concept document | Public | Ecosystem propagation. Spreads the Exhaustive Verification paradigm and invites collaboration. |
+| C2PA manifest specification | Public | Open standard for how verification results are structured and signed. |
+| Shared blackboard (Fact / Intent / Hint) | Public | Append‑only knowledge store. Every verification result becomes reusable knowledge for the entire ecosystem. |
 
-Certification pricing reflects the complexity of the module under verification — a single‑cycle integer XIF with two operands sits at the lower bound; a multi‑cycle vector accelerator with pipeline interactions and physical constraints sits at the upper bound. Each engagement produces a cryptographically signed audit report and, optionally, an on‑chain proof of verification.
+### Private Strategic Assets
+
+These assets are the Foundation's value‑capture layer. They convert the public
+infrastructure into sustainable revenue, but only after ecosystem validation
+confirms real demand.
+
+| Asset | Visibility | Role |
+|:---|:---|:---|
+| C2PA certificate issuance | Private (SSCCS Foundation) | Cryptographically signed verification certificates. Premium service for organizations that require tamper‑evident design proof. |
+| Regulation compliance templates | Private | ISO 26262, DO‑178C, ESA ESCC templates. High‑margin add‑on for safety‑critical industries. |
+| On‑chain proof (VPT) | Private | Bridges silicon verification truth to blockchain smart contracts. Enables DeFi‑style verification markets. |
+| Enterprise integration services | Private | CI/CD pipeline integration, custom constraint modeling, SLA. Delivered only to enterprise partners. |
+
+### Why This Structure
+
+This separation ensures that ExaVerif's technical vision propagates freely — like
+Let's Encrypt — while the high‑value services derived from it remain Foundation assets.
+It mirrors the SSCCS substrate model: the substrate grows as entities build on it,
+and every entity that deposits fact and profit strengthens the foundation for the next.
+
+### Future Monetization (Post-Validation)
+
+Paid tiers are designed but **activated only after two independent ecosystem
+partners provide positive validation**. Target pricing will reflect the
+value of each tier once demand is confirmed, ranging from individual‑use
+subscriptions for advanced interpretation features to enterprise‑grade
+compliance templates and per‑certificate fees for cryptographically signed
+C2PA verification certificates.
 
 ## Market Context
 
@@ -213,17 +266,88 @@ plt.show()
 
 The RISC‑V technology market is projected to grow from **$1.35B in 2025** to **$10.7B by 2031** at a **41.2% CAGR**. Verification accounts for roughly 30% of the broader EDA market, which reached **$19.22B in 2025**. Custom instruction extensions are a primary driver of RISC‑V adoption, and every custom instruction requires verification that existing tools cannot exhaustively provide.
 
+## Strategic Market Position
+
+ExaVerif addresses two distinct market vectors that complement each other in timing and margin profile.
+
+### Safety-Critical Certification
+
+Functional safety standards (ISO 26262 for automotive, DO‑178C for aviation, ESA ESCC for space) mandate rigorous evidence that a design is correct. ExaVerif's exhaustive verification naturally generates the complete coverage evidence that these standards require.
+
+- **Customer need:** RISC‑V designs in automotive, aerospace, and medical domains must demonstrate compliance. Current tooling requires complex EDA environments and produces human-readable reports that are difficult to audit.
+- **ExaVerif advantage:** A single YAML file produces a C2PA-signed certificate — a tamper-evident, machine-verifiable proof that every constraint combination has passed. This transforms months of certification prep into a single automated step.
+- **Competition:** Breker, LDRA, and AbsInt exist in this space but none offer automated cryptographic certification. ExaVerif occupies a white space: "certification-ready report as a service."
+- **Go-to-market:** Present at RISC‑V Summit Europe and DAC. Partner with OpenHW and PULP for reference implementations. Target early adopters in automotive Tier 1 suppliers.
+
+### Simulation and Continuous Verification SaaS
+
+As chip complexity grows, one-time verification is giving way to cloud-based, automated verification pipelines integrated into CI/CD workflows.
+
+- **Customer need:** Fabless semiconductor companies and embedded teams spend an estimated 60–80% of SoC project time on verification. They need to reduce this cost without sacrificing coverage.
+- **ExaVerif advantage:** Lightweight API that integrates with existing EDA tools (Verilator, Icarus Verilog) and CI/CD pipelines (GitHub Actions, GitLab CI). No complex environment setup — just an API call.
+- **Competition:** Breker and Imperas are moving toward system-level integration. RISC Zero offers a pay-per-cycle API model. The market is competitive but fragmented; ExaVerif's deterministic completeness is a differentiator.
+- **Go-to-market:** Publish a free GitHub Marketplace plugin to acquire developer mindshare quickly.
+
+### Strategy Evaluation
+
+| Dimension | Safety-Critical Certification | Simulation SaaS |
+|:---|:---|:---|
+| **Business model** | Per-certificate fee (high value) | Subscription + usage-based API (low barrier) |
+| **Market clarity** | Very clear, regulated demand | Expanding market, continuous need |
+| **Technical moat** | Unique "exhaustive + C2PA" capability | Ease of use and integration |
+| **Competition** | Moderate; niche white space exists | Highly competitive; brand matters |
+| **Revenue timeline** | Medium-term (3-6 months to first sale) | Short-term (immediate free tier adoption) |
+
+Both vectors converge on the same core: ExaVerif's deterministic verification engine. The SaaS tier builds community and brand; certification generates high-margin revenue from the same technology stack.
+
 ## Competitive Landscape
 
-| Tool | Approach | Limitation |
-|:---|:---|:---|
-| RISCV‑DV | Constrained‑random instruction generation | Statistical coverage; misses deterministic edge cases |
-| Breker SystemVIP | AI‑assisted test synthesis | Random seed‑based; commercial license required |
-| ImperasDV | Simulation‑based verification with RVVI | Requires commercial simulator; manual test writing |
-| VC Formal / Axiomise | Formal property verification | Complex setup; verifies specific properties only |
-| RiESCUE | Directed compliance testing | Limited to specific extensions; no combination generation |
+The RISC‑V verification market contains several established approaches, each with a distinct gap that ExaVerif fills.
 
-No existing tool performs exhaustive constraint composition. ExaVerif addresses this gap by generating every valid constraint combination and evaluating each deterministically.
+| Category | Tool / Vendor | Approach | Limitation |
+|:---|:---|:---|:---|
+| **Random simulation** | RISCV‑DV (Google) | Constrained-random instruction generation | Statistical coverage; misses deterministic edge cases |
+| **Random simulation** | Breker SystemVIP | AI-assisted test synthesis | Random seed-based; commercial license required |
+| **Formal verification** | OneSpin (Siemens EDA) | Mathematical property proving | Complex setup; verifies specific properties only |
+| **Formal verification** | Axiomise (formalISA) | Formal property verification | Requires deep formal expertise to operate |
+| **Simulation DV** | ImperasDV (Synopsys) | Simulation-based with RVVI standard | Requires commercial simulator; manual test writing |
+| **Compliance** | RISC‑V ACT | ISA compliance test suite | Limited to architectural conformance; no custom extension coverage |
+| **Cloud platform** | Vyoma UpTickPro | Cloud-based integrated verification | Verification still random/manual at core |
+| **AI debugging** | Vtool Cogita‑PRO | AI-assisted debug | Post-silicon debug; does not prevent verification gaps |
+
+**What no existing tool does:** exhaustive constraint composition. Every tool either samples statistically, verifies only specific properties, or requires manual test authoring. ExaVerif generates every valid constraint combination from a single YAML description and evaluates each one deterministically.
+
+Beyond technical capability, ExaVerif differs in kind: it treats verification results as cryptographic assets rather than transient log files. This distinction enables a certification layer that no competitor provides.
+
+## C2PA-Powered Certification
+
+The C2PA (Coalition for Content Provenance and Authenticity) standard cryptographically traces the origin and integrity of digital content. Originally designed for media (images, video, PDFs), its application to semiconductor design verification creates an entirely new category: **tamper-evident design certification.**
+
+### How It Works
+
+| Step | Action | Output |
+|:---|:---|:---|
+| 1 | `ev check --target my_xif.yaml` | Every constraint combination evaluated |
+| 2 | `ev certify --c2pa --target my_xif.yaml` | C2PA manifest generated with all scenarios and results |
+| 3 | SSCCS Foundation signs with private key | Cryptographically signed manifest |
+| 4 | `ev verify-certificate --file certificate.pdf` | Anyone verifies with the public key |
+
+The certificate embeds the complete verification trace — every constraint combination, its evaluation result, the execution environment hash, and a timestamp. Any subsequent modification to the design or the verification result invalidates the signature.
+
+### Market Positioning with C2PA
+
+| Capability | ExaVerif | ImperasDV | Breker | OneSpin |
+|:---|:---|:---|:---|:---|
+| Exhaustive verification | Full automation from YAML | Not supported | Partial | Partial |
+| C2PA certificate | Automatic generation and signing | Not supported | Not supported | Not supported |
+| Entry barrier | Very low (single CLI binary) | High (EDA required) | High (EDA required) | Very high |
+| Result reuse | Permanent on shared blackboard | One-time | One-time | One-time |
+
+### Why This Matters for the Ecosystem
+
+- **C2PA Foundation:** Gains a new domain — semiconductor design — extending the standard beyond media and documents.
+- **RISC‑V International:** Solves the trust problem inherent in an open ISA. "RISC‑V is now cryptographically verifiable" becomes a powerful adoption argument.
+- **Blockchain projects:** Real-world verification results become connectable to on-chain proofs. C2PA certificates bridge silicon truth and smart contract verification.
 
 ## Collaboration with the Ecosystem
 
@@ -231,6 +355,92 @@ ExaVerif is being developed as an independent product within the RISC‑V ecosys
 
 Collaboration is structured as a mutual exchange: partners provide domain expertise and access to real‑world XIF designs for validation; the ExaVerif project provides the tool, methodology, and certification infrastructure. All verification facts generated through collaboration are deposited on the shared blackboard, where they become reusable knowledge for the entire ecosystem.
 
+### Blockchain Ecosystem Synergy
+
+Several blockchain infrastructure projects face a foundational problem that ExaVerif solves: they need hardware-level trust but cannot build it themselves. ExaVerif provides the missing piece.
+
+| Project | Their mission | What ExaVerif provides |
+|:---|:---|:---|
+| RISC Zero | Universal zkVM for on-chain computation verification | Proof that the computation actually ran on correct silicon |
+| Succinct | Decentralized proof generation network | Assurance that proof generation ran on verified hardware |
+| Automata | TEE integrity on-chain | Proof that the TEE's RISC‑V core is itself trustworthy |
+| Locale | IoT sensor data verification before smart contract use | Certification that the data-originating MCU is trusted |
+
+Each of these projects needs "verification of verification" — a root of trust that ExaVerif uniquely supplies. This is not competition; it is ecological symbiosis. ExaVerif's verification certificates connect silicon truth to on-chain truth.
+
+### Related Research: Radiation-Tolerant Computing
+
+A parallel research track explores how the same XIF verification methodology extends to radiation-tolerant RISC‑V computing for space environments. Custom instructions verified by ExaVerif at design time can carry fault-tolerance policies into deployment. This work is documented separately in the [RISC‑V Space Computing report](/research/riscv_space).
+
+### What Makes This Possible Only on RISC‑V
+
+| Dimension | Proprietary ISA (x86 / ARM) | Open ISA (RISC‑V) |
+|:---|:---|:---|
+| Simulators | Vendor-proprietary (Intel SDE, ARM Fast Models) | Fully open source (Spike, QEMU, Renode) |
+| Extensibility | Vendor-permitted instructions only | Anyone can design custom instructions via XIF |
+| Verification transparency | Black-box; internal tooling required | Anyone can inspect algorithms and results |
+| Certification | Vendor-issued proprietary certs only | Third-party independent certification possible |
+
+Only RISC‑V's open infrastructure enables a third-party certification authority to exist. ExaVerif is the engine that makes that certification meaningful.
+
 ## Connection to the Substrate
 
 ExaVerif is an independent domain entity built on the shared substrate — a working demonstration of the model described in the [Project Model](/projects). Every verification run feeds the shared blackboard. A failure pattern discovered in one module becomes a hint for every other RISC‑V project. The product earns revenue; the substrate earns knowledge.
+
+```{python}
+#| label: fig-architecture
+#| fig-cap: "ExaVerif is the verification engine; C2PA certification and SaaS are services layered on top of the shared substrate."
+dot("""
+digraph Architecture {
+    rankdir=TB
+    node [shape=box, style=filled, fontname="Arial", fontsize=10]
+
+    Certification [label="C2PA Certificate Service\n(SSCCS Foundation)\nmanifest generation, signing, issuance", fillcolor="#D5F5E3"]
+    SaaS [label="Simulation SaaS\nsubscription + usage-based API\nCI/CD integration, regulation templates", fillcolor="#D5F5E3"]
+
+    Ev [label="ExaVerif (Coreware)\nexhaustive constraint composition\ndeterministic evaluation\nHTTP API & CLI", fillcolor="#D4E6F1"]
+
+    Substrate [label="SSCCS Substrate\nBlackboard (Fact / Intent / Hint)\nContract governance\nPublished primitives", fillcolor="#FADBD8"]
+
+    Certification -> Ev [style=dotted, dir=back]
+    SaaS -> Ev [style=dotted, dir=back]
+    Ev -> Substrate [style=dotted]
+}
+""")
+```
+
+## Roadmap
+
+The vision is realized in three phases, each building on the previous.
+
+### Phase 1: The Let's Encrypt Moment (2026)
+
+**Goal:** Establish the first open-source RISC‑V verification certification authority.
+
+- Release ExaVerif CLI as open source (Apache 2.0)
+- Integrate C2PA manifest generation and signing
+- Certify the first open-source RISC‑V core (OpenHW CORE-V) and publish the certificate
+- Deploy `ev verify-certificate` for public key verification
+- **Output:** A single binary that performs exhaustive verification and issues a verifiable certificate.
+
+### Phase 2: Standard Establishment (2027)
+
+**Goal:** Position ExaVerif as the reference verification standard within the RISC‑V ecosystem.
+
+- Propose ExaVerif + C2PA as a RISC‑V International standard track
+- Propose a "Semiconductor Design" working group to the C2PA Foundation
+- Launch regulation-specific compliance templates (ISO 26262, DO‑178C) as enterprise add-ons
+- Deploy on-chain proof of certification (VPT on Ethereum L2)
+- **Output:** Industry standard draft, blockchain registration prototype, working group proposal.
+
+### Phase 3: Ecosystem Maturity (2028+)
+
+**Goal:** Become the de facto verification infrastructure for all RISC‑V designs.
+
+- See adoption by regulatory bodies (TÜV, FDA) as a recognized certification method
+- Exceed 1,000 certificates issued annually
+- Expand certification model beyond RISC‑V to other processor architectures
+- Scale the SaaS platform to serve the full RISC‑V developer ecosystem
+- **Output:** Industry-specific templates, audit trail system, published certification track record.
+
+Each phase is designed to generate revenue independently — Phase 1 through Pro subscriptions and early certification engagements, Phase 2 through enterprise compliance templates and volume certification, Phase 3 through platform scale and ecosystem network effects.

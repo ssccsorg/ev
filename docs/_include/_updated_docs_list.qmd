@@ -1,0 +1,9 @@
+
+::: {tbl-colwidths="[20, 80]"}
+
+| Updated | Document |
+|----------|---------|
+| 2026-05-20 | [ExaVerif](/index.html) <sup style="background:#2c8;color:#fff;font-size:.65em;padding:0 .4em;border-radius:3px;">N</sup> |
+
+
+:::
