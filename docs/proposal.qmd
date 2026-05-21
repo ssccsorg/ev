@@ -49,7 +49,11 @@ The current verification tooling faces two persistent obstacles:
 
 ## What ExaVerif Does
 
-ExaVerif replaces random sampling with deterministic constraint composition. A developer describes the module's constraints in a YAML file. A single command generates every valid constraint combination, evaluates each one, and produces a complete pass/fail report.
+ExaVerif integrates three stages into a single pipeline.
+
+1. **Scenario generation.** A developer describes the module's constraints in a YAML file. ExaVerif generates every valid constraint combination automatically.
+2. **Verification execution.** Each combination is evaluated deterministically against pluggable backends (Spike, QEMU, Verilator). Results are collected as structured pass/fail records.
+3. **Knowledge base feedback.** All results are committed to a shared knowledge store consumed by [Nexus](https://docs.ssccs.org/projects/nexus), the autonomous research infrastructure. Failure patterns become training material; coverage gaps become research targets; verified modules become reusable reference points for the entire RISC-V ecosystem.
 
 ```bash
 ev check --target my_xif.yaml
@@ -66,13 +70,13 @@ The optional `--interpret` flag runs a lightweight LLM pass over failures and ex
 dot("""
 digraph VerificationLearningLoop {
     rankdir=LR
-    node [shape=box, style=filled, fontname="Arial", fontsize=10]
+    node [shape=box, style=filled, fontname="Arial", fontsize=10, margin=0.35]
 
     Ev [label="ExaVerif\n• Constraint evaluation\n• Failure pattern detection\n• Coverage gap identification", fillcolor="#D4E6F1"]
 
     Nexus [label="Knowledge Base\n• Fact accumulation\n• Pattern extraction\n• Hint generation", fillcolor="#FADBD8"]
 
-    Agent [label="Agentic Research Loop\n• Hypothesis generation\n• Constraint refinement\n• Strategy optimization", fillcolor="#D5F5E3"]
+    Agent [label="SSCCS Research-PoC Loop\n• Hypothesis generation\n• Constraint refinement\n• Strategy optimization", fillcolor="#D5F5E3"]
 
     Ev -> Nexus [label="verification results\nfailure traces\ncoverage data", style=solid]
     Nexus -> Agent [label="training material\naccumulated facts", style=solid]
