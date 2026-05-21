@@ -64,7 +64,7 @@ exclude:
   - "**/README.md"
   - "**/*.llms.md"
   - "**/llms.txt"
-  - "_proposal.qmd"
+  - "proposal.qmd"
 
   # Directory patterns (trailing slash indicates directory)
   - "**/_include/"
