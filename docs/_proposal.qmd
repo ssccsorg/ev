@@ -117,6 +117,27 @@ digraph Position {
 """)
 ```
 
+## Automated Issue Management
+
+A verification result that is filed away after review becomes stale the moment the
+codebase changes. ExaVerif treats every result as a permanent, queryable record.
+When a constraint combination fails, the failure is not merely logged — it becomes
+part of a structured knowledge store that other projects can query without human
+intervention.
+
+Existing tools produce reports that must be manually compared, triaged, and tracked
+across projects. ExaVerif records every pass and every failure alongside the exact
+constraint combination that produced it. When a developer runs `ev check` against a
+module, ExaVerif consults what the collective has already discovered about similar
+constraint patterns. A failure that was analysed once never needs to be diagnosed
+from scratch again.
+
+This shifts verification from a series of disconnected runs to a compounding
+knowledge loop. A team validating a new custom instruction benefits from every
+failure pattern that every other team has already encountered, resolved, and
+deposited. The tool does not merely report issues — it remembers them, and that
+memory grows with every use.
+
 ## Vision: Let's Encrypt for RISC‑V
 
 RISC‑V's greatest asset is its openness. Anyone can build a processor. That promise is also its greatest vulnerability: can the resulting design be trusted? Every custom instruction, every pipeline decision, every hazard resolution must be verified, but today that verification is gated by expensive EDA tooling and deep domain expertise.
