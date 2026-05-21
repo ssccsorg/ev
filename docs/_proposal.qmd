@@ -9,6 +9,8 @@ abstract: |
 ---
 
 ```{python}
+#| include: false
+#| context: local
 title_meta_items = {
     "html": [
         {"title": "Code", "link": "https://github.com/ssccsorg/ev", "content": "Github", "icon": "bi bi-link"},
@@ -46,6 +48,38 @@ ev certify --target my_xif.yaml --output certificate.pdf
 Internally, ExaVerif uses the Field Composition engine — a branchless, constant‑time verification kernel that has been internally validated via x86‑64 CI — to guarantee that every evaluation is deterministic. The same input always produces the same result, independent of random seeds or simulator state.
 
 The optional `--interpret` flag runs a lightweight LLM pass over failures and explains why each one occurred. All results are committed as immutable Fact records to the shared blackboard — a verifiable, append‑only knowledge store shared across the RISC‑V verification ecosystem. Once committed, these facts become reusable verification knowledge for any project.
+
+## How the Industry Verifies Custom Instructions
+
+Before examining why ExaVerif is different, it is worth understanding how verification teams approach custom instruction verification today. Each approach carries its own strengths, and each leaves specific gaps unfilled.
+
+### Scenario-Based Integration Testing
+
+Tools like Breker generate test scenarios using SystemVerilog, UVM, and PSS. Their modular FASTApps framework can target custom extensions as reusable verification components. These tools excel at complex SoC-level integration testing where real-world system behavior must be simulated.
+
+The burden falls on setup. UVM environments are expensive to build and maintain. PSS requires specialized knowledge that many RISC‑V teams lack. The randomness at the core of scenario generation means that deterministic edge cases can slip through — a particular operand combination that triggers a pipeline hazard might never be generated, and no log will report its absence.
+
+### Reference Model Comparison
+
+ImperasDV takes a different approach: it runs the RTL design and a golden reference model in lockstep, comparing results cycle by cycle. Custom instruction support is a recognized strength — the reference model can be modified to match the extension being verified.
+
+The limitation lies in the reference model itself. Updating it to match a new custom instruction takes time, and the verification remains simulation-bound. No matter how many cycles are compared, exhaustive coverage of the constraint space is not the goal — correctness relative to the model is, and the model may contain blind spots of its own.
+
+### Formal Verification
+
+OneSpin (Siemens EDA) applies mathematical proof techniques to achieve zero bug escapes. SystemVerilog Assertions (SVA) define properties that the design must satisfy, and the tool proves or disproves them exhaustively.
+
+This approach catches bugs that simulation never would. The trade-off is complexity. Setup demands deep formal expertise. Large designs hit capacity limits where proofs become computationally infeasible. The scope is typically narrow — specific properties are verified, not the full constraint space of a custom instruction.
+
+### Random and Automated Test Generation
+
+RiescueC and RISCOF represent the open-source end of the spectrum. A JSON configuration describes the extension, and random assembly test sequences are generated automatically. RISCOF compares results across simulators to detect discrepancies.
+
+The barrier to entry is low, which makes these tools popular for ISA compliance testing. The shortcoming is the same randomness that makes them accessible: coverage is statistical, not deterministic. A test that passes today may fail tomorrow with a different seed. A corner case that matters may never be randomly selected.
+
+### The Pattern Across All Approaches
+
+Every existing approach — whether commercial or open-source — shares one trait: **coverage is either statistical or scoped to specific properties.** None generates every valid constraint combination and evaluates each deterministically. This is the gap ExaVerif exists to fill.
 
 ## Why ExaVerif Is Different
 
