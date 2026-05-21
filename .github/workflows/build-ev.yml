@@ -1,0 +1,54 @@
+name: Build ev CLI
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "Cargo.*"
+      - "rust-toolchain*"
+      - ".github/workflows/build-ev.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "Cargo.*"
+      - "rust-toolchain*"
+      - ".github/workflows/build-ev.yml"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache dependencies
+        uses: swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Lint
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Test
+        run: cargo test --release
