@@ -3,7 +3,7 @@
 
 | Updated | Document |
 |----------|---------|
-| 2026-05-21 | [ExaVerif](/proposal.html) <sup style="background:#2c8;color:#fff;font-size:.65em;padding:0 .4em;border-radius:3px;">N</sup> |
+| 2026-05-21 | [Proposal](/proposal.html) <sup style="background:#2c8;color:#fff;font-size:.65em;padding:0 .4em;border-radius:3px;">N</sup> |
 | 2026-05-20 | [](/index.html) <sup style="background:#2c8;color:#fff;font-size:.65em;padding:0 .4em;border-radius:3px;">N</sup> |
 
 
