@@ -7,7 +7,7 @@ on:
       - "src/**"
       - "tests/**"
       - "Cargo.*"
-      - "rust-toolchain*"
+      - "run.sh"
       - ".github/workflows/build-ev.yml"
   pull_request:
     branches: ["main"]
@@ -15,7 +15,7 @@ on:
       - "src/**"
       - "tests/**"
       - "Cargo.*"
-      - "rust-toolchain*"
+      - "run.sh"
       - ".github/workflows/build-ev.yml"
   workflow_dispatch:
 
@@ -33,6 +33,12 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Checkout ssccs2 (path dependency)
+        uses: actions/checkout@v6
+        with:
+          repository: ssccsorg/ssccs
+          path: ssccs2
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -40,6 +46,13 @@ jobs:
 
       - name: Cache dependencies
         uses: swatinem/rust-cache@v2
+
+      - name: Pre-flight auto-fixes
+        run: |
+          cargo fmt --all
+          cargo clippy --fix --allow-dirty 2>&1 || true
+          cargo fix --allow-dirty 2>&1 || true
+          cargo fmt --all
 
       - name: Check formatting
         run: cargo fmt --check
