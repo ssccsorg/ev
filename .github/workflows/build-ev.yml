@@ -35,11 +35,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Checkout ssccs2 (path dependency)
+      - name: Checkout ssccs (path dependency)
         uses: actions/checkout@v6
         with:
           repository: ssccsorg/ssccs
-          path: ../ssccs2
+          path: ../ssccs
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -83,4 +83,4 @@ jobs:
       - name: Channel demo (ev ↔ SSCCS POC)
         run: |
           echo "=== channel demo ==="
-          ./scripts/demo-poc.sh
+          ./scripts/demo-ssccs-poc.sh
