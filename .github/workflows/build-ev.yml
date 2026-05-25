@@ -6,6 +6,7 @@ on:
     paths:
       - "src/**"
       - "tests/**"
+      - "scripts/**"
       - "Cargo.*"
       - "run.sh"
       - ".github/workflows/build-ev.yml"
@@ -14,6 +15,7 @@ on:
     paths:
       - "src/**"
       - "tests/**"
+      - "scripts/**"
       - "Cargo.*"
       - "run.sh"
       - ".github/workflows/build-ev.yml"
@@ -37,7 +39,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: ssccsorg/ssccs
-          path: ssccs2
+          path: ../ssccs2
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -65,3 +67,20 @@ jobs:
 
       - name: Test
         run: cargo test --release
+
+      - name: Verify (fixtures)
+        run: |
+          echo "=== all-pass fixture ==="
+          ./target/release/ev check --target tests/fixtures/all_pass.xif.yaml
+          echo ""
+          echo "=== mixed fixture (exit 1 expected) ==="
+          ./target/release/ev check --target tests/fixtures/sample.xif.yaml && exit 1 || true
+          echo "  exit 1: correct (84 of 96 fail eq constraint)"
+          echo ""
+          echo "=== json output ==="
+          ./target/release/ev check --target tests/fixtures/sample.xif.yaml --json | head -8
+
+      - name: Channel demo (ev ↔ SSCCS POC)
+        run: |
+          echo "=== channel demo ==="
+          ./scripts/demo-poc.sh
