@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 #
-# demo-poc.sh — Channel: ev ↔ SSCCS POC golden anchor cross-verification
+# demo-ssccs-poc.sh — Channel: ev ↔ SSCCS POC golden anchor cross-verification
 #
-# Clones ssccs2, extracts golden anchors from observe_full.S, generates
+# Clones ssccs, extracts golden anchors from observe_full.S, generates
 # YAML fixtures, and runs ev check to independently verify that the
 # exhaustive constraint engine produces the same results as the
 # hand-written RISC‑V assembly.
@@ -16,14 +16,14 @@ set -euo pipefail
 #   parity   — proj_parity on {2,3}         (2 segments)
 #
 # Usage:
-#   ./scripts/demo-poc.sh
+#   ./scripts/demo-ssccs-poc.sh
 #
 
 cd "$(dirname "$0")/.."
 
 TMPDIR="${TMPDIR:-/tmp}"
 WORKDIR="$TMPDIR/ev-demo-$$"
-SSCCS2_DIR="$WORKDIR/ssccs2"
+SSCCS_DIR="$WORKDIR/ssccs"
 PASSED=0
 FAILED=0
 
@@ -34,10 +34,10 @@ trap cleanup EXIT
 
 echo "=== Channel Demo: ev ↔ SSCCS POC ==="
 echo ""
-echo "Step 1: Cloning ssccs2..."
+echo "Step 1: Cloning ssccs..."
 mkdir -p "$WORKDIR"
-git clone --depth 1 https://github.com/ssccsorg/ssccs.git "$SSCCS2_DIR" 2>&1 | tail -1
-ASM="$SSCCS2_DIR/poc/baremetal_riscv/asm/observe_full.S"
+git clone --depth 1 https://github.com/ssccsorg/ssccs.git "$SSCCS_DIR" 2>&1 | tail -1
+ASM="$SSCCS_DIR/poc/baremetal_riscv/asm/observe_full.S"
 
 if [ ! -f "$ASM" ]; then
     echo "ERROR: observe_full.S not found"
