@@ -1,1 +1,105 @@
-ExaVerif: Exhaustive Verification for RISC‑V Custom Instructions
+---
+title: "ev — ExaVerif"
+subtitle: "Exhaustive Verification for RISC-V Custom Instructions"
+date: last-modified
+metadata-files:
+  - _include/format.html.yml
+abstract: |
+  ev (ExaVerif) is an open-source (Apache 2.0) exhaustive verification CLI for RISC-V custom instruction extensions. Given a YAML file describing instruction fields and their constraints, ev generates every valid combination, checks them deterministically, and reports which pass and which fail.
+---
+
+## Quick Start
+
+```bash
+# Full CI pipeline
+./run.sh
+
+# Channel demo: cross-verify against SSCCS POC golden anchors
+./run.sh --demo
+
+# Verify an instruction
+ev check --target tests/fixtures/all_pass.xif.yaml
+
+# Verify with cross-field constraint and JSON output
+ev check --target tests/fixtures/sample.xif.yaml --json
+```
+
+## Architecture
+
+```
+src/
+  main.rs         CLI (clap: check, certify)
+  spec.rs         VerificationSpec — format-agnostic internal IR
+  format.rs       FormatCapable trait
+  xif.rs          YamlFormat — RISCV-CTG-compatible YAML parser
+  compose.rs      Domain expansion (cartesian product)
+  evaluate.rs     Field construction + observe() pipeline
+  registry.rs     ConstraintRegistry + ProjectorRegistry (pluggable)
+  reporter.rs     ReporterCapable trait + TextReporter + JsonReporter
+```
+
+Capability-trait architecture (same pattern as [NeXus](https://docs.ssccs.org/projects/nexus/)):
+
+| Extension Point | How |
+|:---|:---|
+| New constraint | `ConstraintRegistry::register("name", builder)` |
+| New projector | `ProjectorRegistry::register("name", builder)` |
+| New input format | Implement `FormatCapable` |
+| New output format | Implement `ReporterCapable` |
+
+## Input Format
+
+ev uses YAML -- the industry standard in RISC-V verification (RISCV-CTG, RISCV-DV, RISCV-Config all use YAML). `.ss` (SSCCS native) is planned as a future format.
+
+```yaml
+target: simple_alu
+fields:
+  op_a:    { range: [0, 15] }
+  op_b:    { range: [0, 15] }
+  op_code: { values: [0, 1, 2, 3] }
+constraints:
+  - type: eq
+    axis_a: 0
+    axis_b: 1
+projector: { type: sum }
+```
+
+## Channel Demo
+
+ev independently cross-verifies against hand-written RISC-V assembly from the [SSCCS PoC](https://github.com/ssccsorg/ssccs):
+
+```
+narrow:   even ∧ range_0_10  →  2,REJECT,REJECT,10,REJECT  ✓
+broad:    no constraints     →  2,3,5,10,12                ✓
+sum3d_a:  (2,1,0)            →  3                          ✓
+sum3d_b:  (1,2,3)            →  6                          ✓
+parity:   {2,3}              →  0,1                        ✓
+```
+
+Same constraints, same results -- two completely independent paths: handwritten RISC-V assembly vs. Rust-based exhaustive verification.
+
+## Triple-Substrate Validation
+
+The SSCCS PoC that ev cross-verifies against implements the same constraint pipeline across three independent substrates:
+
+```
+RISC-V Assembly (.S)  ──┐
+                         ├── Golden Anchors (19, auto-verified by Python)
+SystemVerilog (.sv)    ──┤
+                         │
+Rust Fallback          ──┘
+```
+
+A Python script (`check_golden_anchors.py`) automatically verifies all 19 golden constants. Any change to the assembly forces a cross-substrate consistency check.
+
+## Ecosystem
+
+ev is part of the [SSCCS Foundation](https://ssccs.org) ecosystem:
+
+- **SSCCS PoC** ([github.com/ssccsorg/ssccs](https://github.com/ssccsorg/ssccs)) -- Field Composition engine, Scheme abstraction layer, 18 crates
+- **NeXus** ([docs.ssccs.org/projects/nexus](https://docs.ssccs.org/projects/nexus/)) -- OODA loop orchestration engine
+- **ev (ExaVerif)** ([github.com/ssccsorg/ev](https://github.com/ssccsorg/ev)) -- exhaustive verification CLI (this project)
+
+## License
+
+Apache 2.0. Copyright 2026 [SSCCS Foundation](https://ssccs.org).
