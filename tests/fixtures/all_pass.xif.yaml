@@ -1,0 +1,10 @@
+target: simple_alu
+fields:
+  op_a:
+    range: [0, 15]
+  op_b:
+    range: [0, 15]
+  op_code:
+    values: [0, 1, 2, 3]
+projector:
+  type: sum
