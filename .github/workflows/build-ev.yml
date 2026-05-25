@@ -39,7 +39,10 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: ssccsorg/ssccs
-          path: ../ssccs
+          path: _ssccs
+
+      - name: Move ssccs into place for Cargo path dependency
+        run: mv _ssccs ../ssccs
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -83,4 +86,4 @@ jobs:
       - name: Channel demo (ev ↔ SSCCS POC)
         run: |
           echo "=== channel demo ==="
-          ./scripts/demo-ssccs-poc.sh
+          ./scripts/demo-poc.sh
