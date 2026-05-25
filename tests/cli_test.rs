@@ -25,6 +25,27 @@ fn certify_help_succeeds() {
 }
 
 #[test]
+fn check_json_flag_succeeds() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("check")
+        .arg("--target")
+        .arg("tests/fixtures/sample.xif.yaml")
+        .arg("--json")
+        .output()
+        .expect("failed to run ev check --json");
+    assert!(output.status.success(), "ev check --json should exit 0");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("\"passed\": 96"),
+        "json output should report 96 passed"
+    );
+    assert!(
+        stdout.contains("\"field_order\""),
+        "json output should include field_order"
+    );
+}
+
+#[test]
 fn version_flag_succeeds() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("--version")
