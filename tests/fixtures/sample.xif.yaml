@@ -9,3 +9,9 @@ fields:
     values: [2, 3, 4]
   hazard_bypass:
     values: [true, false]
+constraints:
+  - type: eq
+    axis_a: 0
+    axis_b: 1
+projector:
+  type: sum

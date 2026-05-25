@@ -1,9 +1,15 @@
 mod compose;
 mod evaluate;
-mod report;
+mod format;
+mod registry;
+mod reporter;
+mod spec;
 mod xif;
 
 use clap::{Parser, Subcommand};
+use registry::ConstraintRegistry;
+use registry::ProjectorRegistry;
+use reporter::{JsonReporter, ReporterCapable, TextReporter};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -58,16 +64,30 @@ fn main() -> anyhow::Result<()> {
                 anyhow::bail!("--interpret is not yet implemented");
             }
 
-            let doc = xif::XifDocument::from_path(&target)?;
-            let combinations = compose::expand_all(&doc);
-            let evaluations = evaluate::evaluate_all(&doc, combinations);
+            // Resolve input format by extension.
+            let spec = spec::VerificationSpec::from_yaml(&target)?;
 
-            let all_passed = if json {
-                let names: Vec<&str> = doc.field_names();
-                report::report_json(&doc.target, &names, &evaluations)
+            // Default registries — extensible via plugin system in future phases.
+            let constraint_registry = ConstraintRegistry::default();
+            let projector_registry = ProjectorRegistry::default();
+
+            let combinations = compose::expand_all(&spec);
+            let evaluations = evaluate::evaluate_all(
+                &spec,
+                combinations,
+                &constraint_registry,
+                &projector_registry,
+            );
+
+            let reporter: Box<dyn ReporterCapable> = if json {
+                Box::new(JsonReporter)
             } else {
-                report::report_text(&doc.target, &evaluations)
+                Box::new(TextReporter)
             };
+
+            let field_order: Vec<String> = spec.fields.keys().cloned().collect();
+
+            let all_passed = reporter.report(&spec.target, &field_order, &evaluations);
 
             if !all_passed {
                 std::process::exit(1);
