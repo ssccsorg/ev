@@ -25,6 +25,30 @@ fn certify_help_succeeds() {
 }
 
 #[test]
+fn check_json_flag_produces_valid_output() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("check")
+        .arg("--target")
+        .arg("tests/fixtures/sample.xif.yaml")
+        .arg("--json")
+        .output()
+        .expect("failed to run ev check --json");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("\"passed\": 12"),
+        "json output should report 12 passed (eq constraint filters to 12)"
+    );
+    assert!(
+        stdout.contains("\"field_order\""),
+        "json output should include field_order"
+    );
+    assert!(
+        stdout.contains("\"failed\": 84"),
+        "json output should report 84 failed"
+    );
+}
+
+#[test]
 fn version_flag_succeeds() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("--version")

@@ -1,10 +1,22 @@
+mod compose;
+mod evaluate;
+mod format;
+mod registry;
+mod reporter;
+mod spec;
+mod xif;
+
 use clap::{Parser, Subcommand};
+use registry::ConstraintRegistry;
+use registry::ProjectorRegistry;
+use reporter::{JsonReporter, ReporterCapable, TextReporter};
+use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(
     name = "ev",
     version,
-    about = "Exhaustive verification for RISC-V custom instructions"
+    about = "Exhaustive verification for custom instruction extensions"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -13,11 +25,15 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Verify a module against its constraint specification
+    /// Verify an instruction against its field specification
     Check {
-        /// Path to the YAML constraint file
+        /// Path to the YAML constraint file (XIF format)
         #[arg(short, long)]
-        target: String,
+        target: PathBuf,
+
+        /// Output results as JSON instead of text
+        #[arg(long)]
+        json: bool,
 
         /// Explain failures in natural language via LLM
         #[arg(long)]
@@ -27,9 +43,9 @@ enum Commands {
     Certify {
         /// Path to the YAML constraint file
         #[arg(short, long)]
-        target: String,
+        target: PathBuf,
 
-        /// Output path for the certificate PDF
+        /// Output path for the certificate
         #[arg(short, long)]
         output: Option<String>,
     },
@@ -39,15 +55,48 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Check { target, interpret } => {
-            println!("ev check --target {target}");
+        Commands::Check {
+            target,
+            json,
+            interpret,
+        } => {
             if interpret {
-                println!("  (--interpret enabled)");
+                anyhow::bail!("--interpret is not yet implemented");
+            }
+
+            // Resolve input format by extension.
+            let spec = spec::VerificationSpec::from_yaml(&target)?;
+
+            // Default registries — extensible via plugin system in future phases.
+            let constraint_registry = ConstraintRegistry::default();
+            let projector_registry = ProjectorRegistry::default();
+
+            let combinations = compose::expand_all(&spec);
+            let evaluations = evaluate::evaluate_all(
+                &spec,
+                combinations,
+                &constraint_registry,
+                &projector_registry,
+            );
+
+            let reporter: Box<dyn ReporterCapable> = if json {
+                Box::new(JsonReporter)
+            } else {
+                Box::new(TextReporter)
+            };
+
+            let field_order: Vec<String> = spec.fields.keys().cloned().collect();
+
+            let all_passed = reporter.report(&spec.target, &field_order, &evaluations);
+
+            if !all_passed {
+                std::process::exit(1);
             }
         }
         Commands::Certify { target, output } => {
             let path = output.unwrap_or_else(|| "certificate.pdf".to_string());
-            println!("ev certify --target {target} --output {path}");
+            println!("ev certify --target {} --output {}", target.display(), path);
+            anyhow::bail!("certify is not yet implemented");
         }
     }
 

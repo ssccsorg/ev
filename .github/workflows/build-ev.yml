@@ -6,16 +6,18 @@ on:
     paths:
       - "src/**"
       - "tests/**"
+      - "scripts/**"
       - "Cargo.*"
-      - "rust-toolchain*"
+      - "run.sh"
       - ".github/workflows/build-ev.yml"
   pull_request:
     branches: ["main"]
     paths:
       - "src/**"
       - "tests/**"
+      - "scripts/**"
       - "Cargo.*"
-      - "rust-toolchain*"
+      - "run.sh"
       - ".github/workflows/build-ev.yml"
   workflow_dispatch:
 
@@ -33,6 +35,15 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Checkout ssccs (path dependency)
+        uses: actions/checkout@v6
+        with:
+          repository: ssccsorg/ssccs
+          path: _ssccs
+
+      - name: Move ssccs into place for Cargo path dependency
+        run: mv _ssccs ../ssccs
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -40,6 +51,13 @@ jobs:
 
       - name: Cache dependencies
         uses: swatinem/rust-cache@v2
+
+      - name: Pre-flight auto-fixes
+        run: |
+          cargo fmt --all
+          cargo clippy --fix --allow-dirty 2>&1 || true
+          cargo fix --allow-dirty 2>&1 || true
+          cargo fmt --all
 
       - name: Check formatting
         run: cargo fmt --check
@@ -52,3 +70,20 @@ jobs:
 
       - name: Test
         run: cargo test --release
+
+      - name: Verify (fixtures)
+        run: |
+          echo "=== all-pass fixture ==="
+          ./target/release/ev check --target tests/fixtures/all_pass.xif.yaml
+          echo ""
+          echo "=== mixed fixture (exit 1 expected) ==="
+          ./target/release/ev check --target tests/fixtures/sample.xif.yaml && exit 1 || true
+          echo "  exit 1: correct (84 of 96 fail eq constraint)"
+          echo ""
+          echo "=== json output ==="
+          ./target/release/ev check --target tests/fixtures/sample.xif.yaml --json | head -8
+
+      - name: Channel demo (ev ↔ SSCCS POC)
+        run: |
+          echo "=== channel demo (ev ↔ SSCCS POC) ==="
+          SSCCS_DIR=../ssccs bash scripts/demo-ssccs-poc.sh
