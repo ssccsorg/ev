@@ -3,10 +3,10 @@ set -euo pipefail
 #
 # demo-ssccs-poc.sh — Channel: ev ↔ SSCCS POC golden anchor cross-verification
 #
-# Clones ssccs, extracts golden anchors from observe_full.S, generates
-# YAML fixtures, and runs ev check to independently verify that the
-# exhaustive constraint engine produces the same results as the
-# hand-written RISC‑V assembly.
+# Clones ssccs (or uses existing SSCCS_DIR), extracts golden anchors from
+# observe_full.S, generates YAML fixtures, and runs ev check to independently
+# verify that the exhaustive constraint engine produces the same results as
+# the hand-written RISC‑V assembly.
 #
 # Channels verified:
 #   narrow   — even ∧ range_0_10, proj_id  (5 segments, 2 pass)
@@ -17,30 +17,38 @@ set -euo pipefail
 #
 # Usage:
 #   ./scripts/demo-ssccs-poc.sh
+#   SSCCS_DIR=../ssccs bash scripts/demo-ssccs-poc.sh  (skip clone)
 #
 
 cd "$(dirname "$0")/.."
 
-TMPDIR="${TMPDIR:-/tmp}"
-WORKDIR="$TMPDIR/ev-demo-$$"
-SSCCS_DIR="$WORKDIR/ssccs"
 PASSED=0
 FAILED=0
 
-cleanup() { rm -rf "$WORKDIR"; }
-trap cleanup EXIT
+if [ -z "${SSCCS_DIR:-}" ]; then
+    TMPDIR="${TMPDIR:-/tmp}"
+    WORKDIR="$TMPDIR/ev-demo-$$"
+    SRCDIR="$WORKDIR/ssccs"
+    cleanup() { rm -rf "$WORKDIR"; }
+    trap cleanup EXIT
+    echo "=== Channel Demo: ev ↔ SSCCS POC ==="
+    echo ""
+    echo "Step 1: Cloning ssccs..."
+    mkdir -p "$WORKDIR"
+    git clone --depth 1 https://github.com/ssccsorg/ssccs.git "$SRCDIR" 2>&1 | tail -1
+    YAML_DIR="$WORKDIR/fixtures"
+else
+    SRCDIR="$SSCCS_DIR"
+    YAML_DIR="${SSCCS_DIR}-fixtures"
+    echo "=== Channel Demo: ev ↔ SSCCS POC ==="
+    echo ""
+    echo "Step 1: Using existing ssccs at $SSCCS_DIR"
+fi
 
-# ── Step 1: Clone ssccs2 ──────────────────────────────────────────────
-
-echo "=== Channel Demo: ev ↔ SSCCS POC ==="
-echo ""
-echo "Step 1: Cloning ssccs..."
-mkdir -p "$WORKDIR"
-git clone --depth 1 https://github.com/ssccsorg/ssccs.git "$SSCCS_DIR" 2>&1 | tail -1
-ASM="$SSCCS_DIR/poc/baremetal_riscv/asm/observe_full.S"
+ASM="$SRCDIR/poc/baremetal_riscv/asm/observe_full.S"
 
 if [ ! -f "$ASM" ]; then
-    echo "ERROR: observe_full.S not found"
+    echo "ERROR: observe_full.S not found at $ASM"
     exit 1
 fi
 echo "  ✓ cloned"
@@ -71,7 +79,6 @@ echo ""
 
 # ── Step 3: Generate YAML fixtures ────────────────────────────────────
 
-YAML_DIR="$WORKDIR/fixtures"
 mkdir -p "$YAML_DIR"
 IFS=',' read -ra SEGS <<< "$SEGMENTS"
 

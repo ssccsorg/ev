@@ -142,7 +142,7 @@ case $MODE in
         ;;
     demo)
         echo "ev — channel demo mode"
-        exec ./scripts/demo-poc.sh
+        exec bash scripts/demo-ssccs-poc.sh
         ;;
     all)
         echo "ev CI (local)"

@@ -85,5 +85,5 @@ jobs:
 
       - name: Channel demo (ev ↔ SSCCS POC)
         run: |
-          echo "=== channel demo ==="
-          ./scripts/demo-poc.sh
+          echo "=== channel demo (ev ↔ SSCCS POC) ==="
+          SSCCS_DIR=../ssccs bash scripts/demo-ssccs-poc.sh
