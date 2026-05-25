@@ -1,48 +1,113 @@
 # ev — ExaVerif
 
-Exhaustive verification CLI for RISC-V custom instructions.
+Exhaustive verification CLI for RISC‑V custom instruction extensions.
+Apache 2.0.
 
-## Prerequisites
+## What It Does
 
-- Rust 1.85+ (install via [rustup](https://rustup.rs/))
+Given a YAML file describing instruction fields and constraints, `ev` generates
+every valid combination, checks them against the constraint space, and reports
+which pass and which fail — deterministically.
+
+```
+YAML → Domain Expansion → Field.build() → observe() → Report
+```
 
 ## Quick Start
 
 ```bash
-# Build
-cargo build --release
-
-# Run
-ev check --target my_xif.yaml
-ev certify --target my_xif.yaml --output certificate.pdf
-
-# Test
-cargo test --release
-
-# Lint and format
-cargo fmt --check
-cargo clippy --all-targets -- -D warnings
+./run.sh                  # Full CI pipeline (fmt → clippy → test → verify)
+./run.sh --demo           # Channel demo: cross-verify SSCCS POC golden anchors
+./run.sh --check          # fmt + check only
 ```
 
-Or use the Makefile:
+Or step-by-step:
 
 ```bash
-make build
-make test
-make check  # fmt + clippy + build + test
+cargo build --release
+ev check --target tests/fixtures/all_pass.xif.yaml
+ev check --target tests/fixtures/sample.xif.yaml --json
+cargo test --release
 ```
 
-## Project Structure
+## Input Format
+
+```yaml
+target: simple_alu
+fields:
+  op_a:
+    range: [0, 15]
+  op_b:
+    range: [0, 15]
+  op_code:
+    values: [0, 1, 2, 3]
+projector:
+  type: sum
+```
+
+Optional cross-field constraints:
+
+```yaml
+constraints:
+  - type: eq
+    axis_a: 0
+    axis_b: 1       # op_a must equal op_b
+```
+
+Built-in constraint types: `range`, `even`, `eq`.
+Built-in projector types: `sum`, `identity`, `parity`.
+Extensible via `ConstraintRegistry` and `ProjectorRegistry`.
+
+## Channel Demo
+
+`./run.sh --demo` clones `ssccsorg/ssccs`, extracts golden anchors from
+hand-written RISC‑V assembly (`observe_full.S`), and independently verifies
+them through ev's exhaustive constraint engine:
 
 ```
-src/main.rs          CLI entry point (clap-based subcommands)
-tests/cli_test.rs    Integration tests for CLI interface
-docs/                Documentation (Quarto website)
+narrow:   even ∧ range_0_10  →  2,REJECT,REJECT,10,REJECT  ✓
+broad:    no constraints     →  2,3,5,10,12                ✓
+sum3d_a:  (2,1,0)            →  3                          ✓
+sum3d_b:  (1,2,3)            →  6                          ✓
+parity:   {2,3}              →  0,1                        ✓
 ```
 
-## CI
+Same constraints, same results — two completely independent paths: handwritten
+RISC‑V assembly vs. Rust-based exhaustive verification.
 
-Two workflows:
+## Architecture
 
-- `build-ev.yml` — Rust build, lint, format, test on push/PR to main
-- Documentation workflows — build and deploy docs site
+```
+src/
+  main.rs         CLI (clap: check, certify)
+  spec.rs         VerificationSpec — format-agnostic internal IR
+  format.rs       FormatCapable trait
+  xif.rs          YamlFormat — RISCV-CTG-compatible YAML parser
+  compose.rs      Domain expansion (cartesian product)
+  evaluate.rs     Field construction + observe() pipeline
+  registry.rs     ConstraintRegistry + ProjectorRegistry (pluggable)
+  reporter.rs     ReporterCapable trait + TextReporter + JsonReporter
+tests/
+  fixtures/       all_pass.xif.yaml, sample.xif.yaml
+scripts/
+  demo-poc.sh     Channel demo: ev ↔ SSCCS POC golden anchor verification
+```
+
+Capability-trait architecture (same pattern as Nexus):
+
+| Extension point | How to add |
+|:---|:---|
+| New constraint | `ConstraintRegistry::register("name", builder)` |
+| New projector | `ProjectorRegistry::register("name", builder)` |
+| New input format | Implement `FormatCapable` |
+| New output format | Implement `ReporterCapable` |
+| New channel | Add script to `scripts/` |
+
+## Prerequisites
+
+- Rust 1.85+ ([rustup](https://rustup.rs/))
+- Python 3 (for channel demo golden anchor parsing)
+
+## License
+
+Apache 2.0 — see [LICENSE](LICENSE).
