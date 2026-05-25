@@ -20,6 +20,7 @@ set -euo pipefail
 #   ./run.sh --clippy     # full lint cycle (fix → fmt → clippy)
 #   ./run.sh --test       # fmt + test + verify
 #   ./run.sh --verify     # run ev check against fixtures only
+#   ./run.sh --demo       # channel demo: ev ↔ SSCCS POC golden anchors
 #
 
 cd "$(dirname "$0")"
@@ -32,6 +33,7 @@ while [[ "$#" -gt 0 ]]; do
         --clippy) MODE="clippy" ;;
         --test)   MODE="test" ;;
         --verify) MODE="verify" ;;
+        --demo)   MODE="demo" ;;
         --help|-h)
             echo "Usage: $0 [OPTION]"
             echo "  (no arg)   Full pipeline (fmt → fix → clippy → test → verify)"
@@ -39,6 +41,7 @@ while [[ "$#" -gt 0 ]]; do
             echo "  --clippy   Full lint cycle (fix → fmt → clippy)"
             echo "  --test     fmt + test + verify"
             echo "  --verify   Run ev check against sample fixtures"
+            echo "  --demo     Channel demo: ev ↔ SSCCS POC golden anchors"
             exit 0
             ;;
         *) echo "Unknown: $1"; echo "Usage: $0 [--check|--clippy|--test|--verify]"; exit 1 ;;
@@ -136,6 +139,10 @@ case $MODE in
         run_verify
         echo ""
         echo "Verify passed."
+        ;;
+    demo)
+        echo "ev — channel demo mode"
+        exec ./scripts/demo-poc.sh
         ;;
     all)
         echo "ev CI (local)"
