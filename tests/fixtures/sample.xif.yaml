@@ -1,0 +1,11 @@
+target: CVA6_XIF_Accelerator
+fields:
+  operand_a:
+    range: [0, 7]
+    alignment: 2
+  operand_b:
+    range: [0, 3]
+  pipeline_depth:
+    values: [2, 3, 4]
+  hazard_bypass:
+    values: [true, false]
