@@ -1,15 +1,16 @@
 //! Domain expansion — generates all constraint combinations from field definitions.
 //!
 //! Each combination is a coordinate vector (one value per field) forming the
-//! cartesian product of all field domains.
+//! cartesian product of all field domains. Format-agnostic — works with any
+//! VerificationSpec regardless of input format.
 
-use crate::xif::XifDocument;
+use crate::spec::VerificationSpec;
 use ssccs_core::{Coordinates, Segment};
 
 /// A single constraint combination — one coordinate in the verification space.
 #[derive(Debug, Clone)]
 pub struct Combination {
-    /// Field values in the same order as `field_names()`.
+    /// Field values in the same order as spec.fields.keys().
     pub values: Vec<i64>,
     /// Corresponding coordinate in the abstract space.
     pub coordinates: Coordinates,
@@ -19,14 +20,14 @@ pub struct Combination {
 
 /// Expand all field domains into the full cartesian product.
 ///
-/// Returns combinations in deterministic order (lexicographic by field name,
-/// then by value).
-pub fn expand_all(doc: &XifDocument) -> Vec<Combination> {
-    let names = doc.field_names();
+/// Returns combinations in deterministic order (sorted by field name,
+/// then lexicographic by value).
+pub fn expand_all(spec: &VerificationSpec) -> Vec<Combination> {
+    let names: Vec<&String> = spec.fields.keys().collect();
     let domains: Vec<Vec<i64>> = names
         .iter()
         .map(|name| {
-            let def = doc.fields.get(*name).expect("field must exist");
+            let def = spec.fields.get(*name).expect("field must exist");
             def.expand()
         })
         .collect();
@@ -38,7 +39,7 @@ pub fn expand_all(doc: &XifDocument) -> Vec<Combination> {
     let total: usize = domains.iter().map(|d| d.len()).product();
     let mut combinations = Vec::with_capacity(total);
 
-    // Iterative cartesian product using index tracking.
+    // Iterative cartesian product using index tracking (odometer).
     let mut indices = vec![0usize; domains.len()];
     loop {
         let values: Vec<i64> = indices
@@ -61,7 +62,6 @@ pub fn expand_all(doc: &XifDocument) -> Vec<Combination> {
                 indices[i] += 1;
                 if indices[i] >= domains[i].len() {
                     indices[i] = 0;
-                    carry = true;
                 } else {
                     carry = false;
                 }

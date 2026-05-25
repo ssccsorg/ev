@@ -1,86 +1,101 @@
-//! XIF (eXhaustive Instruction Format) — YAML schema and parser.
+//! XIF (eXhaustive Instruction Format) — YAML parser implementing FormatCapable.
 //!
 //! XIF is the industry-standard YAML input format for ev, compatible with
 //! existing RISC-V verification workflows (RISCV-CTG, RISCV-DV, RISCV-Config).
-//! It describes instruction fields, their domains, and optional cross-field
-//! constraints for exhaustive verification.
 
+use crate::format::FormatCapable;
+use crate::spec::{ConstraintSpec, FieldSpec, ProjectorSpec, VerificationSpec};
 use anyhow::Context;
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::path::Path;
 
-/// Top-level XIF document.
-#[derive(Debug, Deserialize)]
-pub struct XifDocument {
-    /// Target instruction or accelerator name.
-    #[serde(default)]
-    pub target: String,
-    /// Field definitions — each field maps to one dimension.
-    pub fields: BTreeMap<String, FieldDef>,
+/// YAML format parser — implements FormatCapable.
+pub struct YamlFormat;
+
+impl FormatCapable for YamlFormat {
+    fn parse(&self, path: &Path) -> anyhow::Result<VerificationSpec> {
+        let content = std::fs::read_to_string(path).context("Failed to read YAML file")?;
+        let raw: RawXif = serde_yaml::from_str(&content).context("Failed to parse YAML")?;
+        Ok(raw.into_spec())
+    }
 }
 
-/// Definition of a single instruction field.
+// ── Raw deserialization structs ──
+
+#[derive(Debug, Deserialize)]
+struct RawXif {
+    #[serde(default)]
+    target: String,
+    #[serde(default)]
+    fields: BTreeMap<String, RawField>,
+    #[serde(default)]
+    constraints: Vec<ConstraintSpec>,
+    #[serde(default = "default_projector")]
+    projector: ProjectorSpec,
+}
+
+fn default_projector() -> ProjectorSpec {
+    ProjectorSpec::Sum
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
-pub enum FieldDef {
-    /// Contiguous integer range.
+enum RawField {
     Range {
         range: [i64; 2],
         #[serde(default)]
         alignment: Option<i64>,
     },
-    /// Explicit discrete values (integers or booleans).
-    Values { values: Vec<serde_yaml::Value> },
+    Values {
+        values: Vec<serde_yaml::Value>,
+    },
 }
 
-impl FieldDef {
-    /// Expand this field definition into all possible integer values.
-    pub fn expand(&self) -> Vec<i64> {
-        match self {
-            FieldDef::Range { range, alignment } => {
-                let align = alignment.unwrap_or(1);
-                let start = range[0];
-                let end = range[1];
-                (start..=end).filter(|v| v % align == 0).collect()
-            }
-            FieldDef::Values { values } => values
-                .iter()
-                .filter_map(|v| match v {
-                    serde_yaml::Value::Number(n) => n.as_i64(),
-                    serde_yaml::Value::Bool(b) => Some(if *b { 1 } else { 0 }),
-                    _ => None,
-                })
-                .collect(),
-        }
-    }
+impl RawXif {
+    fn into_spec(self) -> VerificationSpec {
+        let fields: BTreeMap<String, FieldSpec> = self
+            .fields
+            .into_iter()
+            .map(|(name, raw)| {
+                let spec = match raw {
+                    RawField::Range { range, alignment } => FieldSpec {
+                        range: Some((range[0], range[1])),
+                        alignment,
+                        values: None,
+                    },
+                    RawField::Values { values } => {
+                        let vals: Vec<i64> = values
+                            .iter()
+                            .filter_map(|v| match v {
+                                serde_yaml::Value::Number(n) => n.as_i64(),
+                                serde_yaml::Value::Bool(b) => Some(if *b { 1 } else { 0 }),
+                                _ => None,
+                            })
+                            .collect();
+                        FieldSpec {
+                            range: None,
+                            alignment: None,
+                            values: Some(vals),
+                        }
+                    }
+                };
+                (name, spec)
+            })
+            .collect();
 
-    /// Check whether a value satisfies this field definition.
-    pub fn allows(&self, value: i64) -> bool {
-        match self {
-            FieldDef::Range { range, alignment } => {
-                let align = alignment.unwrap_or(1);
-                value >= range[0] && value <= range[1] && value % align == 0
-            }
-            FieldDef::Values { values } => values.iter().any(|v| match v {
-                serde_yaml::Value::Number(n) => n.as_i64() == Some(value),
-                serde_yaml::Value::Bool(b) => (*b && value == 1) || (!*b && value == 0),
-                _ => false,
-            }),
+        VerificationSpec {
+            target: self.target,
+            fields,
+            constraints: self.constraints,
+            projector: self.projector,
         }
     }
 }
 
-impl XifDocument {
-    /// Parse a XIF document from a YAML file path.
-    pub fn from_path(path: &Path) -> anyhow::Result<Self> {
-        let content = std::fs::read_to_string(path).context("Failed to read YAML file")?;
-        let doc: XifDocument = serde_yaml::from_str(&content).context("Failed to parse YAML")?;
-        Ok(doc)
-    }
-
-    /// Ordered list of field names (sorted for determinism).
-    pub fn field_names(&self) -> Vec<&str> {
-        self.fields.keys().map(|s| s.as_str()).collect()
+/// Convenience: parse a YAML file directly (without going through the trait).
+impl VerificationSpec {
+    pub fn from_yaml(path: &Path) -> anyhow::Result<Self> {
+        YamlFormat.parse(path)
     }
 }
