@@ -34,6 +34,7 @@
 //! ```
 
 pub mod compose;
+
 pub mod evaluate;
 pub mod fih;
 pub mod format;

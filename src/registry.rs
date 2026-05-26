@@ -1,33 +1,37 @@
 //! Type registries — map named constraint/projector types to builders.
-//!
-//! Following the Nexus capability-trait pattern, registries decouple the
-//! input format (YAML type names) from the concrete implementations. New
-//! constraint or projector types register themselves without modifying
-//! the pipeline core.
 
+use crate::compose::{Coordinates, Point};
 use crate::spec::{ConstraintSpec, ProjectorSpec};
-use ssccs_core::{Constraint, Coordinates, Field, Projector, Segment};
 use std::collections::HashMap;
 
 // ============================================================================
-// Constraint Registry
+// Check trait
 // ============================================================================
 
-/// Builds a boxed constraint from a specification.
-pub type ConstraintBuilder = fn(spec: &ConstraintSpec) -> AnyConstraint;
+/// A pass/fail rule on a coordinate vector.
+pub trait Check: std::fmt::Debug + Send + Sync {
+    fn allows(&self, coords: &Coordinates) -> bool;
+    fn describe(&self) -> String;
+}
 
-/// Type-erased constraint wrapper — bridges `Box<dyn Constraint>` into
-/// `impl Constraint + 'static` for Field::add_constraint().
+/// Builds a boxed check from a specification.
+pub type ConstraintBuilder = fn(spec: &ConstraintSpec) -> AnyCheck;
+
+/// Type-erased check wrapper.
 #[derive(Debug)]
-pub struct AnyConstraint(Box<dyn Constraint>);
+pub struct AnyCheck(Box<dyn Check>);
 
-impl AnyConstraint {
-    pub fn new(c: impl Constraint + 'static) -> Self {
+impl AnyCheck {
+    pub fn new(c: impl Check + 'static) -> Self {
         Self(Box::new(c))
+    }
+
+    pub fn into_check(self) -> Box<dyn Check> {
+        self.0
     }
 }
 
-impl Constraint for AnyConstraint {
+impl Check for AnyCheck {
     fn allows(&self, coords: &Coordinates) -> bool {
         self.0.allows(coords)
     }
@@ -37,9 +41,6 @@ impl Constraint for AnyConstraint {
 }
 
 /// Registry of named constraint types → builders.
-///
-/// Use `default_registry()` for the standard set, or build a custom one
-/// for domain-specific constraints.
 pub struct ConstraintRegistry {
     builders: HashMap<String, ConstraintBuilder>,
 }
@@ -51,19 +52,16 @@ impl ConstraintRegistry {
         }
     }
 
-    /// Register a constraint builder under a type name.
     pub fn register(&mut self, type_name: &str, builder: ConstraintBuilder) {
         self.builders.insert(type_name.to_string(), builder);
     }
 
-    /// Build a constraint from a spec. Returns None if the type is unknown.
-    pub fn build(&self, spec: &ConstraintSpec) -> Option<AnyConstraint> {
+    pub fn build(&self, spec: &ConstraintSpec) -> Option<AnyCheck> {
         let type_name = spec_type_name(spec);
         self.builders.get(type_name).map(|b| b(spec))
     }
 
-    /// Build all constraints from a list of specs, skipping unknown types.
-    pub fn build_all(&self, specs: &[ConstraintSpec]) -> Vec<AnyConstraint> {
+    pub fn build_all(&self, specs: &[ConstraintSpec]) -> Vec<AnyCheck> {
         specs.iter().filter_map(|s| self.build(s)).collect()
     }
 }
@@ -73,7 +71,7 @@ impl Default for ConstraintRegistry {
         let mut reg = Self::new();
         reg.register("range", |spec| {
             if let ConstraintSpec::Range { axis, min, max } = spec {
-                AnyConstraint::new(RangeC {
+                AnyCheck::new(RangeC {
                     axis: *axis,
                     min: *min,
                     max: *max,
@@ -84,14 +82,14 @@ impl Default for ConstraintRegistry {
         });
         reg.register("even", |spec| {
             if let ConstraintSpec::Even { axis } = spec {
-                AnyConstraint::new(EvenC { axis: *axis })
+                AnyCheck::new(EvenC { axis: *axis })
             } else {
                 panic!("even builder called on non-even spec")
             }
         });
         reg.register("eq", |spec| {
             if let ConstraintSpec::Eq { axis_a, axis_b } = spec {
-                AnyConstraint::new(EqC {
+                AnyCheck::new(EqC {
                     axis_a: *axis_a,
                     axis_b: *axis_b,
                 })
@@ -111,7 +109,7 @@ fn spec_type_name(spec: &ConstraintSpec) -> &str {
     }
 }
 
-// ── Built-in constraint implementations ──
+// ── Built-in check implementations ──
 
 #[derive(Debug, Clone)]
 struct RangeC {
@@ -120,7 +118,7 @@ struct RangeC {
     max: i64,
 }
 
-impl Constraint for RangeC {
+impl Check for RangeC {
     fn allows(&self, coords: &Coordinates) -> bool {
         coords
             .get_axis(self.axis)
@@ -137,7 +135,7 @@ struct EvenC {
     axis: usize,
 }
 
-impl Constraint for EvenC {
+impl Check for EvenC {
     fn allows(&self, coords: &Coordinates) -> bool {
         coords
             .get_axis(self.axis)
@@ -155,7 +153,7 @@ struct EqC {
     axis_b: usize,
 }
 
-impl Constraint for EqC {
+impl Check for EqC {
     fn allows(&self, coords: &Coordinates) -> bool {
         let a = coords.get_axis(self.axis_a);
         let b = coords.get_axis(self.axis_b);
@@ -167,30 +165,30 @@ impl Constraint for EqC {
 }
 
 // ============================================================================
-// Projector Registry
+// Evaluator trait and registry
 // ============================================================================
 
-/// A type-erased projector that delegates to a concrete implementation.
-///
-/// ssccs_core::Projector has an associated type (Output), which prevents
-/// storing heterogeneous projectors in a Vec. We erase the output type
-/// by boxing to i64.
-pub trait ErasedProjector: std::fmt::Debug + Send + Sync {
-    fn project_i64(&self, field: &Field, segment: &Segment) -> Option<i64>;
+/// Maps a coordinate point to a projected value.
+pub trait Evaluator: std::fmt::Debug + Send + Sync {
+    fn evaluate(&self, point: &Point) -> Option<i64>;
 }
 
-impl<P: Projector<Output = i64>> ErasedProjector for P {
-    fn project_i64(&self, field: &Field, segment: &Segment) -> Option<i64> {
-        self.project(field, segment)
+/// Type-erased evaluator.
+pub trait ErasedEvaluator: std::fmt::Debug + Send + Sync {
+    fn evaluate(&self, point: &Point) -> Option<i64>;
+}
+
+impl<E: Evaluator> ErasedEvaluator for E {
+    fn evaluate(&self, point: &Point) -> Option<i64> {
+        self.evaluate(point)
     }
 }
 
-/// Builds a boxed erased projector from a specification.
-pub type ProjectorBuilder = fn(spec: &ProjectorSpec) -> Box<dyn ErasedProjector>;
+pub type EvaluatorBuilder = fn(spec: &ProjectorSpec) -> Box<dyn ErasedEvaluator>;
 
-/// Registry of named projector types → builders.
+/// Registry of named evaluator types → builders.
 pub struct ProjectorRegistry {
-    builders: HashMap<String, ProjectorBuilder>,
+    builders: HashMap<String, EvaluatorBuilder>,
 }
 
 impl ProjectorRegistry {
@@ -200,11 +198,11 @@ impl ProjectorRegistry {
         }
     }
 
-    pub fn register(&mut self, type_name: &str, builder: ProjectorBuilder) {
+    pub fn register(&mut self, type_name: &str, builder: EvaluatorBuilder) {
         self.builders.insert(type_name.to_string(), builder);
     }
 
-    pub fn build(&self, spec: &ProjectorSpec) -> Option<Box<dyn ErasedProjector>> {
+    pub fn build(&self, spec: &ProjectorSpec) -> Option<Box<dyn ErasedEvaluator>> {
         let type_name = spec_projector_name(spec);
         self.builders.get(type_name).map(|b| b(spec))
     }
@@ -213,17 +211,17 @@ impl ProjectorRegistry {
 impl Default for ProjectorRegistry {
     fn default() -> Self {
         let mut reg = Self::new();
-        reg.register("sum", |_spec| Box::new(SumP));
+        reg.register("sum", |_spec| Box::new(SumEval));
         reg.register("identity", |spec| {
             if let ProjectorSpec::Identity { axis } = spec {
-                Box::new(IdentityP { axis: *axis })
+                Box::new(IdentityEval { axis: *axis })
             } else {
                 panic!("identity builder called on non-identity spec")
             }
         });
         reg.register("parity", |spec| {
             if let ProjectorSpec::Parity { axis } = spec {
-                Box::new(ParityP { axis: *axis })
+                Box::new(ParityEval { axis: *axis })
             } else {
                 panic!("parity builder called on non-parity spec")
             }
@@ -240,38 +238,33 @@ fn spec_projector_name(spec: &ProjectorSpec) -> &str {
     }
 }
 
-// ── Built-in projector implementations ──
-
 #[derive(Debug, Clone)]
-struct SumP;
+struct SumEval;
 
-impl Projector for SumP {
-    type Output = i64;
-    fn project(&self, _field: &Field, segment: &Segment) -> Option<Self::Output> {
-        Some(segment.coordinates().raw.iter().sum())
+impl Evaluator for SumEval {
+    fn evaluate(&self, point: &Point) -> Option<i64> {
+        Some(point.coordinates().raw.iter().sum())
     }
 }
 
 #[derive(Debug, Clone)]
-struct IdentityP {
+struct IdentityEval {
     axis: usize,
 }
 
-impl Projector for IdentityP {
-    type Output = i64;
-    fn project(&self, _field: &Field, segment: &Segment) -> Option<Self::Output> {
-        segment.coordinates().get_axis(self.axis)
+impl Evaluator for IdentityEval {
+    fn evaluate(&self, point: &Point) -> Option<i64> {
+        point.coordinates().get_axis(self.axis)
     }
 }
 
 #[derive(Debug, Clone)]
-struct ParityP {
+struct ParityEval {
     axis: usize,
 }
 
-impl Projector for ParityP {
-    type Output = i64;
-    fn project(&self, _field: &Field, segment: &Segment) -> Option<Self::Output> {
-        segment.coordinates().get_axis(self.axis).map(|v| v & 1)
+impl Evaluator for ParityEval {
+    fn evaluate(&self, point: &Point) -> Option<i64> {
+        point.coordinates().get_axis(self.axis).map(|v| v & 1)
     }
 }

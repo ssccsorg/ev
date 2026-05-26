@@ -13,18 +13,6 @@ fn check_help_succeeds() {
 }
 
 #[test]
-fn certify_help_succeeds() {
-    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
-        .arg("certify")
-        .arg("--help")
-        .output()
-        .expect("failed to run ev certify --help");
-    assert!(output.status.success(), "ev certify --help should exit 0");
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("--target"), "help should mention --target");
-}
-
-#[test]
 fn check_json_flag_produces_valid_output() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("check")

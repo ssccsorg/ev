@@ -39,23 +39,9 @@ enum Commands {
         #[arg(long)]
         json: bool,
 
-        /// Explain failures in natural language via LLM
-        #[arg(long)]
-        interpret: bool,
-
         /// Run external synthesis after verification
         #[arg(long)]
         synth: bool,
-    },
-    /// Generate a signed verification certificate
-    Certify {
-        /// Path to the YAML constraint file
-        #[arg(short, long)]
-        target: PathBuf,
-
-        /// Output path for the certificate
-        #[arg(short, long)]
-        output: Option<String>,
     },
 }
 
@@ -76,13 +62,8 @@ fn main() -> anyhow::Result<()> {
         Commands::Check {
             target,
             json,
-            interpret,
             synth,
         } => {
-            if interpret {
-                anyhow::bail!("--interpret is not yet implemented");
-            }
-
             // Resolve input format by extension.
             let spec = spec::VerificationSpec::from_yaml(&target)?;
 
@@ -143,11 +124,6 @@ fn main() -> anyhow::Result<()> {
             if !all_passed {
                 std::process::exit(1);
             }
-        }
-        Commands::Certify { target, output } => {
-            let path = output.unwrap_or_else(|| "certificate.pdf".to_string());
-            println!("ev certify --target {} --output {}", target.display(), path);
-            anyhow::bail!("certify is not yet implemented");
         }
     }
 
