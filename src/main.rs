@@ -106,11 +106,17 @@ fn main() -> anyhow::Result<()> {
                     let fact: fih::Fact = report.into();
                     println!("{}", serde_json::to_string_pretty(&fact)?);
                 } else {
-                    println!("Synthesis: {}", report.module_name);
+                    let status_label = if report.status == "ok" { "ok" } else { "FAILED" };
+                    println!("Synthesis: {} [{}]", report.module_name, status_label);
                     println!("  backend:  {}", report.tool);
                     println!("  version:  {}", report.version);
                     println!("  gate count: {:?}", report.gate_count);
                     println!("  cell area:  {:?}", report.cell_area);
+                    if let Some(ref msg) = report.message {
+                        if report.status != "ok" {
+                            println!("  error:     {}", msg.trim());
+                        }
+                    }
                 }
             }
 
