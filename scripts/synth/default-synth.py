@@ -9,7 +9,7 @@ to stdout containing gate counts, cell area, cell type breakdown,
 DOT gate-level diagram path, and any Yosys warnings.
 """
 
-import json, os, shutil, subprocess, sys, tempfile
+import json, shutil, subprocess, sys, tempfile # noqa: E401
 from pathlib import Path
 
 
@@ -93,7 +93,7 @@ def main():
         if yosys_log.exists():
             try:
                 lines = yosys_log.read_text().splitlines()
-                warns = [l.strip() for l in lines if "warning" in l.lower()]
+                warns = [l.strip() for l in lines if "warning" in l.lower()]  # noqa
                 if warns:
                     warnings = warns
             except OSError:
