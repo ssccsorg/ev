@@ -22,8 +22,9 @@ use serde::{Deserialize, Serialize};
 
 /// Tool-agnostic synthesis metrics.
 ///
-/// Every synthesis backend produces these fields. The `netlist_path` field
-/// is the handoff point to downstream colonies (place-and-route).
+/// Every synthesis backend produces these fields. Backend-specific data
+/// (e.g. Yosys cell types, DOT diagram path) goes into `raw` as an
+/// opaque JSON object — the core layer does not know about any tool.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SynthesisMetrics {
     pub tool: String,
@@ -32,36 +33,30 @@ pub struct SynthesisMetrics {
     pub module_name: String,
     pub gate_count: Option<u64>,
     pub cell_area: Option<f64>,
-    /// Synthesized netlist — handoff point to physical design.
-    pub netlist_path: Option<String>,
-    /// Gate-level DOT diagram path (Yosys show -format dot).
-    pub dot_path: Option<String>,
-    /// Per-cell-type breakdown: {"$_AND_": 12, "$_DFF_": 4, ...}.
-    #[serde(default)]
-    pub cell_types: Option<serde_json::Value>,
-    /// Yosys warnings captured from log.
-    #[serde(default)]
-    pub warnings: Option<serde_json::Value>,
+    /// Backend-specific opaque data (opaque to core).
+    /// YosysBackend populates this with dot_path, cell_types, warnings, etc.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extra: Option<serde_json::Value>,
     pub status: String,
     pub message: Option<String>,
 }
 
 impl From<SynthesisMetrics> for crate::fih::Fact {
     fn from(m: SynthesisMetrics) -> Self {
-        let payload = serde_json::json!({
+        let origin = format!("ev/synthesis/{}", m.tool);
+        let mut payload = serde_json::json!({
             "tool": m.tool,
             "version": m.version,
             "source": m.source,
             "gate_count": m.gate_count,
             "cell_area": m.cell_area,
-            "netlist_path": m.netlist_path,
-            "dot_path": m.dot_path,
-            "cell_types": m.cell_types,
-            "warnings": m.warnings,
             "status": m.status,
             "message": m.message,
         });
-        crate::fih::Fact::new("synthesis_result", "ev/synthesis", &m.module_name, payload)
+        if let Some(ref extra) = m.extra {
+            payload["extra"] = extra.clone();
+        }
+        crate::fih::Fact::new("synthesis_result", &origin, &m.module_name, payload)
     }
 }
 
@@ -265,10 +260,7 @@ pub fn error_report(
         module_name: module_name.into(),
         gate_count: None,
         cell_area: None,
-        netlist_path: None,
-        dot_path: None,
-        cell_types: None,
-        warnings: None,
+        extra: None,
         status: "error".into(),
         message: Some(message),
     }
@@ -305,10 +297,7 @@ impl RunSynthesis for MockSynthesisBackend {
             module_name: top_module.into(),
             gate_count: Some(0),
             cell_area: None,
-            netlist_path: None,
-            dot_path: None,
-            cell_types: None,
-            warnings: None,
+            extra: None,
             status: "ok".into(),
             message: None,
         })
@@ -625,6 +614,10 @@ mod tests {
 
     #[test]
     fn synthesis_metrics_to_fact() {
+        let extra = serde_json::json!({
+            "dot_path": "/tmp/netlist.dot",
+            "cell_types": null,
+        });
         let metrics = SynthesisMetrics {
             tool: "yosys".into(),
             version: "0.50".into(),
@@ -632,22 +625,18 @@ mod tests {
             module_name: "my_alu".into(),
             gate_count: Some(142),
             cell_area: Some(0.012),
-            netlist_path: Some("/tmp/netlist.v".into()),
-            dot_path: Some("/tmp/netlist.dot".into()),
-            cell_types: None,
-            warnings: None,
+            extra: Some(extra),
             status: "ok".into(),
             message: None,
         };
         let fact: crate::fih::Fact = metrics.into();
 
         assert_eq!(fact.fact_type, "synthesis_result");
-        assert_eq!(fact.origin, "ev/synthesis");
+        assert_eq!(fact.origin, "ev/synthesis/yosys");
         assert_eq!(fact.target, "my_alu");
         assert_eq!(fact.payload["tool"], "yosys");
         assert_eq!(fact.payload["gate_count"], 142);
-        assert_eq!(fact.payload["netlist_path"], "/tmp/netlist.v");
-        assert_eq!(fact.payload["dot_path"], "/tmp/netlist.dot");
+        assert_eq!(fact.payload["extra"]["dot_path"], "/tmp/netlist.dot");
         assert_eq!(fact.payload["status"], "ok");
         assert!(!fact.timestamp.is_empty());
     }
@@ -661,10 +650,7 @@ mod tests {
             module_name: "bad_module".into(),
             gate_count: None,
             cell_area: None,
-            netlist_path: None,
-            dot_path: None,
-            cell_types: None,
-            warnings: None,
+            extra: None,
             status: "error".into(),
             message: Some("yosys not found".into()),
         };
