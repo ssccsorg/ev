@@ -142,6 +142,41 @@ impl RunSynthesis for ScriptBackend {
     }
 }
 
+/// Mock backend for CI/testing — validates the pipeline without a real tool.
+///
+/// Reads the generated RTL file, verifies it contains a valid module
+/// declaration, and returns deterministic mock metrics. Used when
+/// `EV_SYNTH_BACKEND=mock` or directly in unit tests.
+pub struct MockSynthesisBackend;
+
+impl RunSynthesis for MockSynthesisBackend {
+    fn run(&self, rtl_path: &std::path::Path, top_module: &str) -> anyhow::Result<SynthesisMetrics> {
+        let content = std::fs::read_to_string(rtl_path)
+            .map_err(|e| anyhow::anyhow!("Mock: cannot read RTL file {}: {}", rtl_path.display(), e))?;
+
+        if !content.contains(&format!("module {}", top_module)) {
+            anyhow::bail!(
+                "Mock: RTL file {} does not contain module {}",
+                rtl_path.display(),
+                top_module
+            );
+        }
+
+        Ok(SynthesisMetrics {
+            tool: "mock".into(),
+            version: "0.0.0".into(),
+            source: rtl_path.to_string_lossy().to_string(),
+            module_name: top_module.into(),
+            gate_count: Some(0),
+            cell_area: None,
+            netlist_path: None,
+            dot_path: None,
+            status: "ok".into(),
+            message: None,
+        })
+    }
+}
+
 fn generate_sv(spec: &VerificationSpec) -> anyhow::Result<std::path::PathBuf> {
     let tmp_dir = std::env::temp_dir().join("ev-synth");
     std::fs::create_dir_all(&tmp_dir)?;
@@ -287,12 +322,14 @@ pub fn synthesize_default(spec: &VerificationSpec) -> anyhow::Result<SynthesisMe
             )
         })?
     };
-    // Compose: SvGenerator (GenerateRtl) + ScriptBackend (RunSynthesis)
-    // SvGenerator doesn't implement RunSynthesis, ScriptBackend doesn't
-    // implement GenerateRtl — but together via synthesize_pipeline they
-    // form the full synthesis path.
+    // Compose: SvGenerator (GenerateRtl) + backend (RunSynthesis).
+    // When EV_SYNTH_BACKEND=mock, use MockSynthesisBackend for CI/testing.
     let rtl_path = SvGenerator.generate(spec)?;
-    ScriptBackend::new(script_path).run(&rtl_path, &spec.target)
+    if std::env::var("EV_SYNTH_BACKEND").unwrap_or_default() == "mock" {
+        MockSynthesisBackend.run(&rtl_path, &spec.target)
+    } else {
+        ScriptBackend::new(script_path).run(&rtl_path, &spec.target)
+    }
 }
 
 #[cfg(test)]
@@ -532,5 +569,53 @@ mod tests {
         assert_eq!(fact.payload["status"], "error");
         assert_eq!(fact.payload["message"], "yosys not found");
         assert!(fact.payload["gate_count"].is_null());
+    }
+
+    // ── MockSynthesisBackend ───────────────────────────────────────
+
+    #[test]
+    fn mock_backend_valid_sv() {
+        let mut fields = BTreeMap::new();
+        fields.insert("a".into(), FieldSpec { range: Some((0, 7)), alignment: None, values: None });
+        let spec = make_spec(fields, ProjectorSpec::Identity { axis: 0 });
+        let rtl_path = SvGenerator.generate(&spec).unwrap();
+
+        let metrics = MockSynthesisBackend.run(&rtl_path, "test_module").unwrap();
+        assert_eq!(metrics.tool, "mock");
+        assert_eq!(metrics.status, "ok");
+        assert_eq!(metrics.gate_count, Some(0));
+    }
+
+    #[test]
+    fn mock_backend_wrong_module_name() {
+        let mut fields = BTreeMap::new();
+        fields.insert("a".into(), FieldSpec { range: Some((0, 7)), alignment: None, values: None });
+        let spec = make_spec(fields, ProjectorSpec::Identity { axis: 0 });
+        let rtl_path = SvGenerator.generate(&spec).unwrap();
+
+        let result = MockSynthesisBackend.run(&rtl_path, "nonexistent_module");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn mock_backend_missing_file() {
+        let result = MockSynthesisBackend.run(
+            std::path::Path::new("/tmp/ev-nonexistent.sv"),
+            "foo",
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn full_pipeline_with_mock() {
+        let mut fields = BTreeMap::new();
+        fields.insert("x".into(), FieldSpec { range: Some((0, 3)), alignment: None, values: None });
+        let spec = make_spec(fields, ProjectorSpec::Sum);
+
+        let rtl_path = SvGenerator.generate(&spec).unwrap();
+        let metrics = MockSynthesisBackend.run(&rtl_path, "test_module").unwrap();
+
+        assert_eq!(metrics.module_name, "test_module");
+        assert_eq!(metrics.status, "ok");
     }
 }
