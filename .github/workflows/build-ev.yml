@@ -38,13 +38,6 @@ jobs:
       - name: Cache dependencies
         uses: swatinem/rust-cache@v2
 
-      - name: Pre-flight auto-fixes
-        run: |
-          cargo fmt --all
-          cargo clippy --fix --allow-dirty 2>&1 || true
-          cargo fix --allow-dirty 2>&1 || true
-          cargo fmt --all
-
       - name: Check formatting
         run: cargo fmt --check
 
