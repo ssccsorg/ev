@@ -104,6 +104,9 @@ impl RunSynthesis for YosysBackend {
         }
 
         // ── Parse statistics ──────────────────────────────────────────
+        // gate_count and cell_area live in the core struct; everything
+        // else (cell types, DOT path, warnings) goes into `extra` as
+        // opaque backend-specific data.
         let stat_data: Option<serde_json::Value> = if stat_path.exists() {
             std::fs::read_to_string(&stat_path)
                 .ok()
@@ -112,12 +115,16 @@ impl RunSynthesis for YosysBackend {
             None
         };
 
-        let (gate_count, cell_area, cell_types) = if let Some(ref data) = stat_data {
+        let mut gate_count: Option<u64> = None;
+        let mut cell_area: Option<f64> = None;
+        let mut extra = serde_json::json!({});
+
+        if let Some(ref data) = stat_data {
             let top = data.get("top_module").or_else(|| data.get("design"));
-            let gate_count = top
+            gate_count = top
                 .and_then(|t| t.get("num_cells"))
                 .and_then(|v| v.as_u64());
-            let cell_area = top.and_then(|t| t.get("area")).and_then(|v| v.as_f64());
+            cell_area = top.and_then(|t| t.get("area")).and_then(|v| v.as_f64());
             let cell_types = data
                 .get("modules")
                 .and_then(|m| m.get(top_module))
@@ -131,39 +138,38 @@ impl RunSynthesis for YosysBackend {
                 })
                 .filter(|m| !m.is_empty())
                 .map(serde_json::Value::Object);
-            (gate_count, cell_area, cell_types)
-        } else {
-            (None, None, None)
-        };
+
+            if let Some(ct) = cell_types {
+                extra["cell_types"] = ct;
+            }
+        }
 
         // ── DOT output ────────────────────────────────────────────────
-        let dot_path_str: Option<String> = if dot_path.exists() {
-            std::fs::read_to_string(&dot_path)
-                .ok()
-                .filter(|content| content.contains("digraph"))
-                .map(|_| dot_path.to_string_lossy().to_string())
-        } else {
-            None
-        };
+        if dot_path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&dot_path) {
+                if content.contains("digraph") {
+                    extra["dot_path"] = serde_json::json!(dot_path.to_string_lossy().to_string());
+                }
+            }
+        }
+
+        extra["netlist_path"] = serde_json::json!(netlist_path.to_string_lossy().to_string());
 
         // ── Warnings ──────────────────────────────────────────────────
-        let warnings: Option<serde_json::Value> = if log_path.exists() {
-            std::fs::read_to_string(&log_path)
-                .ok()
-                .map(|content| {
-                    content
-                        .lines()
-                        .filter(|l| l.to_lowercase().contains("warning"))
-                        .map(|l| l.trim().to_string())
-                        .collect::<Vec<_>>()
-                })
-                .filter(|w| !w.is_empty())
-                .map(|w| {
-                    serde_json::Value::Array(w.into_iter().map(serde_json::Value::String).collect())
-                })
-        } else {
-            None
-        };
+        if log_path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&log_path) {
+                let warns: Vec<String> = content
+                    .lines()
+                    .filter(|l| l.to_lowercase().contains("warning"))
+                    .map(|l| l.trim().to_string())
+                    .collect();
+                if !warns.is_empty() {
+                    extra["warnings"] = serde_json::Value::Array(
+                        warns.into_iter().map(serde_json::Value::String).collect(),
+                    );
+                }
+            }
+        }
 
         Ok(SynthesisMetrics {
             tool: "yosys".into(),
@@ -172,10 +178,8 @@ impl RunSynthesis for YosysBackend {
             module_name,
             gate_count,
             cell_area,
-            netlist_path: Some(netlist_path.to_string_lossy().to_string()),
-            dot_path: dot_path_str,
-            cell_types,
-            warnings,
+
+            extra: Some(extra),
             status: "ok".into(),
             message: None,
         })
