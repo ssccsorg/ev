@@ -25,6 +25,8 @@ pub struct SynthesisMetrics {
     pub cell_area: Option<f64>,
     /// Synthesized netlist — handoff point to physical design.
     pub netlist_path: Option<String>,
+    /// Gate-level DOT diagram path (Yosys show -format dot).
+    pub dot_path: Option<String>,
     pub status: String,
     pub message: Option<String>,
 }
@@ -38,6 +40,7 @@ impl From<SynthesisMetrics> for crate::fih::Fact {
             "gate_count": m.gate_count,
             "cell_area": m.cell_area,
             "netlist_path": m.netlist_path,
+            "dot_path": m.dot_path,
             "status": m.status,
             "message": m.message,
         });
@@ -126,6 +129,7 @@ impl RunSynthesis for ScriptBackend {
                 gate_count: None,
                 cell_area: None,
                 netlist_path: None,
+                dot_path: None,
                 status: "error".into(),
                 message: Some(stderr.to_string()),
             });
@@ -491,6 +495,7 @@ mod tests {
             gate_count: Some(142),
             cell_area: Some(0.012),
             netlist_path: Some("/tmp/netlist.v".into()),
+            dot_path: Some("/tmp/netlist.dot".into()),
             status: "ok".into(),
             message: None,
         };
@@ -502,6 +507,7 @@ mod tests {
         assert_eq!(fact.payload["tool"], "yosys");
         assert_eq!(fact.payload["gate_count"], 142);
         assert_eq!(fact.payload["netlist_path"], "/tmp/netlist.v");
+        assert_eq!(fact.payload["dot_path"], "/tmp/netlist.dot");
         assert_eq!(fact.payload["status"], "ok");
         assert!(!fact.timestamp.is_empty());
     }
@@ -516,6 +522,7 @@ mod tests {
             gate_count: None,
             cell_area: None,
             netlist_path: None,
+            dot_path: None,
             status: "error".into(),
             message: Some("yosys not found".into()),
         };

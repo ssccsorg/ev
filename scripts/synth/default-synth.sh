@@ -5,7 +5,7 @@ set -euo pipefail
 #
 # Takes a SystemVerilog file, runs Yosys synthesis, and produces a
 # machine-readable JSON report containing module name, gate count,
-# and cell area (when available).
+# cell area, and DOT gate-level diagram path.
 #
 # Usage:
 #   ./scripts/synth/default-synth.sh <file.sv> [top_module]
@@ -16,10 +16,6 @@ set -euo pipefail
 # Output: JSON to stdout
 #
 # Requires: yosys (https://github.com/YosysHQ/yosys)
-#
-# This script is a standalone channel — ev and the SSCCS POC are
-# independent verification tools. The JSON report here is designed
-# for machine consumption so ev can parse it in a later phase.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -29,7 +25,8 @@ if [ $# -lt 1 ]; then
     cat <<USAGE >&2
 Usage: $0 <file.sv> [top_module]
 
-Synthesize a SystemVerilog design with Yosys and produce a JSON report.
+Synthesize a SystemVerilog design with Yosys and produce a JSON report
+including gate-level DOT diagram path.
 
 Arguments:
   file.sv       Path to the SystemVerilog source file
@@ -37,7 +34,8 @@ Arguments:
 
 Output:
   JSON report to stdout with keys:
-    tool, version, source, module_name, gate_count, cell_area, status
+    tool, version, source, module_name, gate_count, cell_area,
+    netlist_path, dot_path, status
 USAGE
     exit 1
 fi
@@ -80,21 +78,21 @@ YOSYS_VERSION="$(yosys --version 2>&1 | head -1)"
 #   1. Read the SystemVerilog source
 #   2. Select the top module
 #   3. Synthesize down to generic gates (synth -top)
-#   4. Print statistics (stat -json)
-#   5. Write JSON netlist (write_json) for potential post-processing
-#
-# Yosys JSON output is captured to a temp file; stat JSON is embedded
-# in the final report.
+#   4. Export gate-level DOT diagram (show -format dot)
+#   5. Print statistics (stat -json)
+#   6. Write JSON netlist (write_json) for potential post-processing
 
 WORK_DIR="$(mktemp -d 2>/dev/null || mktemp -d -t 'yosys-synth')"
 trap 'rm -rf "$WORK_DIR"' EXIT
 
 JSON_NETLIST="$WORK_DIR/netlist.json"
+DOT_FILE="$WORK_DIR/netlist.dot"
 STAT_LOG="$WORK_DIR/stat.log"
 
 yosys -q -l "$WORK_DIR/yosys.log" -p "
     read_verilog -sv \"$SV_FILE\";
     synth -top \"$TOP_MODULE\";
+    show -format dot -prefix \"$WORK_DIR/netlist\" \"$TOP_MODULE\";
     stat -json > \"$STAT_LOG\";
     write_json \"$JSON_NETLIST\";
 " 2>&1
@@ -107,16 +105,6 @@ if [ $YOSYS_EXIT -ne 0 ]; then
 fi
 
 # ── Parse stat JSON ──────────────────────────────────────────────────────
-#
-# The stat -json output has the form:
-#   {
-#     "design": { ... },
-#     "top_module": {
-#       "num_cells": <int>,
-#       "area": <float> | null,
-#       "cells": { ... }
-#     }
-#   }
 
 GATE_COUNT="null"
 CELL_AREA="null"
@@ -147,6 +135,12 @@ except Exception:
 " 2>/dev/null || echo "null")
 fi
 
+# Verify DOT file was created
+DOT_PATH_JSON="null"
+if [ -f "$DOT_FILE" ]; then
+    DOT_PATH_JSON="\"$DOT_FILE\""
+fi
+
 # ── Output JSON report ───────────────────────────────────────────────────
 
 python3 -c "
@@ -160,6 +154,7 @@ report = {
     'gate_count': $GATE_COUNT,
     'cell_area': $CELL_AREA,
     'netlist_path': '$JSON_NETLIST',
+    'dot_path': $DOT_PATH_JSON,
     'status': 'ok',
 }
 
