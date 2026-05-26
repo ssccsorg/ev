@@ -15,7 +15,9 @@ target_config:
 # Built-in defaults: generate_latest_docs, resolve, rumdl fmt
 # Commands listed here run AFTER the defaults.
 pre_build:
-  _global: []
+  _global:
+    - python3 ../poc/baremetal_riscv/sv/sv2dot.py ../poc/baremetal_riscv/sv/ > arch/sv_architecture.dot
+    - python3 arch/generate.py
 
 # Post-render commands (additional to built-in defaults)
 # Built-in defaults: generate_llms_txt
