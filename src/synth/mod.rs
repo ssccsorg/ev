@@ -85,24 +85,6 @@ pub trait RunSynthesis: Send + Sync {
         -> anyhow::Result<SynthesisMetrics>;
 }
 
-/// Aggregate: full synthesis pipeline from spec to metrics.
-///
-/// Backends that provide both RTL generation and tool execution get this
-/// blanket implementation automatically.
-#[allow(dead_code)]
-pub trait FullSynthesis: GenerateRtl + RunSynthesis {}
-impl<T: GenerateRtl + RunSynthesis> FullSynthesis for T {}
-
-/// Compose GenerateRtl + RunSynthesis into a single pipeline call.
-#[allow(dead_code)]
-pub fn synthesize_pipeline(
-    pipeline: &dyn FullSynthesis,
-    spec: &VerificationSpec,
-) -> anyhow::Result<SynthesisMetrics> {
-    let rtl_path = pipeline.generate(spec)?;
-    pipeline.run(&rtl_path, &spec.target)
-}
-
 /// Default RTL generator — produces SystemVerilog.
 pub struct SvGenerator;
 
