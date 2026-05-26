@@ -3,13 +3,6 @@ name: Build ev CLI
 on:
   push:
     branches: ["main"]
-    paths:
-      - "src/**"
-      - "tests/**"
-      - "scripts/**"
-      - "Cargo.*"
-      - "run.sh"
-      - ".github/workflows/build-ev.yml"
   pull_request:
     branches: ["main"]
   workflow_dispatch:
