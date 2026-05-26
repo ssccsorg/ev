@@ -13,6 +13,8 @@ use registry::ConstraintRegistry;
 use registry::ProjectorRegistry;
 use reporter::{JsonReporter, ReporterCapable, TextReporter};
 use std::path::PathBuf;
+use synth::backends::yosys::YosysBackend;
+use synth::{GenerateRtl, MockSynthesisBackend, RunSynthesis, SvGenerator};
 
 #[derive(Parser)]
 #[command(
@@ -55,6 +57,16 @@ enum Commands {
         #[arg(short, long)]
         output: Option<String>,
     },
+}
+
+fn resolve_synth_backend() -> Box<dyn RunSynthesis> {
+    // Policy decision: environment variables control backend selection.
+    // This is the only place where ev chooses a backend — the library
+    // layer does not know about env vars or CLI flags.
+    if std::env::var("EV_SYNTH_BACKEND").unwrap_or_default() == "mock" {
+        return Box::new(MockSynthesisBackend);
+    }
+    Box::new(YosysBackend)
 }
 
 fn main() -> anyhow::Result<()> {
@@ -101,12 +113,19 @@ fn main() -> anyhow::Result<()> {
 
             // Run synthesis alongside verification when requested.
             if synth {
-                let report = synth::synthesize_default(&spec)?;
+                let backend = resolve_synth_backend();
+                let rtl_path = SvGenerator.generate(&spec)?;
+                let report = backend.run(&rtl_path, &spec.target)?;
+
                 if json {
                     let fact: fih::Fact = report.into();
                     println!("{}", serde_json::to_string_pretty(&fact)?);
                 } else {
-                    let status_label = if report.status == "ok" { "ok" } else { "FAILED" };
+                    let status_label = if report.status == "ok" {
+                        "ok"
+                    } else {
+                        "FAILED"
+                    };
                     println!("Synthesis: {} [{}]", report.module_name, status_label);
                     println!("  backend:  {}", report.tool);
                     println!("  version:  {}", report.version);

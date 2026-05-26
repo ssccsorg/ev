@@ -11,7 +11,12 @@ use std::collections::BTreeMap;
 /// Capability: format and output verification results.
 pub trait ReporterCapable: Send + Sync {
     /// Report results. Returns true if all evaluations passed.
-    fn report(&self, spec: &VerificationSpec, field_order: &[String], evaluations: &[Evaluation]) -> bool;
+    fn report(
+        &self,
+        spec: &VerificationSpec,
+        field_order: &[String],
+        evaluations: &[Evaluation],
+    ) -> bool;
 }
 
 // ============================================================================
@@ -21,7 +26,12 @@ pub trait ReporterCapable: Send + Sync {
 pub struct TextReporter;
 
 impl ReporterCapable for TextReporter {
-    fn report(&self, spec: &VerificationSpec, _field_order: &[String], evaluations: &[Evaluation]) -> bool {
+    fn report(
+        &self,
+        spec: &VerificationSpec,
+        _field_order: &[String],
+        evaluations: &[Evaluation],
+    ) -> bool {
         let passed_count = evaluations.iter().filter(|e| e.passed).count();
         let failed_count = evaluations.len() - passed_count;
 
@@ -84,7 +94,12 @@ struct VerificationReport {
 pub struct JsonReporter;
 
 impl ReporterCapable for JsonReporter {
-    fn report(&self, spec: &VerificationSpec, field_order: &[String], evaluations: &[Evaluation]) -> bool {
+    fn report(
+        &self,
+        spec: &VerificationSpec,
+        field_order: &[String],
+        evaluations: &[Evaluation],
+    ) -> bool {
         let passed_count = evaluations.iter().filter(|e| e.passed).count();
         let failed_count = evaluations.len() - passed_count;
         let spec_hash = hash_spec(spec);
@@ -110,7 +125,8 @@ impl ReporterCapable for JsonReporter {
                             e.combination.values.get(i).map(|v| (name.clone(), *v))
                         })
                         .collect();
-                    let id = hash_evaluation(&spec_hash, &e.combination.values, e.passed, e.projection);
+                    let id =
+                        hash_evaluation(&spec_hash, &e.combination.values, e.passed, e.projection);
                     EvaluationEntry {
                         id,
                         combination: e.combination.values.clone(),
@@ -150,7 +166,12 @@ fn hash_spec(spec: &VerificationSpec) -> String {
 }
 
 /// Hash a single evaluation result. Tied to its parent spec via spec_hash.
-fn hash_evaluation(spec_hash: &str, values: &[i64], passed: bool, projection: Option<i64>) -> String {
+fn hash_evaluation(
+    spec_hash: &str,
+    values: &[i64],
+    passed: bool,
+    projection: Option<i64>,
+) -> String {
     let mut h = Sha256::new();
     h.update(spec_hash.as_bytes());
     for v in values {
