@@ -1,5 +1,6 @@
 mod compose;
 mod evaluate;
+mod fih;
 mod format;
 mod registry;
 mod reporter;
@@ -100,15 +101,16 @@ fn main() -> anyhow::Result<()> {
 
             // Run synthesis alongside verification when requested.
             if synth {
-                let result = synth::synthesize_default(&spec)?;
+                let report = synth::synthesize_default(&spec)?;
                 if json {
-                    println!("{}", serde_json::to_string_pretty(&result)?);
+                    let fact: fih::Fact = report.into();
+                    println!("{}", serde_json::to_string_pretty(&fact)?);
                 } else {
-                    println!("Synthesis: {}", result.module_name);
-                    println!("  backend:  {}", result.tool);
-                    println!("  version:  {}", result.version);
-                    println!("  gate count: {:?}", result.gate_count);
-                    println!("  cell area:  {:?}", result.cell_area);
+                    println!("Synthesis: {}", report.module_name);
+                    println!("  backend:  {}", report.tool);
+                    println!("  version:  {}", report.version);
+                    println!("  gate count: {:?}", report.gate_count);
+                    println!("  cell area:  {:?}", report.cell_area);
                 }
             }
 
