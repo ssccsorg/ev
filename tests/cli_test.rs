@@ -59,7 +59,10 @@ fn check_json_with_synth_mock() {
         .env("EV_SYNTH_BACKEND", "mock")
         .output()
         .expect("failed to run ev check --json --synth with mock backend");
-    assert!(output.status.success(), "ev check --json --synth should exit 0");
+    assert!(
+        output.status.success(),
+        "ev check --json --synth should exit 0"
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     // Must contain both verification report and synthesis Fact.
@@ -95,9 +98,15 @@ fn check_text_with_synth_mock() {
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     // Text output must show synthesis summary.
-    assert!(stdout.contains("Synthesis:"), "text output should contain Synthesis summary");
+    assert!(
+        stdout.contains("Synthesis:"),
+        "text output should contain Synthesis summary"
+    );
     assert!(stdout.contains("[ok]"), "synthesis should show ok status");
-    assert!(stdout.contains("backend:  mock"), "should mention mock backend");
+    assert!(
+        stdout.contains("backend:  mock"),
+        "should mention mock backend"
+    );
     assert!(stdout.contains("gate count:"), "should show gate count");
 }
 
@@ -112,7 +121,10 @@ fn check_json_all_pass() {
         .expect("failed to run ev check --json on all_pass fixture");
     let stdout = String::from_utf8_lossy(&output.stdout);
 
-    assert!(stdout.contains("\"passed\": 1024"), "all 1024 combos should pass");
+    assert!(
+        stdout.contains("\"passed\": 1024"),
+        "all 1024 combos should pass"
+    );
     assert!(stdout.contains("\"failed\": 0"), "no failures expected");
     assert!(
         stdout.contains("\"spec_hash\""),
@@ -132,7 +144,10 @@ fn check_text_mixed_fixture_exits_1() {
         .arg("tests/fixtures/sample.xif.yaml")
         .output()
         .expect("failed to run ev check on mixed fixture");
-    assert!(!output.status.success(), "mixed fixture should exit non-zero");
+    assert!(
+        !output.status.success(),
+        "mixed fixture should exit non-zero"
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("failed: 84"), "should report 84 failures");
 }
@@ -145,7 +160,10 @@ fn check_help_mentions_synth_flag() {
         .output()
         .expect("failed to run ev check --help");
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("--synth"), "help should mention --synth flag");
+    assert!(
+        stdout.contains("--synth"),
+        "help should mention --synth flag"
+    );
 }
 
 #[test]
