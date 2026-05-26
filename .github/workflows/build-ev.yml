@@ -78,9 +78,11 @@ jobs:
           echo "=== text output ==="
           ./target/release/ev check --target tests/fixtures/all_pass.xif.yaml --synth
           echo "=== json output ==="
-          ./target/release/ev check --target tests/fixtures/all_pass.xif.yaml --synth --json > /tmp/synth_out.jsonl 2>&1
-          # Last line is the synthesis Fact; validate status without Python
-          tail -1 /tmp/synth_out.jsonl | grep -q '"status":"ok"' && echo "synthesis Fact OK" || (echo "synthesis FAILED"; exit 1)
+          ./target/release/ev check --target tests/fixtures/all_pass.xif.yaml --synth --json > /tmp/synth_fact.json 2>/tmp/synth_stderr.txt
+          # Validate fact_type and status without Python or jq
+          grep -q '"fact_type":"synthesis_result"' /tmp/synth_fact.json || (echo "FAILED: missing fact_type"; exit 1)
+          grep -q '"status":"ok"' /tmp/synth_fact.json || (echo "FAILED: synthesis status not ok"; exit 1)
+          echo "synthesis Fact OK"
 
       - name: Verify (fixtures)
         run: |
