@@ -85,6 +85,20 @@ fn main() -> anyhow::Result<()> {
                 &projector_registry,
             );
 
+            // Always report verification results first.
+            let all_passed;
+            {
+                let reporter: Box<dyn ReporterCapable> = if json {
+                    Box::new(JsonReporter)
+                } else {
+                    Box::new(TextReporter)
+                };
+
+                let field_order: Vec<String> = spec.fields.keys().cloned().collect();
+                all_passed = reporter.report(&spec.target, &field_order, &evaluations);
+            }
+
+            // Run synthesis alongside verification when requested.
             if synth {
                 let result = synth::synthesize_default(&spec)?;
                 if json {
@@ -96,19 +110,10 @@ fn main() -> anyhow::Result<()> {
                     println!("  gate count: {:?}", result.gate_count);
                     println!("  cell area:  {:?}", result.cell_area);
                 }
-            } else {
-                let reporter: Box<dyn ReporterCapable> = if json {
-                    Box::new(JsonReporter)
-                } else {
-                    Box::new(TextReporter)
-                };
+            }
 
-                let field_order: Vec<String> = spec.fields.keys().cloned().collect();
-                let all_passed = reporter.report(&spec.target, &field_order, &evaluations);
-
-                if !all_passed {
-                    std::process::exit(1);
-                }
+            if !all_passed {
+                std::process::exit(1);
             }
         }
         Commands::Certify { target, output } => {
