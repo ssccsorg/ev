@@ -16,6 +16,10 @@ cd "$(dirname "$0")"
 
 case ${1:-} in
     --verify)
+        if [ ! -f target/release/ev ]; then
+            echo "Binary not found. Run './run.sh' first to build."
+            exit 1
+        fi
         scripts/ci-integration.sh ;;
     --demo)
         exec bash scripts/demo-ssccs-poc.sh ;;
