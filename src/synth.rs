@@ -19,6 +19,26 @@ pub struct SynthesisReport {
     pub message: Option<String>,
 }
 
+impl From<SynthesisReport> for crate::fih::Fact {
+    fn from(r: SynthesisReport) -> Self {
+        let payload = serde_json::json!({
+            "tool": r.tool,
+            "version": r.version,
+            "source": r.source,
+            "gate_count": r.gate_count,
+            "cell_area": r.cell_area,
+            "status": r.status,
+            "message": r.message,
+        });
+        crate::fih::Fact::new(
+            "synthesis_result",
+            "ev/synthesis",
+            &r.module_name,
+            payload,
+        )
+    }
+}
+
 /// Capability: synthesize a design from a verification spec.
 pub trait SynthesisCapable: Send + Sync {
     fn synthesize(&self, spec: &VerificationSpec) -> anyhow::Result<SynthesisReport>;
