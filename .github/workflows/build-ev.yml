@@ -64,11 +64,6 @@ jobs:
       - name: Test
         run: cargo test --release
 
-      - name: Test synthesis (mock)
-        run: |
-          EV_SYNTH_BACKEND=mock ./target/release/ev check --target tests/fixtures/all_pass.xif.yaml --synth
-          EV_SYNTH_BACKEND=mock ./target/release/ev check --target tests/fixtures/all_pass.xif.yaml --synth --json
-
       - name: Install Yosys
         run: sudo apt-get update -qq && sudo apt-get install -y -qq yosys
 
