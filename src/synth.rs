@@ -1,56 +1,87 @@
-//! Synthesis capability — runs external synthesis tools and produces reports.
+//! Synthesis capability — runs external synthesis tools and produces metrics.
 //!
-//! Each backend implements the `SynthesisCapable` trait. The pipeline depends
-//! on the trait, not on any specific tool.
+//! Fine-grained capability traits following the neXus model:
+//!   GenerateRtl  — spec → RTL file
+//!   RunSynthesis — RTL file → tool output
+//!   FullSynthesis = GenerateRtl + RunSynthesis (blanket impl)
+//!
+//! Each backend implements only what it provides. The pipeline depends on
+//! traits, not on any specific tool.
 
 use crate::spec::VerificationSpec;
 use serde::{Deserialize, Serialize};
 
-/// Report produced by a synthesis backend.
+/// Tool-agnostic synthesis metrics.
+///
+/// Every synthesis backend produces these fields. The `netlist_path` field
+/// is the handoff point to downstream colonies (OpenROAD, place-and-route).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SynthesisReport {
+pub struct SynthesisMetrics {
     pub tool: String,
     pub version: String,
     pub source: String,
     pub module_name: String,
     pub gate_count: Option<u64>,
     pub cell_area: Option<f64>,
+    /// Synthesized netlist — handoff point to physical design.
+    pub netlist_path: Option<String>,
     pub status: String,
     pub message: Option<String>,
 }
 
-impl From<SynthesisReport> for crate::fih::Fact {
-    fn from(r: SynthesisReport) -> Self {
+impl From<SynthesisMetrics> for crate::fih::Fact {
+    fn from(m: SynthesisMetrics) -> Self {
         let payload = serde_json::json!({
-            "tool": r.tool,
-            "version": r.version,
-            "source": r.source,
-            "gate_count": r.gate_count,
-            "cell_area": r.cell_area,
-            "status": r.status,
-            "message": r.message,
+            "tool": m.tool,
+            "version": m.version,
+            "source": m.source,
+            "gate_count": m.gate_count,
+            "cell_area": m.cell_area,
+            "netlist_path": m.netlist_path,
+            "status": m.status,
+            "message": m.message,
         });
         crate::fih::Fact::new(
             "synthesis_result",
             "ev/synthesis",
-            &r.module_name,
+            &m.module_name,
             payload,
         )
     }
 }
 
-/// Capability: synthesize a design from a verification spec.
-pub trait SynthesisCapable: Send + Sync {
-    fn synthesize(&self, spec: &VerificationSpec) -> anyhow::Result<SynthesisReport>;
-}
-
 /// Capability: generate RTL source from a verification spec.
 ///
 /// Decoupled from synthesis so any RTL dialect (SystemVerilog, Verilog,
-/// VHDL, Chisel) can feed any synthesis backend. The default implementation
-/// produces SystemVerilog.
+/// VHDL, Chisel) can feed any synthesis backend.
 pub trait GenerateRtl: Send + Sync {
     fn generate(&self, spec: &VerificationSpec) -> anyhow::Result<std::path::PathBuf>;
+}
+
+/// Capability: run a synthesis tool on an RTL file and produce metrics.
+///
+/// The tool is invoked with an RTL path and a top-level module name.
+/// Backends implement only this trait — they don't know about VerificationSpec.
+pub trait RunSynthesis: Send + Sync {
+    fn run(&self, rtl_path: &std::path::Path, top_module: &str) -> anyhow::Result<SynthesisMetrics>;
+}
+
+/// Aggregate: full synthesis pipeline from spec to metrics.
+///
+/// Backends that provide both RTL generation and tool execution get this
+/// blanket implementation automatically.
+#[allow(dead_code)]
+pub trait FullSynthesis: GenerateRtl + RunSynthesis {}
+impl<T: GenerateRtl + RunSynthesis> FullSynthesis for T {}
+
+/// Compose GenerateRtl + RunSynthesis into a single pipeline call.
+#[allow(dead_code)]
+pub fn synthesize_pipeline(
+    pipeline: &dyn FullSynthesis,
+    spec: &VerificationSpec,
+) -> anyhow::Result<SynthesisMetrics> {
+    let rtl_path = pipeline.generate(spec)?;
+    pipeline.run(&rtl_path, &spec.target)
 }
 
 /// Default RTL generator — produces SystemVerilog.
@@ -63,52 +94,47 @@ impl GenerateRtl for SvGenerator {
 }
 
 /// Backend that runs an external shell script.
+///
+/// Implements `RunSynthesis` only. Pair with a `GenerateRtl` impl
+/// (default: `SvGenerator`) to get `FullSynthesis` via blanket impl.
 pub struct ScriptBackend {
     script_path: std::path::PathBuf,
-    rtl_gen: Box<dyn GenerateRtl>,
 }
 
 impl ScriptBackend {
     pub fn new(script_path: std::path::PathBuf) -> Self {
-        Self { script_path, rtl_gen: Box::new(SvGenerator) }
-    }
-
-    /// Use a non-default RTL generator.
-    #[allow(dead_code)]
-    pub fn with_rtl_generator(mut self, gen: Box<dyn GenerateRtl>) -> Self {
-        self.rtl_gen = gen;
-        self
+        Self { script_path }
     }
 }
 
-impl SynthesisCapable for ScriptBackend {
-    fn synthesize(&self, spec: &VerificationSpec) -> anyhow::Result<SynthesisReport> {
-        let rtl_path = self.rtl_gen.generate(spec)?;
+impl RunSynthesis for ScriptBackend {
+    fn run(&self, rtl_path: &std::path::Path, top_module: &str) -> anyhow::Result<SynthesisMetrics> {
         let output = std::process::Command::new("bash")
             .arg(&self.script_path)
-            .arg(&rtl_path)
-            .arg(&spec.target)
+            .arg(rtl_path)
+            .arg(top_module)
             .output()
             .map_err(|e| anyhow::anyhow!("Failed to run synthesis: {}", e))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Ok(SynthesisReport {
+            return Ok(SynthesisMetrics {
                 tool: "unknown".into(),
                 version: "unknown".into(),
                 source: rtl_path.to_string_lossy().to_string(),
-                module_name: spec.target.clone(),
+                module_name: top_module.into(),
                 gate_count: None,
                 cell_area: None,
+                netlist_path: None,
                 status: "error".into(),
                 message: Some(stderr.to_string()),
             });
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
-        let report: SynthesisReport = serde_json::from_str(&stdout)
+        let metrics: SynthesisMetrics = serde_json::from_str(&stdout)
             .map_err(|e| anyhow::anyhow!("Failed to parse synthesis JSON: {}", e))?;
-        Ok(report)
+        Ok(metrics)
     }
 }
 
@@ -232,8 +258,8 @@ fn sv_constraint_assertion(
     }
 }
 
-/// Run the default synthesis backend.
-pub fn synthesize_default(spec: &VerificationSpec) -> anyhow::Result<SynthesisReport> {
+/// Run the default synthesis pipeline: SvGenerator + ScriptBackend (Yosys).
+pub fn synthesize_default(spec: &VerificationSpec) -> anyhow::Result<SynthesisMetrics> {
     let script_path = if let Ok(path) = std::env::var("EV_SYNTH_SCRIPT") {
         std::path::PathBuf::from(path)
     } else {
@@ -257,7 +283,12 @@ pub fn synthesize_default(spec: &VerificationSpec) -> anyhow::Result<SynthesisRe
             )
         })?
     };
-    ScriptBackend::new(script_path).synthesize(spec)
+    // Compose: SvGenerator (GenerateRtl) + ScriptBackend (RunSynthesis)
+    // SvGenerator doesn't implement RunSynthesis, ScriptBackend doesn't
+    // implement GenerateRtl — but together via synthesize_pipeline they
+    // form the full synthesis path.
+    let rtl_path = SvGenerator.generate(spec)?;
+    ScriptBackend::new(script_path).run(&rtl_path, &spec.target)
 }
 
 #[cfg(test)]
@@ -448,44 +479,47 @@ mod tests {
         assert!(result.unwrap_err().to_string().contains("no fields"));
     }
 
-    // ── SynthesisReport → Fact ────────────────────────────────────
+    // ── SynthesisMetrics → Fact ────────────────────────────────────
 
     #[test]
-    fn synthesis_report_to_fact() {
-        let report = SynthesisReport {
+    fn synthesis_metrics_to_fact() {
+        let metrics = SynthesisMetrics {
             tool: "yosys".into(),
             version: "0.50".into(),
             source: "/tmp/test.sv".into(),
             module_name: "my_alu".into(),
             gate_count: Some(142),
             cell_area: Some(0.012),
+            netlist_path: Some("/tmp/netlist.v".into()),
             status: "ok".into(),
             message: None,
         };
-        let fact: crate::fih::Fact = report.into();
+        let fact: crate::fih::Fact = metrics.into();
 
         assert_eq!(fact.fact_type, "synthesis_result");
         assert_eq!(fact.origin, "ev/synthesis");
         assert_eq!(fact.target, "my_alu");
         assert_eq!(fact.payload["tool"], "yosys");
         assert_eq!(fact.payload["gate_count"], 142);
+        assert_eq!(fact.payload["netlist_path"], "/tmp/netlist.v");
         assert_eq!(fact.payload["status"], "ok");
         assert!(!fact.timestamp.is_empty());
     }
 
     #[test]
-    fn synthesis_report_error_to_fact() {
-        let report = SynthesisReport {
+    fn synthesis_metrics_error_to_fact() {
+        let metrics = SynthesisMetrics {
             tool: "unknown".into(),
             version: "unknown".into(),
             source: "/tmp/test.sv".into(),
             module_name: "bad_module".into(),
             gate_count: None,
             cell_area: None,
+            netlist_path: None,
             status: "error".into(),
             message: Some("yosys not found".into()),
         };
-        let fact: crate::fih::Fact = report.into();
+        let fact: crate::fih::Fact = metrics.into();
 
         assert_eq!(fact.fact_type, "synthesis_result");
         assert_eq!(fact.payload["status"], "error");

@@ -159,6 +159,7 @@ report = {
     'module_name': '$TOP_MODULE',
     'gate_count': $GATE_COUNT,
     'cell_area': $CELL_AREA,
+    'netlist_path': '$JSON_NETLIST',
     'status': 'ok',
 }
 
