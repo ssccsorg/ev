@@ -110,8 +110,17 @@ case ${1:-} in
         echo ""
 
         echo "=== Phase 5: channel demo (ev ↔ SSCCS POC) ==="
-        if [ -d ../ssccs ]; then
-            SSCCS_DIR=../ssccs bash scripts/demo-ssccs-poc.sh
+        if [ -d "$(cd .. && pwd)/ssccs" ]; then
+            # Resolve absolute path so demo script works regardless of its own cd
+            SSCCS_DIR="$(cd .. && pwd)/ssccs"
+            echo "  ssccs found at $SSCCS_DIR"
+            set +e
+            SSCCS_DIR="$SSCCS_DIR" bash scripts/demo-ssccs-poc.sh
+            DEMO_EC=$?
+            set -e
+            if [ "$DEMO_EC" -ne 0 ]; then
+                echo "  demo exited with code $DEMO_EC (non-fatal)"
+            fi
         else
             echo "  ../ssccs not found — skipping demo"
             echo "  (clone: git clone https://github.com/ssccsorg/ssccs.git ../ssccs)"
