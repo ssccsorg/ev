@@ -12,13 +12,6 @@ on:
       - ".github/workflows/build-ev.yml"
   pull_request:
     branches: ["main"]
-    paths:
-      - "src/**"
-      - "tests/**"
-      - "scripts/**"
-      - "Cargo.*"
-      - "run.sh"
-      - ".github/workflows/build-ev.yml"
   workflow_dispatch:
 
 env:
