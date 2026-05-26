@@ -315,24 +315,24 @@ pub fn synthesize_default(spec: &VerificationSpec) -> anyhow::Result<SynthesisMe
         std::path::PathBuf::from(path)
     } else {
         let candidates = [
-            std::env::current_exe().ok().and_then(|p| {
-                p.parent().map(|p| p.join("../scripts/synth/default-synth.sh"))
-            }),
-            Some(std::path::PathBuf::from("scripts/synth/default-synth.sh")),
-        ];
-        let mut found = None;
-        for c in candidates.iter().flatten() {
-            if c.exists() {
-                found = Some(c.clone());
-                break;
+                std::env::current_exe().ok().and_then(|p| {
+                    p.parent().map(|p| p.join("../scripts/synth/default-synth.py"))
+                }),
+                Some(std::path::PathBuf::from("scripts/synth/default-synth.py")),
+            ];
+            let mut found = None;
+            for c in candidates.iter().flatten() {
+                if c.exists() {
+                    found = Some(c.clone());
+                    break;
+                }
             }
-        }
-        found.ok_or_else(|| {
-            anyhow::anyhow!(
-                "No synthesis script. Set EV_SYNTH_SCRIPT or install \
-                 scripts/synth/default-synth.sh"
-            )
-        })?
+            found.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "No synthesis script. Set EV_SYNTH_SCRIPT or install \
+                     scripts/synth/default-synth.py"
+                )
+            })?
     };
     // Compose: SvGenerator (GenerateRtl) + backend (RunSynthesis).
     // When EV_SYNTH_BACKEND=mock, use MockSynthesisBackend for CI/testing.
