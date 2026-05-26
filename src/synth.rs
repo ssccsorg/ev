@@ -215,7 +215,7 @@ fn generate_sv(spec: &VerificationSpec) -> anyhow::Result<std::path::PathBuf> {
         ports.push(format!("  input logic [{}:0] {}", width.saturating_sub(1), name));
     }
     // Result width: generous ceiling based on field count and max width.
-    let max_field_width = spec.fields.values().map(|f| field_bit_width(f)).max().unwrap_or(1);
+    let max_field_width = spec.fields.values().map(field_bit_width).max().unwrap_or(1);
     let result_width = max_field_width + (spec.fields.len() as u32).next_power_of_two().ilog2();
     ports.push(format!("  output logic [{}:0] result", result_width.saturating_sub(1)));
     sv.push_str(&ports.join(",\n"));
