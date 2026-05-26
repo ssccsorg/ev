@@ -108,7 +108,8 @@ fn main() -> anyhow::Result<()> {
                 };
 
                 let field_order: Vec<String> = spec.fields.keys().cloned().collect();
-                all_passed = reporter.report(&spec, &field_order, &evaluations);
+                let spec_hash = reporter::hash_spec(&spec);
+                all_passed = reporter.report(&spec.target, &spec_hash, &field_order, &evaluations);
             }
 
             // Run synthesis alongside verification when requested.

@@ -2,18 +2,31 @@
 //!
 //! Following the Nexus capability-trait pattern: each output format (text, JSON)
 //! implements this trait. The pipeline only depends on the trait.
+//!
+//! Note: the trait is deliberately minimal (`target`, `spec_hash`, `field_order`,
+//! `evaluations`). It does NOT depend on `VerificationSpec` so that any colony
+//! — not just ev — can implement it.
 
 use crate::evaluate::Evaluation;
-use crate::spec::VerificationSpec;
 use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
 
 /// Capability: format and output verification results.
+///
+/// Takes only the data it needs (target name, optional spec hash for content-
+/// addressing, field order, and evaluations). Does NOT take `&VerificationSpec`
+/// to keep the trait reusable across colonies.
 pub trait ReporterCapable: Send + Sync {
     /// Report results. Returns true if all evaluations passed.
+    ///
+    /// * `target` — human-readable name of the verified target.
+    /// * `spec_hash` — content-addressable hash of the spec (empty string if
+    ///   not available / not needed, e.g. text reporter).
+    /// * `field_order` — ordered field names matching evaluation values.
+    /// * `evaluations` — individual evaluation results.
     fn report(
         &self,
-        spec: &VerificationSpec,
+        target: &str,
+        spec_hash: &str,
         field_order: &[String],
         evaluations: &[Evaluation],
     ) -> bool;
@@ -28,14 +41,15 @@ pub struct TextReporter;
 impl ReporterCapable for TextReporter {
     fn report(
         &self,
-        spec: &VerificationSpec,
+        target: &str,
+        _spec_hash: &str,
         _field_order: &[String],
         evaluations: &[Evaluation],
     ) -> bool {
         let passed_count = evaluations.iter().filter(|e| e.passed).count();
         let failed_count = evaluations.len() - passed_count;
 
-        println!("target: {}", spec.target);
+        println!("target: {}", target);
         println!("total:  {}", evaluations.len());
         println!("passed: {}", passed_count);
         println!("failed: {}", failed_count);
@@ -61,6 +75,7 @@ impl ReporterCapable for TextReporter {
 // ============================================================================
 
 use serde::Serialize;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Serialize)]
 struct EvaluationEntry {
@@ -96,19 +111,20 @@ pub struct JsonReporter;
 impl ReporterCapable for JsonReporter {
     fn report(
         &self,
-        spec: &VerificationSpec,
+        target: &str,
+        spec_hash: &str,
         field_order: &[String],
         evaluations: &[Evaluation],
     ) -> bool {
         let passed_count = evaluations.iter().filter(|e| e.passed).count();
         let failed_count = evaluations.len() - passed_count;
-        let spec_hash = hash_spec(spec);
         let origin = format!("ev/{}", env!("CARGO_PKG_VERSION"));
         let timestamp = chrono::Utc::now().to_rfc3339();
+        let spec_hash = spec_hash.to_string();
 
         let report = VerificationReport {
             origin,
-            target: spec.target.clone(),
+            target: target.to_string(),
             timestamp,
             spec_hash: spec_hash.clone(),
             total: evaluations.len(),
@@ -147,9 +163,14 @@ impl ReporterCapable for JsonReporter {
 }
 
 // ── Content-addressable hashing ──────────────────────────────────────────
+// Public so callers (e.g. main.rs) can compute the hash and pass it to
+// ReporterCapable::report.
 
 /// Hash a spec into a deterministic content ID.
-fn hash_spec(spec: &VerificationSpec) -> String {
+///
+/// Public so the caller can compute this once and pass to the reporter
+/// trait, keeping the trait free of `&VerificationSpec` dependencies.
+pub fn hash_spec(spec: &crate::spec::VerificationSpec) -> String {
     let mut h = Sha256::new();
     h.update(spec.target.as_bytes());
     for (name, field) in &spec.fields {
