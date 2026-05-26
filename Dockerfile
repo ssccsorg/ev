@@ -18,9 +18,9 @@ RUN yosys --version && rustc --version
 WORKDIR /workspace
 COPY . .
 
-# ssccs-core is a path dependency used only in CI for channel demo.
-# It is cloned in the CI workflow, not here.
-# To build locally with ssccs:  ln -s /path/to/ssccs ../ssccs
+# ssccs-core is a path dependency. In CI it is checked out by the
+# workflow; for local builds you must provide it at ../ssccs yourself.
+# See .github/workflows/build-ev.yml for details.
 RUN cargo build --release
 
 # Smoke test: synthesis with mock
