@@ -27,7 +27,7 @@ jobs:
           repository: ssccsorg/ssccs
           path: _ssccs
 
-      - name: Move ssccs into place for Cargo path dependency
+      - name: Move ssccs into place
         run: mv _ssccs ../ssccs
 
       - uses: dtolnay/rust-toolchain@stable
@@ -36,11 +36,8 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Build + lint + test
-        run: ./scripts/ci.sh
-
       - name: Install Yosys
         run: sudo apt-get update -qq && sudo apt-get install -y -qq yosys
 
-      - name: Integration tests (Yosys synthesis + fixtures + channel demo)
-        run: ./scripts/ci-integration.sh
+      - name: Full pipeline
+        run: bash run.sh --ci

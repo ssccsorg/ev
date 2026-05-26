@@ -1,32 +1,111 @@
 #!/usr/bin/env bash
 set -euo pipefail
 #
-# ev — Local CI runner
-#
-# Single entry point. Run without arguments for the full pipeline.
-# Requires: yosys installed and ssccs available at ../ssccs for --demo.
+# ev — Single entry point
 #
 # Usage:
-#   ./run.sh              # Full pipeline (default)
-#   ./run.sh --code       # fmt + clippy + build + test only
-#   ./run.sh --fix        # fmt + clippy --fix + build + test (auto-fix)
-#   ./run.sh --verify     # verify fixtures + Yosys synthesis
-#   ./run.sh --demo       # channel demo: ev ↔ SSCCS POC golden anchors
-#   ./run.sh --help       # show this message
+#   ./run.sh              # Full pipeline: fix → code → verify → demo
+#   ./run.sh --ci         # CI mode: code → verify → demo (ssccs from ../ssccs)
+#   ./run.sh --code       # fmt → clippy → build → test (strict)
+#   ./run.sh --fix        # auto-fix → build → test
+#   ./run.sh --verify     # Yosys synthesis + fixtures (binary must exist)
+#   ./run.sh --demo       # Channel demo: ev ↔ SSCCS POC golden anchors
+#   ./run.sh --help
 #
 
 cd "$(dirname "$0")"
+export RUSTFLAGS="-D warnings"
+
+# ── Helpers ────────────────────────────────────────────────────────────
+
+EV=./target/release/ev
+ALL_PASS=tests/fixtures/all_pass.xif.yaml
+MIXED=tests/fixtures/sample.xif.yaml
+
+code_checks() {
+    echo "=== fmt ==="
+    cargo fmt --check
+
+    echo "=== clippy ==="
+    cargo clippy --all-targets
+
+    echo "=== build ==="
+    cargo build --release
+
+    echo "=== test ==="
+    cargo test --release
+}
+
+verify_synth() {
+    echo "=== Yosys version ==="
+    yosys --version
+
+    echo "=== synthesis (text) ==="
+    $EV check --target "$ALL_PASS" --synth
+
+    echo "=== synthesis (json) ==="
+    $EV check --target "$ALL_PASS" --synth --json > /tmp/synth_fact.json 2>/tmp/synth_stderr.txt
+    grep -q '"fact_type": "synthesis_result"' /tmp/synth_fact.json || { cat /tmp/synth_stderr.txt; echo "FAILED: missing fact_type"; exit 1; }
+    grep -q '"status": "ok"' /tmp/synth_fact.json || { cat /tmp/synth_stderr.txt; echo "FAILED: synthesis status not ok"; exit 1; }
+    echo "  ok"
+}
+
+verify_fixtures() {
+    echo "=== all-pass fixture ==="
+    $EV check --target "$ALL_PASS"
+
+    echo "=== mixed fixture ==="
+    EC=0; $EV check --target "$MIXED" || EC=$?
+    if [ "$EC" -eq 1 ]; then
+        echo "  exit: 1 (expected — 84 of 96 fail eq constraint)"
+    else
+        echo "  exit: $EC (UNEXPECTED)"
+        exit 1
+    fi
+
+    echo "=== json output ==="
+    $EV check --target "$MIXED" --json 2>&1 | head -8 || true
+}
+
+run_demo() {
+    local ssccs_dir="$1"
+    if [ -n "$ssccs_dir" ] && [ -d "$ssccs_dir" ]; then
+        echo "=== channel demo ==="
+        set +e
+        SSCCS_DIR="$ssccs_dir" bash scripts/demo-ssccs-poc.sh
+        local ec=$?
+        set -e
+        if [ "$ec" -eq 0 ]; then
+            echo "  demo: all 5/5 passed"
+        else
+            echo "  demo: exit $ec (non-fatal)"
+        fi
+    else
+        echo "=== channel demo: skipped (ssccs not found) ==="
+    fi
+}
+
+# ── Modes ──────────────────────────────────────────────────────────────
 
 case ${1:-} in
+    --ci)
+        echo "══════════════════════════════════════"
+        echo "  ev — CI pipeline"
+        echo "══════════════════════════════════════"
+        code_checks
+        verify_synth
+        verify_fixtures
+        # In CI, ../ssccs is set up by the workflow.
+        run_demo "$(cd .. && pwd)/ssccs"
+        echo ""
+        echo "  All CI checks passed."
+        echo "══════════════════════════════════════"
+        ;;
     --code)
         echo "══════════════════════════════════════"
         echo "  ev — code checks"
         echo "══════════════════════════════════════"
-        export RUSTFLAGS="-D warnings"
-        cargo fmt --check
-        cargo clippy --all-targets
-        cargo build --release
-        cargo test --release
+        code_checks
         echo ""
         echo "  All code checks passed."
         echo "══════════════════════════════════════"
@@ -39,7 +118,6 @@ case ${1:-} in
         cargo clippy --fix --allow-dirty 2>&1 || true
         cargo fix --allow-dirty 2>&1 || true
         cargo fmt --all
-        export RUSTFLAGS="-D warnings"
         cargo build --release
         cargo test --release
         echo ""
@@ -47,86 +125,68 @@ case ${1:-} in
         echo "══════════════════════════════════════"
         ;;
     --verify)
+        if [ ! -f "$EV" ]; then
+            echo "Binary not found. Run './run.sh' first."
+            exit 1
+        fi
         echo "══════════════════════════════════════"
         echo "  ev — integration verification"
         echo "══════════════════════════════════════"
-        if [ ! -f target/release/ev ]; then
-            echo "  Binary not found. Run './run.sh' first to build."
-            exit 1
+        if command -v yosys &>/dev/null; then
+            verify_synth
+        else
+            echo "  yosys not found — skipping synthesis"
         fi
-        scripts/ci-integration.sh
+        verify_fixtures
+        echo ""
+        echo "  Verification passed."
+        echo "══════════════════════════════════════"
         ;;
     --demo)
+        # Self-contained: clone ssccs if not provided.
         exec bash scripts/demo-ssccs-poc.sh
         ;;
     --help|-h)
         echo "Usage: $0 [OPTION]"
-        echo "  (no arg)   Full pipeline: fix → fmt → clippy → build → test → verify → demo"
-        echo "  --code     fmt → clippy → build → test (strict, no auto-fix)"
-        echo "  --fix      auto-fix → build → test (fast)"
-        echo "  --verify   Yosys synthesis + fixtures only"
-        echo "  --demo     Channel demo: ev ↔ SSCCS POC golden anchors"
+        echo "  (no arg)   Full pipeline: fix → code → verify → demo"
+        echo "  --ci       CI mode: code → verify → demo"
+        echo "  --code     fmt → clippy → build → test (strict)"
+        echo "  --fix      auto-fix → build → test"
+        echo "  --verify   Yosys + fixtures (binary needed)"
+        echo "  --demo     Channel demo: ev ↔ SSCCS POC"
         exit 0
         ;;
     *)
-        # Full pipeline: fix, check, integration, demo
+        # Full local pipeline
         echo "══════════════════════════════════════"
         echo "  ev — Full Pipeline"
         echo "══════════════════════════════════════"
-        echo ""
 
         echo "=== Phase 1: auto-fix ==="
         cargo fmt --all
         cargo clippy --fix --allow-dirty 2>&1 || true
         cargo fix --allow-dirty 2>&1 || true
         cargo fmt --all
-        echo ""
 
-        echo "=== Phase 2: strict code checks ==="
-        export RUSTFLAGS="-D warnings"
-        cargo fmt --check
-        cargo clippy --all-targets
-        echo ""
+        echo "=== Phase 2: code checks ==="
+        code_checks
 
-        echo "=== Phase 3: build + test ==="
-        cargo build --release
-        cargo test --release
-        echo ""
-
-        echo "=== Phase 4: integration (Yosys + fixtures) ==="
+        echo "=== Phase 3: integration ==="
         if command -v yosys &>/dev/null; then
-            scripts/ci-integration.sh
+            verify_synth
         else
-            echo "  yosys not found — skipping synthesis test"
-            echo "  (install yosys: brew install yosys / apt install yosys)"
-            # still run fixture-only checks
-            EV=./target/release/ev
-            ALL_PASS=tests/fixtures/all_pass.xif.yaml
-            MIXED=tests/fixtures/sample.xif.yaml
-            $EV check --target "$ALL_PASS"
-            EC=0; $EV check --target "$MIXED" || EC=$?
-            if [ "$EC" -eq 1 ]; then echo "  mixed: exit 1 (expected)"; fi
+            echo "  yosys not found — skipping synthesis"
+            verify_fixtures
         fi
-        echo ""
 
-        echo "=== Phase 5: channel demo (ev ↔ SSCCS POC) ==="
-        if [ -d "$(cd .. && pwd)/ssccs" ]; then
-            # Resolve absolute path so demo script works regardless of its own cd
-            SSCCS_DIR="$(cd .. && pwd)/ssccs"
-            echo "  ssccs found at $SSCCS_DIR"
-            set +e
-            SSCCS_DIR="$SSCCS_DIR" bash scripts/demo-ssccs-poc.sh
-            DEMO_EC=$?
-            set -e
-            if [ "$DEMO_EC" -ne 0 ]; then
-                echo "  demo exited with code $DEMO_EC (non-fatal)"
-            fi
+        echo "=== Phase 4: channel demo ==="
+        if [ -d ../ssccs ]; then
+            run_demo "$(cd .. && pwd)/ssccs"
         else
             echo "  ../ssccs not found — skipping demo"
-            echo "  (clone: git clone https://github.com/ssccsorg/ssccs.git ../ssccs)"
         fi
-        echo ""
 
+        echo ""
         echo "══════════════════════════════════════"
         echo "  All done."
         echo "══════════════════════════════════════"

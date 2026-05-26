@@ -211,7 +211,10 @@ mod tests {
         VerificationSpec {
             target: "test".into(),
             fields,
-            constraints: vec![ConstraintSpec::Eq { axis_a: 0, axis_b: 1 }],
+            constraints: vec![ConstraintSpec::Eq {
+                axis_a: 0,
+                axis_b: 1,
+            }],
             projector: ProjectorSpec::Sum,
         }
     }
