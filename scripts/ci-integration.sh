@@ -57,6 +57,14 @@ echo "=== json output ==="
 $EV check --target "$MIXED" --json | head -8
 
 # ── Channel demo (ev ↔ SSCCS POC) ───────────────────────────────────
+#
+# Only runs in CI (where ../ssccs is set up by the workflow).
+# Local runs should use ./run.sh --demo for a self-contained demo.
 
-echo "=== channel demo (ev ↔ SSCCS POC) ==="
-SSCCS_DIR=../ssccs bash scripts/demo-ssccs-poc.sh
+if [ -n "${CI:-}" ]; then
+    echo "=== channel demo (ev ↔ SSCCS POC) ==="
+    SSCCS_DIR=../ssccs bash scripts/demo-ssccs-poc.sh
+else
+    echo "=== channel demo: skipped (not in CI) ==="
+    echo "  run './run.sh --demo' locally"
+fi
