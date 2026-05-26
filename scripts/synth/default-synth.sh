@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 #
-# yosys-synth.sh — Synthesis channel
+# default-synth.sh — Synthesis channel
 #
 # Takes a SystemVerilog file, runs Yosys synthesis, and produces a
 # machine-readable JSON report containing module name, gate count,
 # and cell area (when available).
 #
 # Usage:
-#   ./scripts/synth/yosys-synth.sh <file.sv> [top_module]
+#   ./scripts/synth/default-synth.sh <file.sv> [top_module]
 #
 # If top_module is omitted, the script infers it from the filename
 # (the basename without extension).
@@ -51,7 +51,8 @@ if [ ! -f "$SV_FILE" ]; then
 fi
 
 if [ -z "$TOP_MODULE" ]; then
-    BASENAME="$(basename "$SV_FILE" .sv)"
+    BASENAME="$(basename "$SV_FILE")"
+    BASENAME="${BASENAME%.sv}"
     BASENAME="${BASENAME%.v}"
     TOP_MODULE="$BASENAME"
 fi
@@ -73,8 +74,9 @@ fi
 
 YOSYS_VERSION="$(yosys --version 2>&1 | head -1)"
 
-# ── Synthesis flow ────────────────────────────────────────────────────────
+# ── Synthesis script ──────────────────────────────────────────────────────
 #
+# Flow:
 #   1. Read the SystemVerilog source
 #   2. Select the top module
 #   3. Synthesize down to generic gates (synth -top)

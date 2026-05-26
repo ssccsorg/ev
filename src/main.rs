@@ -4,6 +4,7 @@ mod format;
 mod registry;
 mod reporter;
 mod spec;
+mod synth;
 mod xif;
 
 use clap::{Parser, Subcommand};
@@ -38,6 +39,10 @@ enum Commands {
         /// Explain failures in natural language via LLM
         #[arg(long)]
         interpret: bool,
+
+        /// Run external synthesis after verification
+        #[arg(long)]
+        synth: bool,
     },
     /// Generate a signed verification certificate
     Certify {
@@ -59,6 +64,7 @@ fn main() -> anyhow::Result<()> {
             target,
             json,
             interpret,
+            synth,
         } => {
             if interpret {
                 anyhow::bail!("--interpret is not yet implemented");
@@ -79,18 +85,30 @@ fn main() -> anyhow::Result<()> {
                 &projector_registry,
             );
 
-            let reporter: Box<dyn ReporterCapable> = if json {
-                Box::new(JsonReporter)
+            if synth {
+                let result = synth::synthesize_default(&spec)?;
+                if json {
+                    println!("{}", serde_json::to_string_pretty(&result)?);
+                } else {
+                    println!("Synthesis: {}", result.module_name);
+                    println!("  backend:  {}", result.tool);
+                    println!("  version:  {}", result.version);
+                    println!("  gate count: {:?}", result.gate_count);
+                    println!("  cell area:  {:?}", result.cell_area);
+                }
             } else {
-                Box::new(TextReporter)
-            };
+                let reporter: Box<dyn ReporterCapable> = if json {
+                    Box::new(JsonReporter)
+                } else {
+                    Box::new(TextReporter)
+                };
 
-            let field_order: Vec<String> = spec.fields.keys().cloned().collect();
+                let field_order: Vec<String> = spec.fields.keys().cloned().collect();
+                let all_passed = reporter.report(&spec.target, &field_order, &evaluations);
 
-            let all_passed = reporter.report(&spec.target, &field_order, &evaluations);
-
-            if !all_passed {
-                std::process::exit(1);
+                if !all_passed {
+                    std::process::exit(1);
+                }
             }
         }
         Commands::Certify { target, output } => {
