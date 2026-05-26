@@ -1,12 +1,21 @@
-//! Synthesis capability — runs external synthesis tools and produces metrics.
+//! Core synthesis abstractions — traits, metrics, RTL generation.
 //!
-//! Fine-grained capability traits following the neXus model:
-//!   GenerateRtl  — spec → RTL file
-//!   RunSynthesis — RTL file → tool output
-//!   FullSynthesis = GenerateRtl + RunSynthesis (blanket impl)
+//! Tool-agnostic layer. No backend knows about any specific synthesis tool.
+//! All backends live in `synth::backends` and implement only the `RunSynthesis` trait.
 //!
-//! Each backend implements only what it provides. The pipeline depends on
-//! traits, not on any specific tool.
+//! # Architecture
+//!
+//! ```text
+//! synth::SynthesisMetrics   ← data shared by all backends
+//! synth::GenerateRtl        ← spec → RTL file (tool-agnostic)
+//! synth::RunSynthesis       ← RTL file → metrics (tool-agnostic trait)
+//! synth::FullSynthesis      ← aggregate trait (blanket impl)
+//! synth::SvGenerator        ← default GenerateRtl impl
+//! synth::MockSynthesisBackend ← test/CI backend (no external tool)
+//! synth::backends::yosys    ← YosysBackend (only backend with external dependency)
+//! ```
+
+pub mod backends;
 
 use crate::spec::VerificationSpec;
 use serde::{Deserialize, Serialize};
@@ -14,7 +23,7 @@ use serde::{Deserialize, Serialize};
 /// Tool-agnostic synthesis metrics.
 ///
 /// Every synthesis backend produces these fields. The `netlist_path` field
-/// is the handoff point to downstream colonies (OpenROAD, place-and-route).
+/// is the handoff point to downstream colonies (place-and-route).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SynthesisMetrics {
     pub tool: String,
@@ -52,12 +61,7 @@ impl From<SynthesisMetrics> for crate::fih::Fact {
             "status": m.status,
             "message": m.message,
         });
-        crate::fih::Fact::new(
-            "synthesis_result",
-            "ev/synthesis",
-            &m.module_name,
-            payload,
-        )
+        crate::fih::Fact::new("synthesis_result", "ev/synthesis", &m.module_name, payload)
     }
 }
 
@@ -73,8 +77,17 @@ pub trait GenerateRtl: Send + Sync {
 ///
 /// The tool is invoked with an RTL path and a top-level module name.
 /// Backends implement only this trait — they don't know about VerificationSpec.
+///
+/// # Error contract
+///
+/// * `Ok(metrics)` — always returned on successful tool execution.
+///   Tool-level failures (yosys error, script stderr) are encoded in
+///   `metrics.status` as `"error"` and `metrics.message`.
+/// * `Err(...)` — returned only for infrastructure failures (file not found,
+///   permission denied, JSON parse error).
 pub trait RunSynthesis: Send + Sync {
-    fn run(&self, rtl_path: &std::path::Path, top_module: &str) -> anyhow::Result<SynthesisMetrics>;
+    fn run(&self, rtl_path: &std::path::Path, top_module: &str)
+        -> anyhow::Result<SynthesisMetrics>;
 }
 
 /// Aggregate: full synthesis pipeline from spec to metrics.
@@ -104,98 +117,10 @@ impl GenerateRtl for SvGenerator {
     }
 }
 
-/// Backend that runs an external shell script.
-///
-/// Implements `RunSynthesis` only. Pair with a `GenerateRtl` impl
-/// (default: `SvGenerator`) to get `FullSynthesis` via blanket impl.
-pub struct ScriptBackend {
-    script_path: std::path::PathBuf,
-}
-
-impl ScriptBackend {
-    pub fn new(script_path: std::path::PathBuf) -> Self {
-        Self { script_path }
-    }
-}
-
-impl RunSynthesis for ScriptBackend {
-    fn run(&self, rtl_path: &std::path::Path, top_module: &str) -> anyhow::Result<SynthesisMetrics> {
-        let output = std::process::Command::new("bash")
-            .arg(&self.script_path)
-            .arg(rtl_path)
-            .arg(top_module)
-            .output()
-            .map_err(|e| anyhow::anyhow!("Failed to run synthesis: {}", e))?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Ok(SynthesisMetrics {
-                tool: "unknown".into(),
-                version: "unknown".into(),
-                source: rtl_path.to_string_lossy().to_string(),
-                module_name: top_module.into(),
-                gate_count: None,
-                cell_area: None,
-                netlist_path: None,
-                dot_path: None,
-                cell_types: None,
-                warnings: None,
-                status: "error".into(),
-                message: Some(stderr.to_string()),
-            });
-        }
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let metrics: SynthesisMetrics = serde_json::from_str(&stdout)
-            .map_err(|e| anyhow::anyhow!("Failed to parse synthesis JSON: {}", e))?;
-        Ok(metrics)
-    }
-}
-
-/// Mock backend for CI/testing — validates the pipeline without a real tool.
-///
-/// Reads the generated RTL file, verifies it contains a valid module
-/// declaration, and returns deterministic mock metrics. Used when
-/// `EV_SYNTH_BACKEND=mock` or directly in unit tests.
-pub struct MockSynthesisBackend;
-
-impl RunSynthesis for MockSynthesisBackend {
-    fn run(&self, rtl_path: &std::path::Path, top_module: &str) -> anyhow::Result<SynthesisMetrics> {
-        let content = std::fs::read_to_string(rtl_path)
-            .map_err(|e| anyhow::anyhow!("Mock: cannot read RTL file {}: {}", rtl_path.display(), e))?;
-
-        if !content.contains(&format!("module {}", top_module)) {
-            anyhow::bail!(
-                "Mock: RTL file {} does not contain module {}",
-                rtl_path.display(),
-                top_module
-            );
-        }
-
-        Ok(SynthesisMetrics {
-            tool: "mock".into(),
-            version: "0.0.0".into(),
-            source: rtl_path.to_string_lossy().to_string(),
-            module_name: top_module.into(),
-            gate_count: Some(0),
-            cell_area: None,
-            netlist_path: None,
-            dot_path: None,
-            cell_types: None,
-            warnings: None,
-            status: "ok".into(),
-            message: None,
-        })
-    }
-}
-
 fn generate_sv(spec: &VerificationSpec) -> anyhow::Result<std::path::PathBuf> {
     let tmp_dir = std::env::temp_dir().join("ev-synth");
     std::fs::create_dir_all(&tmp_dir)?;
-    // Use a unique suffix so concurrent or sequential runs don't collide.
-    let unique_suffix: String = std::iter::repeat_with(fast_random_char)
-        .take(8)
-        .collect();
+    let unique_suffix: String = std::iter::repeat_with(fast_random_char).take(8).collect();
     let sv_path = tmp_dir.join(format!("{}_{}.sv", spec.target, unique_suffix));
 
     if spec.fields.is_empty() {
@@ -206,28 +131,34 @@ fn generate_sv(spec: &VerificationSpec) -> anyhow::Result<std::path::PathBuf> {
     sv.push_str("// Auto-generated by ev — ExaVerif\n");
     sv.push_str(&format!("module {} (\n", spec.target));
 
-    // Port declarations — one input per field, plus a result output.
     let field_names: Vec<&String> = spec.fields.keys().collect();
     let mut ports: Vec<String> = Vec::new();
     for name in &field_names {
         let field = &spec.fields[*name];
         let width = field_bit_width(field);
-        ports.push(format!("  input logic [{}:0] {}", width.saturating_sub(1), name));
+        ports.push(format!(
+            "  input logic [{}:0] {}",
+            width.saturating_sub(1),
+            name
+        ));
     }
-    // Result width: generous ceiling based on field count and max width.
     let max_field_width = spec.fields.values().map(field_bit_width).max().unwrap_or(1);
     let result_width = max_field_width + (spec.fields.len() as u32).next_power_of_two().ilog2();
-    ports.push(format!("  output logic [{}:0] result", result_width.saturating_sub(1)));
+    ports.push(format!(
+        "  output logic [{}:0] result",
+        result_width.saturating_sub(1)
+    ));
     sv.push_str(&ports.join(",\n"));
     sv.push_str("\n);\n\n");
 
-    // Projector logic.
     let projector_expr = sv_projector(&spec.projector, &field_names);
     sv.push_str(&format!("  assign result = {};\n", projector_expr));
 
-    // Constraint assertions.
     for constraint in &spec.constraints {
-        sv.push_str(&format!("\n  {}", sv_constraint_assertion(constraint, &field_names)));
+        sv.push_str(&format!(
+            "\n  {}",
+            sv_constraint_assertion(constraint, &field_names)
+        ));
     }
 
     sv.push_str("\nendmodule\n");
@@ -247,10 +178,13 @@ fn field_bit_width(field: &crate::spec::FieldSpec) -> u32 {
         return bits_for(span);
     }
     if let Some((min, max)) = field.range {
-        let span = (max - min).unsigned_abs().max(max.unsigned_abs()).max(min.unsigned_abs());
+        let span = (max - min)
+            .unsigned_abs()
+            .max(max.unsigned_abs())
+            .max(min.unsigned_abs());
         return bits_for(span);
     }
-    8 // default
+    8
 }
 
 fn bits_for(value: u64) -> u32 {
@@ -271,12 +205,16 @@ fn fast_random_char() -> char {
 /// Generate the right-hand side expression for the projector.
 fn sv_projector(proj: &crate::spec::ProjectorSpec, field_names: &[&String]) -> String {
     match proj {
-        crate::spec::ProjectorSpec::Sum => {
-            field_names.iter().map(|n| n.as_str()).collect::<Vec<_>>().join(" + ")
-        }
-        crate::spec::ProjectorSpec::Identity { axis } => {
-            field_names.get(*axis).map(|n| n.as_str()).unwrap_or("0").to_string()
-        }
+        crate::spec::ProjectorSpec::Sum => field_names
+            .iter()
+            .map(|n| n.as_str())
+            .collect::<Vec<_>>()
+            .join(" + "),
+        crate::spec::ProjectorSpec::Identity { axis } => field_names
+            .get(*axis)
+            .map(|n| n.as_str())
+            .unwrap_or("0")
+            .to_string(),
         crate::spec::ProjectorSpec::Parity { axis } => {
             let name = field_names.get(*axis).map(|n| n.as_str()).unwrap_or("0");
             format!("{}[0]", name)
@@ -309,38 +247,71 @@ fn sv_constraint_assertion(
     }
 }
 
-/// Run the default synthesis pipeline: SvGenerator + ScriptBackend (Yosys).
-pub fn synthesize_default(spec: &VerificationSpec) -> anyhow::Result<SynthesisMetrics> {
-    let script_path = if let Ok(path) = std::env::var("EV_SYNTH_SCRIPT") {
-        std::path::PathBuf::from(path)
-    } else {
-        let candidates = [
-                std::env::current_exe().ok().and_then(|p| {
-                    p.parent().map(|p| p.join("../scripts/synth/default-synth.py"))
-                }),
-                Some(std::path::PathBuf::from("scripts/synth/default-synth.py")),
-            ];
-            let mut found = None;
-            for c in candidates.iter().flatten() {
-                if c.exists() {
-                    found = Some(c.clone());
-                    break;
-                }
-            }
-            found.ok_or_else(|| {
-                anyhow::anyhow!(
-                    "No synthesis script. Set EV_SYNTH_SCRIPT or install \
-                     scripts/synth/default-synth.py"
-                )
-            })?
-    };
-    // Compose: SvGenerator (GenerateRtl) + backend (RunSynthesis).
-    // When EV_SYNTH_BACKEND=mock, use MockSynthesisBackend for CI/testing.
-    let rtl_path = SvGenerator.generate(spec)?;
-    if std::env::var("EV_SYNTH_BACKEND").unwrap_or_default() == "mock" {
-        MockSynthesisBackend.run(&rtl_path, &spec.target)
-    } else {
-        ScriptBackend::new(script_path).run(&rtl_path, &spec.target)
+/// Synthesis error report helper.
+///
+/// Produces a `SynthesisMetrics` with `status: "error"` and the given
+/// message, using sensible defaults for all other fields.
+pub fn error_report(
+    tool: &str,
+    version: &str,
+    source: &std::path::Path,
+    module_name: &str,
+    message: String,
+) -> SynthesisMetrics {
+    SynthesisMetrics {
+        tool: tool.into(),
+        version: version.into(),
+        source: source.to_string_lossy().to_string(),
+        module_name: module_name.into(),
+        gate_count: None,
+        cell_area: None,
+        netlist_path: None,
+        dot_path: None,
+        cell_types: None,
+        warnings: None,
+        status: "error".into(),
+        message: Some(message),
+    }
+}
+
+// ── Inline MockSynthesisBackend ──────────────────────────────────────
+// MockSynthesisBackend is tool-agnostic and lives directly in the core
+// layer. Backends with external tool dependencies go into `backends/`.
+
+pub struct MockSynthesisBackend;
+
+impl RunSynthesis for MockSynthesisBackend {
+    fn run(
+        &self,
+        rtl_path: &std::path::Path,
+        top_module: &str,
+    ) -> anyhow::Result<SynthesisMetrics> {
+        let content = std::fs::read_to_string(rtl_path).map_err(|e| {
+            anyhow::anyhow!("Mock: cannot read RTL file {}: {}", rtl_path.display(), e)
+        })?;
+
+        if !content.contains(&format!("module {}", top_module)) {
+            anyhow::bail!(
+                "Mock: RTL file {} does not contain module {}",
+                rtl_path.display(),
+                top_module
+            );
+        }
+
+        Ok(SynthesisMetrics {
+            tool: "mock".into(),
+            version: "0.0.0".into(),
+            source: rtl_path.to_string_lossy().to_string(),
+            module_name: top_module.into(),
+            gate_count: Some(0),
+            cell_area: None,
+            netlist_path: None,
+            dot_path: None,
+            cell_types: None,
+            warnings: None,
+            status: "ok".into(),
+            message: None,
+        })
     }
 }
 
@@ -350,7 +321,10 @@ mod tests {
     use crate::spec::{ConstraintSpec, FieldSpec, ProjectorSpec, VerificationSpec};
     use std::collections::BTreeMap;
 
-    fn make_spec(fields: BTreeMap<String, FieldSpec>, projector: ProjectorSpec) -> VerificationSpec {
+    fn make_spec(
+        fields: BTreeMap<String, FieldSpec>,
+        projector: ProjectorSpec,
+    ) -> VerificationSpec {
         VerificationSpec {
             target: "test_module".into(),
             fields,
@@ -363,43 +337,71 @@ mod tests {
 
     #[test]
     fn bit_width_range_0_15() {
-        let f = FieldSpec { range: Some((0, 15)), alignment: None, values: None };
-        assert_eq!(field_bit_width(&f), 4); // 15 = 1111 → 4 bits
+        let f = FieldSpec {
+            range: Some((0, 15)),
+            alignment: None,
+            values: None,
+        };
+        assert_eq!(field_bit_width(&f), 4);
     }
 
     #[test]
     fn bit_width_range_0_4() {
-        let f = FieldSpec { range: Some((0, 4)), alignment: None, values: None };
-        assert_eq!(field_bit_width(&f), 3); // 4 = 100 → 3 bits
+        let f = FieldSpec {
+            range: Some((0, 4)),
+            alignment: None,
+            values: None,
+        };
+        assert_eq!(field_bit_width(&f), 3);
     }
 
     #[test]
     fn bit_width_range_0_0() {
-        let f = FieldSpec { range: Some((0, 0)), alignment: None, values: None };
-        assert_eq!(field_bit_width(&f), 1); // 0 → 1 bit minimum
+        let f = FieldSpec {
+            range: Some((0, 0)),
+            alignment: None,
+            values: None,
+        };
+        assert_eq!(field_bit_width(&f), 1);
     }
 
     #[test]
     fn bit_width_values_single_bit() {
-        let f = FieldSpec { range: None, alignment: None, values: Some(vec![0, 1]) };
+        let f = FieldSpec {
+            range: None,
+            alignment: None,
+            values: Some(vec![0, 1]),
+        };
         assert_eq!(field_bit_width(&f), 1);
     }
 
     #[test]
     fn bit_width_values_three_bits() {
-        let f = FieldSpec { range: None, alignment: None, values: Some(vec![0, 3, 7]) };
-        assert_eq!(field_bit_width(&f), 3); // 7 = 111
+        let f = FieldSpec {
+            range: None,
+            alignment: None,
+            values: Some(vec![0, 3, 7]),
+        };
+        assert_eq!(field_bit_width(&f), 3);
     }
 
     #[test]
     fn bit_width_empty_values_defaults_to_1() {
-        let f = FieldSpec { range: None, alignment: None, values: Some(vec![]) };
+        let f = FieldSpec {
+            range: None,
+            alignment: None,
+            values: Some(vec![]),
+        };
         assert_eq!(field_bit_width(&f), 1);
     }
 
     #[test]
     fn bit_width_defaults_to_8() {
-        let f = FieldSpec { range: None, alignment: None, values: None };
+        let f = FieldSpec {
+            range: None,
+            alignment: None,
+            values: None,
+        };
         assert_eq!(field_bit_width(&f), 8);
     }
 
@@ -467,7 +469,14 @@ mod tests {
     fn constraint_range() {
         let n = names(&["a"]);
         let refs = name_refs(&n);
-        let s = sv_constraint_assertion(&ConstraintSpec::Range { axis: 0, min: 0, max: 15 }, &refs);
+        let s = sv_constraint_assertion(
+            &ConstraintSpec::Range {
+                axis: 0,
+                min: 0,
+                max: 15,
+            },
+            &refs,
+        );
         assert!(s.contains("assert property"));
         assert!(s.contains("a >= 0"));
         assert!(s.contains("a <= 15"));
@@ -486,7 +495,13 @@ mod tests {
     fn constraint_eq() {
         let n = names(&["a", "b"]);
         let refs = name_refs(&n);
-        let s = sv_constraint_assertion(&ConstraintSpec::Eq { axis_a: 0, axis_b: 1 }, &refs);
+        let s = sv_constraint_assertion(
+            &ConstraintSpec::Eq {
+                axis_a: 0,
+                axis_b: 1,
+            },
+            &refs,
+        );
         assert!(s.contains("assert property"));
         assert!(s.contains("a == b"));
     }
@@ -496,7 +511,14 @@ mod tests {
     #[test]
     fn generate_sv_produces_module_header() {
         let mut fields = BTreeMap::new();
-        fields.insert("op".into(), FieldSpec { range: Some((0, 7)), alignment: None, values: None });
+        fields.insert(
+            "op".into(),
+            FieldSpec {
+                range: Some((0, 7)),
+                alignment: None,
+                values: None,
+            },
+        );
         let spec = make_spec(fields, ProjectorSpec::Identity { axis: 0 });
 
         let sv_path = generate_sv(&spec).unwrap();
@@ -512,10 +534,27 @@ mod tests {
     #[test]
     fn generate_sv_with_constraints() {
         let mut fields = BTreeMap::new();
-        fields.insert("a".into(), FieldSpec { range: Some((0, 15)), alignment: None, values: None });
-        fields.insert("b".into(), FieldSpec { range: Some((0, 15)), alignment: None, values: None });
+        fields.insert(
+            "a".into(),
+            FieldSpec {
+                range: Some((0, 15)),
+                alignment: None,
+                values: None,
+            },
+        );
+        fields.insert(
+            "b".into(),
+            FieldSpec {
+                range: Some((0, 15)),
+                alignment: None,
+                values: None,
+            },
+        );
         let mut spec = make_spec(fields, ProjectorSpec::Sum);
-        spec.constraints = vec![ConstraintSpec::Eq { axis_a: 0, axis_b: 1 }];
+        spec.constraints = vec![ConstraintSpec::Eq {
+            axis_a: 0,
+            axis_b: 1,
+        }];
 
         let sv_path = generate_sv(&spec).unwrap();
         let content = std::fs::read_to_string(&sv_path).unwrap();
@@ -592,7 +631,14 @@ mod tests {
     #[test]
     fn mock_backend_valid_sv() {
         let mut fields = BTreeMap::new();
-        fields.insert("a".into(), FieldSpec { range: Some((0, 7)), alignment: None, values: None });
+        fields.insert(
+            "a".into(),
+            FieldSpec {
+                range: Some((0, 7)),
+                alignment: None,
+                values: None,
+            },
+        );
         let spec = make_spec(fields, ProjectorSpec::Identity { axis: 0 });
         let rtl_path = SvGenerator.generate(&spec).unwrap();
 
@@ -605,7 +651,14 @@ mod tests {
     #[test]
     fn mock_backend_wrong_module_name() {
         let mut fields = BTreeMap::new();
-        fields.insert("a".into(), FieldSpec { range: Some((0, 7)), alignment: None, values: None });
+        fields.insert(
+            "a".into(),
+            FieldSpec {
+                range: Some((0, 7)),
+                alignment: None,
+                values: None,
+            },
+        );
         let spec = make_spec(fields, ProjectorSpec::Identity { axis: 0 });
         let rtl_path = SvGenerator.generate(&spec).unwrap();
 
@@ -615,17 +668,22 @@ mod tests {
 
     #[test]
     fn mock_backend_missing_file() {
-        let result = MockSynthesisBackend.run(
-            std::path::Path::new("/tmp/ev-nonexistent.sv"),
-            "foo",
-        );
+        let result =
+            MockSynthesisBackend.run(std::path::Path::new("/tmp/ev-nonexistent.sv"), "foo");
         assert!(result.is_err());
     }
 
     #[test]
     fn full_pipeline_with_mock() {
         let mut fields = BTreeMap::new();
-        fields.insert("x".into(), FieldSpec { range: Some((0, 3)), alignment: None, values: None });
+        fields.insert(
+            "x".into(),
+            FieldSpec {
+                range: Some((0, 3)),
+                alignment: None,
+                values: None,
+            },
+        );
         let spec = make_spec(fields, ProjectorSpec::Sum);
 
         let rtl_path = SvGenerator.generate(&spec).unwrap();
