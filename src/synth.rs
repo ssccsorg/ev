@@ -27,6 +27,12 @@ pub struct SynthesisMetrics {
     pub netlist_path: Option<String>,
     /// Gate-level DOT diagram path (Yosys show -format dot).
     pub dot_path: Option<String>,
+    /// Per-cell-type breakdown: {"$_AND_": 12, "$_DFF_": 4, ...}.
+    #[serde(default)]
+    pub cell_types: Option<serde_json::Value>,
+    /// Yosys warnings captured from log.
+    #[serde(default)]
+    pub warnings: Option<serde_json::Value>,
     pub status: String,
     pub message: Option<String>,
 }
@@ -41,6 +47,8 @@ impl From<SynthesisMetrics> for crate::fih::Fact {
             "cell_area": m.cell_area,
             "netlist_path": m.netlist_path,
             "dot_path": m.dot_path,
+            "cell_types": m.cell_types,
+            "warnings": m.warnings,
             "status": m.status,
             "message": m.message,
         });
@@ -130,6 +138,8 @@ impl RunSynthesis for ScriptBackend {
                 cell_area: None,
                 netlist_path: None,
                 dot_path: None,
+                cell_types: None,
+                warnings: None,
                 status: "error".into(),
                 message: Some(stderr.to_string()),
             });
@@ -171,6 +181,8 @@ impl RunSynthesis for MockSynthesisBackend {
             cell_area: None,
             netlist_path: None,
             dot_path: None,
+            cell_types: None,
+            warnings: None,
             status: "ok".into(),
             message: None,
         })
@@ -533,6 +545,8 @@ mod tests {
             cell_area: Some(0.012),
             netlist_path: Some("/tmp/netlist.v".into()),
             dot_path: Some("/tmp/netlist.dot".into()),
+            cell_types: None,
+            warnings: None,
             status: "ok".into(),
             message: None,
         };
@@ -560,6 +574,8 @@ mod tests {
             cell_area: None,
             netlist_path: None,
             dot_path: None,
+            cell_types: None,
+            warnings: None,
             status: "error".into(),
             message: Some("yosys not found".into()),
         };

@@ -91,10 +91,12 @@ STAT_LOG="$WORK_DIR/stat.log"
 
 yosys -q -l "$WORK_DIR/yosys.log" -p "
     read_verilog -sv \"$SV_FILE\";
+    hierarchy -top \"$TOP_MODULE\";
+    proc;
     synth -top \"$TOP_MODULE\";
-    show -format dot -prefix \"$WORK_DIR/netlist\" \"$TOP_MODULE\";
     stat -json > \"$STAT_LOG\";
     write_json \"$JSON_NETLIST\";
+    show -format dot -prefix \"$WORK_DIR/netlist\" \"$TOP_MODULE\";
 " 2>&1
 
 YOSYS_EXIT=$?
@@ -108,10 +110,11 @@ fi
 
 GATE_COUNT="null"
 CELL_AREA="null"
+CELL_TYPES_JSON="null"
 
 if [ -f "$STAT_LOG" ]; then
     GATE_COUNT=$(python3 -c "
-import json, sys
+import json
 try:
     with open('$STAT_LOG') as f:
         data = json.load(f)
@@ -123,7 +126,7 @@ except Exception:
 " 2>/dev/null || echo "null")
 
     CELL_AREA=$(python3 -c "
-import json, sys
+import json
 try:
     with open('$STAT_LOG') as f:
         data = json.load(f)
@@ -133,12 +136,32 @@ try:
 except Exception:
     print('null')
 " 2>/dev/null || echo "null")
+
+    CELL_TYPES_JSON=$(python3 -c "
+import json
+try:
+    with open('$STAT_LOG') as f:
+        data = json.load(f)
+    mod = data.get('top_module', data.get('modules', {}).get('$TOP_MODULE', {}))
+    cells = mod.get('cells', {}) if mod else {}
+    # Filter to non-zero counts, sort by count desc
+    filtered = {k: v for k, v in cells.items() if v > 0}
+    print(json.dumps(filtered))
+except Exception:
+    print('null')
+" 2>/dev/null || echo "null")
 fi
 
-# Verify DOT file was created
+# Verify DOT file — must exist and contain a digraph.
 DOT_PATH_JSON="null"
-if [ -f "$DOT_FILE" ]; then
+if [ -f "$DOT_FILE" ] && grep -q 'digraph' "$DOT_FILE" 2>/dev/null; then
     DOT_PATH_JSON="\"$DOT_FILE\""
+fi
+
+# Capture Yosys warnings from log.
+WARNINGS_JSON="null"
+if [ -f "$WORK_DIR/yosys.log" ]; then
+    WARNINGS_JSON=$(grep -i 'warning' "$WORK_DIR/yosys.log" 2>/dev/null | python3 -c "import sys,json; lines=[l.strip() for l in sys.stdin]; print(json.dumps(lines))" 2>/dev/null || echo "null")
 fi
 
 # ── Output JSON report ───────────────────────────────────────────────────
@@ -153,8 +176,10 @@ report = {
     'module_name': '$TOP_MODULE',
     'gate_count': $GATE_COUNT,
     'cell_area': $CELL_AREA,
+    'cell_types': $CELL_TYPES_JSON,
     'netlist_path': '$JSON_NETLIST',
     'dot_path': $DOT_PATH_JSON,
+    'warnings': $WARNINGS_JSON,
     'status': 'ok',
 }
 
