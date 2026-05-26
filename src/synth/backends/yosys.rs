@@ -57,17 +57,16 @@ impl RunSynthesis for YosysBackend {
         let dot_path = work_path.join("netlist.dot");
         let log_path = work_path.join("yosys.log");
 
+        let sv_path_str = rtl_path.display().to_string();
+        // NOTE: Yosys -p expects a string that may contain whitespace.
+        // Quoting module names with double quotes works in Yosys Tcl scripts but
+        // not in -p inline commands — the Yosys -p parser does not interpret Tcl
+        // string quoting the same way. So keep module names unquoted.
         let script = format!(
-            r#"
-                read_verilog -sv "{rtl}";
-                hierarchy -top "{top}";
-                proc;
-                synth -top "{top}";
-                stat -json > "{stat}";
-                write_json "{netlist}";
-                show -format dot -prefix "{prefix}" "{top}";
-            "#,
-            rtl = rtl_path.display(),
+            "read_verilog -sv {sv}; hierarchy -top {top}; proc; synth -top {top}; \
+             stat -json > {stat}; write_json {netlist}; \
+             show -format dot -prefix {prefix} {top};",
+            sv = sv_path_str,
             top = top_module,
             stat = stat_path.display(),
             netlist = netlist_path.display(),
@@ -75,14 +74,22 @@ impl RunSynthesis for YosysBackend {
         );
 
         let result = Command::new(&yosys_bin)
-            .args(["-q", "-l"])
-            .arg(&log_path)
+            .args(["-l", &log_path.to_string_lossy()])
             .args(["-p", &script])
             .output()
             .map_err(|e| anyhow::anyhow!("Failed to execute yosys: {}", e))?;
 
         if !result.status.success() {
-            let stderr = String::from_utf8_lossy(&result.stderr);
+            let mut detail = String::new();
+            detail.push_str(&String::from_utf8_lossy(&result.stderr));
+            detail.push_str(&String::from_utf8_lossy(&result.stdout));
+            // Also read the Yosys log if available.
+            if log_path.exists() {
+                if let Ok(log) = std::fs::read_to_string(&log_path) {
+                    detail.push_str("\n--- yosys log ---\n");
+                    detail.push_str(&log);
+                }
+            }
             return Ok(error_report(
                 "yosys",
                 &version,
@@ -91,7 +98,7 @@ impl RunSynthesis for YosysBackend {
                 format!(
                     "Yosys exited with code {:?}: {}",
                     result.status.code(),
-                    stderr
+                    detail
                 ),
             ));
         }

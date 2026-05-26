@@ -23,6 +23,7 @@ if $FIX; then
     cargo clippy --fix --allow-dirty 2>&1 || true
     cargo fix --allow-dirty 2>&1 || true
     cargo fmt --all
+    exit 0
 fi
 
 echo "=== fmt ==="
