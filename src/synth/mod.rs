@@ -571,6 +571,56 @@ mod tests {
         assert!(result.unwrap_err().to_string().contains("no fields"));
     }
 
+    #[test]
+    fn generate_sv_parity_projector() {
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "x".into(),
+            FieldSpec {
+                range: Some((0, 255)),
+                alignment: None,
+                values: None,
+            },
+        );
+        let spec = make_spec(fields, ProjectorSpec::Parity { axis: 0 });
+
+        let sv_path = generate_sv(&spec).unwrap();
+        let content = std::fs::read_to_string(&sv_path).unwrap();
+
+        assert!(content.contains("assign result = x[0];"));
+        assert!(content.contains("input logic [7:0] x"));
+    }
+
+    #[test]
+    fn generate_sv_with_two_fields_sums_correctly() {
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "a".into(),
+            FieldSpec {
+                range: Some((0, 15)),
+                alignment: None,
+                values: None,
+            },
+        );
+        fields.insert(
+            "b".into(),
+            FieldSpec {
+                range: Some((0, 31)),
+                alignment: None,
+                values: None,
+            },
+        );
+        let spec = make_spec(fields, ProjectorSpec::Sum);
+
+        let sv_path = generate_sv(&spec).unwrap();
+        let content = std::fs::read_to_string(&sv_path).unwrap();
+
+        // a(4bit) + b(5bit) => max=5, len=2, 2.next_power_of_two().ilog2()=1 => result_width=6
+        assert!(content.contains("input logic [3:0] a"));
+        assert!(content.contains("input logic [4:0] b"));
+        assert!(content.contains("output logic [5:0] result"));
+    }
+
     // ── SynthesisMetrics → Fact ────────────────────────────────────
 
     #[test]

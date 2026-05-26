@@ -183,3 +183,90 @@ fn hash_evaluation(
     }
     format!("{:x}", h.finalize())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::spec::{ConstraintSpec, FieldSpec, ProjectorSpec, VerificationSpec};
+    use std::collections::BTreeMap;
+
+    fn make_spec() -> VerificationSpec {
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "op".into(),
+            FieldSpec {
+                range: Some((0, 7)),
+                alignment: None,
+                values: None,
+            },
+        );
+        fields.insert(
+            "rs1".into(),
+            FieldSpec {
+                range: Some((0, 31)),
+                alignment: None,
+                values: None,
+            },
+        );
+        VerificationSpec {
+            target: "test".into(),
+            fields,
+            constraints: vec![ConstraintSpec::Eq { axis_a: 0, axis_b: 1 }],
+            projector: ProjectorSpec::Sum,
+        }
+    }
+
+    #[test]
+    fn hash_spec_deterministic() {
+        let spec = make_spec();
+        let h1 = hash_spec(&spec);
+        let h2 = hash_spec(&spec);
+        assert_eq!(h1, h2, "same spec should produce same hash");
+        assert_eq!(h1.len(), 64, "SHA256 hex should be 64 chars");
+    }
+
+    #[test]
+    fn hash_spec_differs_when_fields_change() {
+        let spec1 = make_spec();
+        let mut spec2 = make_spec();
+        spec2.target = "other".into();
+        let h1 = hash_spec(&spec1);
+        let h2 = hash_spec(&spec2);
+        assert_ne!(h1, h2, "different target should produce different hash");
+    }
+
+    #[test]
+    fn hash_evaluation_deterministic() {
+        let spec = make_spec();
+        let spec_hash = hash_spec(&spec);
+        let values = [1, 2, 3];
+
+        let h1 = hash_evaluation(&spec_hash, &values, true, Some(3));
+        let h2 = hash_evaluation(&spec_hash, &values, true, Some(3));
+        assert_eq!(h1, h2, "same inputs should produce same hash");
+    }
+
+    #[test]
+    fn hash_evaluation_passed_failed_differ() {
+        let spec = make_spec();
+        let spec_hash = hash_spec(&spec);
+        let values = [5, 5, 5];
+
+        let h_pass = hash_evaluation(&spec_hash, &values, true, Some(10));
+        let h_fail = hash_evaluation(&spec_hash, &values, false, Some(10));
+        assert_ne!(
+            h_pass, h_fail,
+            "passed vs failed should produce different hashes"
+        );
+    }
+
+    #[test]
+    fn hash_evaluation_none_projection() {
+        let spec = make_spec();
+        let spec_hash = hash_spec(&spec);
+        let values = [0, 0, 0];
+
+        let h = hash_evaluation(&spec_hash, &values, true, None);
+        assert_eq!(h.len(), 64, "SHA256 hex should be 64 chars");
+    }
+}
