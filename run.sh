@@ -4,8 +4,8 @@ set -euo pipefail
 # ev — Single entry point
 #
 # Usage:
-#   ./run.sh              # Full pipeline: fix → code → verify → demo
-#   ./run.sh --ci         # CI mode: code → verify → demo (ssccs from ../ssccs)
+#   ./run.sh              # Full pipeline: fix → code → verify
+#   ./run.sh --ci         # CI mode: code → verify
 #   ./run.sh --code       # fmt → clippy → build → test (strict)
 #   ./run.sh --fix        # auto-fix → build → test
 #   ./run.sh --verify     # Yosys synthesis + fixtures (binary must exist)
@@ -78,24 +78,6 @@ verify_fixtures() {
     $EV check --target "$MIXED" --json 2>&1 | head -8 || true
 }
 
-run_demo() {
-    local ssccs_dir="$1"
-    if [ -n "$ssccs_dir" ] && [ -d "$ssccs_dir" ]; then
-        echo "=== channel demo ==="
-        set +e
-        SSCCS_DIR="$ssccs_dir" bash scripts/demo-ssccs-poc.sh
-        local ec=$?
-        set -e
-        if [ "$ec" -eq 0 ]; then
-            echo "  demo: all 5/5 passed"
-        else
-            echo "  demo: exit $ec (non-fatal)"
-        fi
-    else
-        echo "=== channel demo: skipped (ssccs not found) ==="
-    fi
-}
-
 # ── Modes ──────────────────────────────────────────────────────────────
 
 case ${1:-} in
@@ -106,8 +88,6 @@ case ${1:-} in
         code_checks
         verify_synth
         verify_fixtures
-        # In CI, ../ssccs is set up by the workflow.
-        run_demo "$(cd .. && pwd)/ssccs"
         echo ""
         echo "  All CI checks passed."
         echo "══════════════════════════════════════"
@@ -159,12 +139,12 @@ case ${1:-} in
         ;;
     --help|-h)
         echo "Usage: $0 [OPTION]"
-        echo "  (no arg)   Full pipeline: fix → code → verify → demo"
-        echo "  --ci       CI mode: code → verify → demo"
+        echo "  (no arg)   Full pipeline: fix → code → verify"
+        echo "  --ci       CI mode: code → verify"
         echo "  --code     fmt → clippy → build → test (strict)"
         echo "  --fix      auto-fix → build → test"
         echo "  --verify   Yosys + fixtures (binary needed)"
-        echo "  --demo     Channel demo: ev ↔ SSCCS POC"
+        echo "  --demo     Channel demo: ev ↔ SSCCS POC (standalone)"
         exit 0
         ;;
     *)
@@ -190,14 +170,8 @@ case ${1:-} in
             verify_fixtures
         fi
 
-        echo "=== Phase 4: channel demo ==="
-        if [ -d ../ssccs ]; then
-            run_demo "$(cd .. && pwd)/ssccs"
-        else
-            echo "  ../ssccs not found — skipping demo"
-        fi
-
         echo ""
+        echo "  Run './run.sh --demo' for channel cross-verification with SSCCS POC."
         echo "══════════════════════════════════════"
         echo "  All done."
         echo "══════════════════════════════════════"
