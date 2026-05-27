@@ -96,3 +96,116 @@ pub fn expand_all(spec: &VerificationSpec) -> Vec<Combination> {
 
     combinations
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::spec::FieldSpec;
+    use std::collections::BTreeMap;
+
+    fn make_spec(fields: BTreeMap<String, FieldSpec>) -> VerificationSpec {
+        VerificationSpec {
+            target: "test".into(),
+            fields,
+            constraints: vec![],
+            projector: crate::spec::ProjectorSpec::Sum,
+        }
+    }
+
+    #[test]
+    fn expand_single_field_two_values() {
+        let mut fields = BTreeMap::new();
+        fields.insert("x".into(), FieldSpec {
+            range: None,
+            alignment: None,
+            values: Some(vec![2, 4]),
+        });
+        let spec = make_spec(fields);
+        let combos = expand_all(&spec);
+        assert_eq!(combos.len(), 2, "2 values = 2 combos");
+        assert_eq!(combos[0].values, vec![2]);
+        assert_eq!(combos[1].values, vec![4]);
+    }
+
+    #[test]
+    fn expand_two_fields_cartesian_product() {
+        let mut fields = BTreeMap::new();
+        fields.insert("a".into(), FieldSpec {
+            range: None,
+            alignment: None,
+            values: Some(vec![1, 2]),
+        });
+        fields.insert("b".into(), FieldSpec {
+            range: None,
+            alignment: None,
+            values: Some(vec![10, 20, 30]),
+        });
+        let spec = make_spec(fields);
+        let combos = expand_all(&spec);
+        // 2 * 3 = 6 combinations
+        assert_eq!(combos.len(), 6);
+        // First combination: a=1, b=10
+        assert_eq!(combos[0].values, vec![1, 10]);
+        // Last combination: a=2, b=30
+        assert_eq!(combos[5].values, vec![2, 30]);
+        // All combinations are unique
+        let mut uniq = std::collections::HashSet::new();
+        for c in &combos {
+            assert!(uniq.insert(c.values.clone()), "duplicate combo: {:?}", c.values);
+        }
+    }
+
+    #[test]
+    fn expand_range_field() {
+        let mut fields = BTreeMap::new();
+        fields.insert("n".into(), FieldSpec {
+            range: Some((0, 3)),
+            alignment: None,
+            values: None,
+        });
+        let spec = make_spec(fields);
+        let combos = expand_all(&spec);
+        assert_eq!(combos.len(), 4, "0..=3 = 4 values");
+        assert_eq!(combos[0].values, vec![0]);
+        assert_eq!(combos[3].values, vec![3]);
+    }
+
+    #[test]
+    fn expand_empty_fields_returns_empty() {
+        let spec = make_spec(BTreeMap::new());
+        let combos = expand_all(&spec);
+        assert!(combos.is_empty());
+    }
+
+    #[test]
+    fn expand_alignment_step() {
+        let mut fields = BTreeMap::new();
+        fields.insert("v".into(), FieldSpec {
+            range: Some((0, 10)),
+            alignment: Some(3),
+            values: None,
+        });
+        let spec = make_spec(fields);
+        let combos = expand_all(&spec);
+        // 0, 3, 6, 9
+        assert_eq!(combos.len(), 4);
+        assert_eq!(combos[0].values, vec![0]);
+        assert_eq!(combos[1].values, vec![3]);
+        assert_eq!(combos[2].values, vec![6]);
+        assert_eq!(combos[3].values, vec![9]);
+    }
+
+    #[test]
+    fn expand_preserves_point_coordinates() {
+        let mut fields = BTreeMap::new();
+        fields.insert("x".into(), FieldSpec {
+            range: None,
+            alignment: None,
+            values: Some(vec![5]),
+        });
+        let spec = make_spec(fields);
+        let combos = expand_all(&spec);
+        assert_eq!(combos[0].point.coordinates().raw, vec![5]);
+        assert_eq!(combos[0].coordinates.raw, vec![5]);
+    }
+}
