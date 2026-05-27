@@ -53,3 +53,12 @@ jobs:
           cache-to: type=gha,mode=min,scope=shared-ev
           provenance: false
           sbom: false
+
+      - name: Prune old cache
+        run: |
+          # Keep only the latest cache entry; older ones accumulate quickly
+          # with shared scope across all PRs.
+          gh extension install actions/gh-actions-cache 2>/dev/null || true
+          gh actions-cache delete ${{ env.IMAGE_NAME }} --confirm 2>/dev/null || true
+        continue-on-error: true
+        shell: bash
