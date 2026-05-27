@@ -61,6 +61,7 @@ jobs:
         run: |
           docker run --rm \
             -v ${{ github.workspace }}:/workspace \
+            --entrypoint bash \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
-            bash -c "cd /workspace && bash run.sh --verify"
+            -c "cd /workspace && bash run.sh --verify"
         shell: bash
