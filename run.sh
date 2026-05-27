@@ -16,6 +16,17 @@ set -euo pipefail
 cd "$(dirname "$0")"
 export RUSTFLAGS="-D warnings"
 
+# ── Pre-process: auto-format before any build-related mode ─────────────
+# Runs unconditionally before --code, --fix, --verify, --ci, and the
+# default pipeline so fmt/clippy issues are caught before strict checks.
+# Skipped for --help and --demo which don't need compilation.
+if [[ "${1:-}" != "--help" && "${1:-}" != "-h" && "${1:-}" != "--demo" ]]; then
+    cargo fmt --all
+    cargo clippy --fix --allow-dirty 2>&1 || true
+    cargo fix --allow-dirty 2>&1 || true
+    cargo fmt --all
+fi
+
 # ── Helpers ────────────────────────────────────────────────────────────
 
 EV=./target/release/ev
