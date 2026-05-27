@@ -8,12 +8,13 @@ on:
   workflow_dispatch:
 
 env:
-  CARGO_TERM_COLOR: always
-  RUSTFLAGS: "-D warnings"
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ssccsorg/ev
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   build:
@@ -21,30 +22,20 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Checkout ssccs (path dependency)
-        uses: actions/checkout@v6
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
         with:
-          repository: ssccsorg/ssccs
-          path: _ssccs
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Move ssccs into place
-        run: mv _ssccs ../ssccs
+      - name: Pull CI image
+        run: docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Auto-format before strict checks
+      - name: Run full pipeline inside container
         run: |
-          cargo fmt --all
-          cargo clippy --fix --allow-dirty 2>&1 || true
-          cargo fix --allow-dirty 2>&1 || true
-          cargo fmt --all
-
-      - name: Install Yosys
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq yosys
-
-      - name: Full pipeline
-        run: bash run.sh --ci
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            bash run.sh --ci
