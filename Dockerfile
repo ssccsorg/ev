@@ -17,11 +17,6 @@ RUN yosys --version && rustc --version
 
 WORKDIR /workspace
 COPY . .
-
-# ssccs is needed only for the --demo channel at runtime.
-# It is checked out by the CI workflow (see build-ev.yml).
-# For local builds without ssccs, remove the ssccs-core dependency
-# from Cargo.toml (already absent on this branch).
 RUN cargo build --release
 
 # Smoke test: synthesis with mock
