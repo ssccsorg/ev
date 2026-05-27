@@ -1,156 +1,175 @@
 #!/usr/bin/env bash
 set -euo pipefail
 #
-# ev — Local CI runner
-#
-# Mirrors .github/workflows/build-ev.yml locally.
-# Pre-flight auto-fixes catch formatting, trivial clippy, and compiler
-# suggestions before strict checks — eliminating most CI noise.
-#
-# Pipeline:
-#   fmt → clippy --fix → fix → fmt → check → clippy → test → verify
-#
-# The verify step runs `ev check` against sample fixtures to confirm
-# the full YAML → domain expansion → observe → report pipeline works
-# for both all-pass and mixed-pass/fail scenarios.
+# ev — Single entry point
 #
 # Usage:
-#   ./run.sh              # Full pipeline (default)
-#   ./run.sh --check      # fmt + check only
-#   ./run.sh --clippy     # full lint cycle (fix → fmt → clippy)
-#   ./run.sh --test       # fmt + test + verify
-#   ./run.sh --verify     # run ev check against fixtures only
-#   ./run.sh --demo       # channel demo: ev ↔ SSCCS POC golden anchors
+#   ./run.sh              # Full pipeline: fix → code → verify → demo
+#   ./run.sh --ci         # CI mode: code → verify (no demo, no auto-fix)
+#   ./run.sh --code       # fmt → clippy → build → test (strict)
+#   ./run.sh --fix        # auto-fix → build → test
+#   ./run.sh --verify     # Yosys synthesis + fixtures (binary must exist)
+#   ./run.sh --demo       # Channel demo: ev ↔ SSCCS POC golden anchors
+#   ./run.sh --help
 #
 
 cd "$(dirname "$0")"
+export RUSTFLAGS="-D warnings"
+EV_IMAGE="${EV_IMAGE:-ghcr.io/ssccsorg/ev:latest}"
 
-MODE="all"
+# Pre-process: auto-fmt for all build modes except --ci, --help, --demo.
+if [[ "${1:-}" != "--ci" && "${1:-}" != "--help" && "${1:-}" != "-h" && "${1:-}" != "--demo" ]]; then
+    cargo fmt --all
+    cargo clippy --fix --allow-dirty 2>&1 || true
+    cargo fix --allow-dirty 2>&1 || true
+    cargo fmt --all
+fi
 
-while [[ "$#" -gt 0 ]]; do
-    case $1 in
-        --check)  MODE="check" ;;
-        --clippy) MODE="clippy" ;;
-        --test)   MODE="test" ;;
-        --verify) MODE="verify" ;;
-        --demo)   MODE="demo" ;;
-        --help|-h)
-            echo "Usage: $0 [OPTION]"
-            echo "  (no arg)   Full pipeline (fmt → fix → clippy → test → verify)"
-            echo "  --check    fmt + check only"
-            echo "  --clippy   Full lint cycle (fix → fmt → clippy)"
-            echo "  --test     fmt + test + verify"
-            echo "  --verify   Run ev check against sample fixtures"
-            echo "  --demo     Channel demo: ev ↔ SSCCS POC golden anchors"
-            exit 0
-            ;;
-        *) echo "Unknown: $1"; echo "Usage: $0 [--check|--clippy|--test|--verify]"; exit 1 ;;
-    esac
-    shift
-done
+EV=./target/release/ev
+ALL_PASS=tests/fixtures/all_pass.xif.yaml
+MIXED=tests/fixtures/sample.xif.yaml
 
-# ── Pre-flight auto-fixes ────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────
 
-run_fmt()          { cargo fmt --all; }
-run_clippy_fix()   { cargo clippy --fix --allow-dirty 2>&1 || true; }
-run_compiler_fix() { cargo fix --allow-dirty 2>&1 || true; }
-run_auto_fix()     { run_fmt && run_clippy_fix && run_compiler_fix && run_fmt; }
+code_checks() {
+    echo "=== fmt ==="
+    cargo fmt --check
+    echo "=== clippy ==="
+    cargo clippy --all-targets
+    echo "=== build ==="
+    cargo build --release
+    echo "=== test ==="
+    cargo test --release
+}
 
-# ── Strict checks ─────────────────────────────────────────────────────────
+# Run a Yosys-dependent command inside the CI container.
+# Falls back to direct execution if Yosys is available locally.
+_yosys() {
+    if command -v yosys &>/dev/null; then
+        "$@"
+    else
+        docker run --rm --entrypoint bash \
+            -v "$(pwd):/workspace" \
+            "$EV_IMAGE" \
+            -c "cd /workspace && $*"
+    fi
+}
 
-run_check()  { cargo check; }
-run_clippy() { cargo clippy --all-targets -- -D warnings; }
-run_test()   { cargo test --release; }
+verify_synth() {
+    _yosys yosys --version
+    echo "=== synthesis (text) ==="
+    _yosys "$EV" check --target "$ALL_PASS" --synth
+    echo "=== synthesis (json) ==="
+    local tmpf
+    tmpf=$(mktemp /tmp/synth_fact.XXXXXX.json)
+    local tmpe
+    tmpe=$(mktemp /tmp/synth_stderr.XXXXXX.txt)
+    _yosys "$EV" check --target "$ALL_PASS" --synth --json > "$tmpf" 2>"$tmpe"
+    grep -q '"fact_type": "synthesis_result"' "$tmpf" || { cat "$tmpe"; echo "FAILED: missing fact_type"; exit 1; }
+    grep -q '"status": "ok"' "$tmpf" || { cat "$tmpe"; echo "FAILED: synthesis status not ok"; exit 1; }
+    echo "  ok"
+    rm -f "$tmpf" "$tmpe"
+}
 
-# ── Pipeline verification ─────────────────────────────────────────────────
-
-ALL_PASS="tests/fixtures/all_pass.xif.yaml"
-MIXED="tests/fixtures/sample.xif.yaml"
-
-run_verify() {
-    echo "--- all-pass fixture ---"
-    echo "\$ ev check --target $ALL_PASS"
-    cargo run --release -- check --target "$ALL_PASS"
-    echo "  exit: 0 (expected)"
-    echo ""
-
-    echo "--- mixed pass/fail fixture (eq constraint) ---"
-    echo "\$ ev check --target $MIXED"
-    set +e
-    cargo run --release -- check --target "$MIXED"
-    EC=$?
-    set -e
+verify_fixtures() {
+    echo "=== all-pass fixture ==="
+    $EV check --target "$ALL_PASS"
+    echo "=== mixed fixture ==="
+    EC=0; $EV check --target "$MIXED" || EC=$?
     if [ "$EC" -eq 1 ]; then
         echo "  exit: 1 (expected — 84 of 96 fail eq constraint)"
     else
         echo "  exit: $EC (UNEXPECTED)"
         exit 1
     fi
-    echo ""
-
-    echo "--- json output ---"
-    echo "\$ ev check --target $MIXED --json | head -8"
-    set +e
-    cargo run --release -- check --target "$MIXED" --json 2>&1 | head -8
-    set -e
-    echo ""
+    echo "=== json output ==="
+    $EV check --target "$MIXED" --json 2>&1 | head -8 || true
 }
 
-# ── Full pipeline ─────────────────────────────────────────────────────────
+# ── Modes ─────────────────────────────────────────────────────────────
 
-run_all() {
-    echo "=== Step 0: fmt --all ===" && run_fmt
-    echo "=== Step 1: clippy --fix ===" && run_clippy_fix
-    echo "=== Step 2: cargo fix ===" && run_compiler_fix
-    echo "=== Step 3: fmt (after fixes) ===" && run_fmt
-    echo "=== Step 4: cargo check ===" && run_check
-    echo "=== Step 5: clippy ===" && run_clippy
-    echo "=== Step 6: test ===" && run_test
-    echo "=== Step 7: verify ===" && run_verify
-}
-
-# ── Dispatch ───────────────────────────────────────────────────────────────
-
-case $MODE in
-    check)
-        echo "ev — check mode"
-        run_fmt
-        run_check
+case ${1:-} in
+    --ci)
+        echo "══════════════════════════════════════"
+        echo "  ev — CI pipeline"
+        echo "══════════════════════════════════════"
+        code_checks
+        verify_synth
+        verify_fixtures
         echo ""
-        echo "Check passed."
+        echo "  All CI checks passed."
+        echo "══════════════════════════════════════"
         ;;
-    clippy)
-        echo "ev — lint mode"
-        run_auto_fix
-        run_clippy
+    --code)
+        echo "══════════════════════════════════════"
+        echo "  ev — code checks"
+        echo "══════════════════════════════════════"
+        code_checks
         echo ""
-        echo "Lint passed."
+        echo "  All code checks passed."
+        echo "══════════════════════════════════════"
         ;;
-    test)
-        echo "ev — test mode"
-        run_fmt
-        run_test
-        run_verify
+    --fix)
+        echo "══════════════════════════════════════"
+        echo "  ev — auto-fix + test"
+        echo "══════════════════════════════════════"
+        cargo fmt --all
+        cargo clippy --fix --allow-dirty 2>&1 || true
+        cargo fix --allow-dirty 2>&1 || true
+        cargo fmt --all
+        cargo build --release
+        cargo test --release
         echo ""
-        echo "Tests passed."
+        echo "  All checks passed (with auto-fix)."
+        echo "══════════════════════════════════════"
         ;;
-    verify)
-        echo "ev — verify mode"
-        run_verify
+    --verify)
+        if [ ! -f "$EV" ]; then
+            echo "Binary not found. Run './run.sh' first."
+            exit 1
+        fi
+        echo "══════════════════════════════════════"
+        echo "  ev — integration verification"
+        echo "══════════════════════════════════════"
+        verify_synth
+        verify_fixtures
         echo ""
-        echo "Verify passed."
+        echo "  Verification passed."
+        echo "══════════════════════════════════════"
         ;;
-    demo)
-        echo "ev — channel demo mode"
+    --demo)
         exec bash scripts/demo-ssccs-poc.sh
         ;;
-    all)
-        echo "ev CI (local)"
-        echo ""
-        run_all
+    --help|-h)
+        echo "Usage: $0 [OPTION]"
+        echo "  (no arg)   Full pipeline: fix → code → verify → demo"
+        echo "  --ci       CI mode: code → verify"
+        echo "  --code     fmt → clippy → build → test (strict)"
+        echo "  --fix      auto-fix → build → test"
+        echo "  --verify   Yosys + fixtures (binary needed)"
+        echo "  --demo     Channel demo: ev ↔ SSCCS POC (standalone)"
+        exit 0
+        ;;
+    *)
+        # Full local pipeline
+        echo "══════════════════════════════════════"
+        echo "  ev — Full Pipeline"
+        echo "══════════════════════════════════════"
+        echo "=== Phase 1: auto-fix ==="
+        cargo fmt --all
+        cargo clippy --fix --allow-dirty 2>&1 || true
+        cargo fix --allow-dirty 2>&1 || true
+        cargo fmt --all
+        echo "=== Phase 2: code checks ==="
+        code_checks
+        echo "=== Phase 3: integration ==="
+        verify_synth
+        verify_fixtures
+        echo "=== Phase 4: channel demo ==="
+        bash scripts/demo-ssccs-poc.sh
         echo ""
         echo "══════════════════════════════════════"
-        echo "  All checks passed."
+        echo "  All done."
         echo "══════════════════════════════════════"
         ;;
 esac

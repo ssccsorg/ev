@@ -13,7 +13,9 @@ serde_yaml = "0.9"
 anyhow = "1"
 serde_json = "1"
 tracing = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+sha2 = "0.10"
+tempfile = "3"
 indicatif = "0.17"
 colored = "2"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
-ssccs-core = { path = "../ssccs/poc/standard/crates/core" }

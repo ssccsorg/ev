@@ -2,14 +2,34 @@
 //!
 //! Following the Nexus capability-trait pattern: each output format (text, JSON)
 //! implements this trait. The pipeline only depends on the trait.
+//!
+//! Note: the trait is deliberately minimal (`target`, `spec_hash`, `field_order`,
+//! `evaluations`). It does NOT depend on `VerificationSpec` so that any colony
+//! — not just ev — can implement it.
 
 use crate::evaluate::Evaluation;
-use std::collections::BTreeMap;
+use sha2::{Digest, Sha256};
 
 /// Capability: format and output verification results.
+///
+/// Takes only the data it needs (target name, optional spec hash for content-
+/// addressing, field order, and evaluations). Does NOT take `&VerificationSpec`
+/// to keep the trait reusable across colonies.
 pub trait ReporterCapable: Send + Sync {
     /// Report results. Returns true if all evaluations passed.
-    fn report(&self, target: &str, field_order: &[String], evaluations: &[Evaluation]) -> bool;
+    ///
+    /// * `target` — human-readable name of the verified target.
+    /// * `spec_hash` — content-addressable hash of the spec (empty string if
+    ///   not available / not needed, e.g. text reporter).
+    /// * `field_order` — ordered field names matching evaluation values.
+    /// * `evaluations` — individual evaluation results.
+    fn report(
+        &self,
+        target: &str,
+        spec_hash: &str,
+        field_order: &[String],
+        evaluations: &[Evaluation],
+    ) -> bool;
 }
 
 // ============================================================================
@@ -19,7 +39,13 @@ pub trait ReporterCapable: Send + Sync {
 pub struct TextReporter;
 
 impl ReporterCapable for TextReporter {
-    fn report(&self, target: &str, _field_order: &[String], evaluations: &[Evaluation]) -> bool {
+    fn report(
+        &self,
+        target: &str,
+        _spec_hash: &str,
+        _field_order: &[String],
+        evaluations: &[Evaluation],
+    ) -> bool {
         let passed_count = evaluations.iter().filter(|e| e.passed).count();
         let failed_count = evaluations.len() - passed_count;
 
@@ -49,9 +75,12 @@ impl ReporterCapable for TextReporter {
 // ============================================================================
 
 use serde::Serialize;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Serialize)]
 struct EvaluationEntry {
+    /// Content-addressable ID: SHA256(spec_hash || values || passed || projection).
+    id: String,
     combination: Vec<i64>,
     fields: BTreeMap<String, i64>,
     passed: bool,
@@ -62,7 +91,14 @@ struct EvaluationEntry {
 
 #[derive(Debug, Serialize)]
 struct VerificationReport {
+    /// Origin: "ev/{version}".
+    origin: String,
+    /// Target module identifier.
     target: String,
+    /// ISO 8601 timestamp of this verification run.
+    timestamp: String,
+    /// Content-addressable hash of the specification (parent reference).
+    spec_hash: String,
     total: usize,
     passed: usize,
     failed: usize,
@@ -73,12 +109,24 @@ struct VerificationReport {
 pub struct JsonReporter;
 
 impl ReporterCapable for JsonReporter {
-    fn report(&self, target: &str, field_order: &[String], evaluations: &[Evaluation]) -> bool {
+    fn report(
+        &self,
+        target: &str,
+        spec_hash: &str,
+        field_order: &[String],
+        evaluations: &[Evaluation],
+    ) -> bool {
         let passed_count = evaluations.iter().filter(|e| e.passed).count();
         let failed_count = evaluations.len() - passed_count;
+        let origin = format!("ev/{}", env!("CARGO_PKG_VERSION"));
+        let timestamp = chrono::Utc::now().to_rfc3339();
+        let spec_hash = spec_hash.to_string();
 
         let report = VerificationReport {
+            origin,
             target: target.to_string(),
+            timestamp,
+            spec_hash: spec_hash.clone(),
             total: evaluations.len(),
             passed: passed_count,
             failed: failed_count,
@@ -93,7 +141,10 @@ impl ReporterCapable for JsonReporter {
                             e.combination.values.get(i).map(|v| (name.clone(), *v))
                         })
                         .collect();
+                    let id =
+                        hash_evaluation(&spec_hash, &e.combination.values, e.passed, e.projection);
                     EvaluationEntry {
+                        id,
                         combination: e.combination.values.clone(),
                         fields,
                         passed: e.passed,
@@ -108,5 +159,138 @@ impl ReporterCapable for JsonReporter {
         println!("{}", json);
 
         failed_count == 0
+    }
+}
+
+// ── Content-addressable hashing ──────────────────────────────────────────
+// Public so callers (e.g. main.rs) can compute the hash and pass it to
+// ReporterCapable::report.
+
+/// Hash a spec into a deterministic content ID.
+///
+/// Public so the caller can compute this once and pass to the reporter
+/// trait, keeping the trait free of `&VerificationSpec` dependencies.
+pub fn hash_spec(spec: &crate::spec::VerificationSpec) -> String {
+    let mut h = Sha256::new();
+    h.update(spec.target.as_bytes());
+    for (name, field) in &spec.fields {
+        h.update(name.as_bytes());
+        h.update(format!("{:?}", field.range).as_bytes());
+        h.update(format!("{:?}", field.alignment).as_bytes());
+        h.update(format!("{:?}", field.values).as_bytes());
+    }
+    h.update(format!("{:?}", spec.projector).as_bytes());
+    for c in &spec.constraints {
+        h.update(format!("{:?}", c).as_bytes());
+    }
+    format!("{:x}", h.finalize())
+}
+
+/// Hash a single evaluation result. Tied to its parent spec via spec_hash.
+fn hash_evaluation(
+    spec_hash: &str,
+    values: &[i64],
+    passed: bool,
+    projection: Option<i64>,
+) -> String {
+    let mut h = Sha256::new();
+    h.update(spec_hash.as_bytes());
+    for v in values {
+        h.update(v.to_le_bytes());
+    }
+    h.update(if passed { b"1" } else { b"0" });
+    if let Some(p) = projection {
+        h.update(p.to_le_bytes());
+    }
+    format!("{:x}", h.finalize())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::spec::{ConstraintSpec, FieldSpec, ProjectorSpec, VerificationSpec};
+    use std::collections::BTreeMap;
+
+    fn make_spec() -> VerificationSpec {
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "op".into(),
+            FieldSpec {
+                range: Some((0, 7)),
+                alignment: None,
+                values: None,
+            },
+        );
+        fields.insert(
+            "rs1".into(),
+            FieldSpec {
+                range: Some((0, 31)),
+                alignment: None,
+                values: None,
+            },
+        );
+        VerificationSpec {
+            target: "test".into(),
+            fields,
+            constraints: vec![ConstraintSpec::Eq {
+                axis_a: 0,
+                axis_b: 1,
+            }],
+            projector: ProjectorSpec::Sum,
+        }
+    }
+
+    #[test]
+    fn hash_spec_deterministic() {
+        let spec = make_spec();
+        let h1 = hash_spec(&spec);
+        let h2 = hash_spec(&spec);
+        assert_eq!(h1, h2, "same spec should produce same hash");
+        assert_eq!(h1.len(), 64, "SHA256 hex should be 64 chars");
+    }
+
+    #[test]
+    fn hash_spec_differs_when_fields_change() {
+        let spec1 = make_spec();
+        let mut spec2 = make_spec();
+        spec2.target = "other".into();
+        let h1 = hash_spec(&spec1);
+        let h2 = hash_spec(&spec2);
+        assert_ne!(h1, h2, "different target should produce different hash");
+    }
+
+    #[test]
+    fn hash_evaluation_deterministic() {
+        let spec = make_spec();
+        let spec_hash = hash_spec(&spec);
+        let values = [1, 2, 3];
+
+        let h1 = hash_evaluation(&spec_hash, &values, true, Some(3));
+        let h2 = hash_evaluation(&spec_hash, &values, true, Some(3));
+        assert_eq!(h1, h2, "same inputs should produce same hash");
+    }
+
+    #[test]
+    fn hash_evaluation_passed_failed_differ() {
+        let spec = make_spec();
+        let spec_hash = hash_spec(&spec);
+        let values = [5, 5, 5];
+
+        let h_pass = hash_evaluation(&spec_hash, &values, true, Some(10));
+        let h_fail = hash_evaluation(&spec_hash, &values, false, Some(10));
+        assert_ne!(
+            h_pass, h_fail,
+            "passed vs failed should produce different hashes"
+        );
+    }
+
+    #[test]
+    fn hash_evaluation_none_projection() {
+        let spec = make_spec();
+        let spec_hash = hash_spec(&spec);
+        let values = [0, 0, 0];
+
+        let h = hash_evaluation(&spec_hash, &values, true, None);
+        assert_eq!(h.len(), 64, "SHA256 hex should be 64 chars");
     }
 }
