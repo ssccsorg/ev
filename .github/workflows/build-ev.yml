@@ -30,9 +30,6 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Build + lint + test (host)
-        run: bash run.sh --code
-
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v4
         with:
@@ -43,7 +40,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Pull or build Docker image
+      - name: Pull or build Docker image (Yosys runtime)
         run: |
           if docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest 2>/dev/null; then
             echo "Image pulled successfully."
@@ -57,11 +54,8 @@ jobs:
           fi
         shell: bash
 
-      - name: Verify synthesis + fixtures (container)
-        run: |
-          docker run --rm \
-            -v ${{ github.workspace }}:/workspace \
-            --entrypoint bash \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
-            -c "cd /workspace && bash run.sh --verify"
+      - name: Full pipeline (host build, container Yosys)
+        run: bash run.sh --ci
+        env:
+          EV_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
         shell: bash
