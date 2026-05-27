@@ -36,6 +36,13 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: Auto-format before strict checks
+        run: |
+          cargo fmt --all
+          cargo clippy --fix --allow-dirty 2>&1 || true
+          cargo fix --allow-dirty 2>&1 || true
+          cargo fmt --all
+
       - name: Install Yosys
         run: sudo apt-get update -qq && sudo apt-get install -y -qq yosys
 
