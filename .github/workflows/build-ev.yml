@@ -38,7 +38,7 @@ jobs:
             echo "Image pulled successfully."
           else
             echo "Image not found in registry. Building with shared cache..."
-            docker buildx build \
+            docker buildx build --load \
               --cache-from type=gha,scope=shared-ev \
               --cache-to type=gha,mode=min,scope=shared-ev \
               -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
