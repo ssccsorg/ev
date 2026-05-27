@@ -9,7 +9,6 @@
 //! synth::SynthesisMetrics   ← data shared by all backends
 //! synth::GenerateRtl        ← spec → RTL file (tool-agnostic)
 //! synth::RunSynthesis       ← RTL file → metrics (tool-agnostic trait)
-//! synth::FullSynthesis      ← aggregate trait (blanket impl)
 //! synth::SvGenerator        ← default GenerateRtl impl
 //! synth::MockSynthesisBackend ← test/CI backend (no external tool)
 //! synth::backends::yosys    ← YosysBackend (only backend with external dependency)
