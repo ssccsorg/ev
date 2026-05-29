@@ -1,0 +1,40 @@
+# CVA6 (Ariane) XIF multiply-accumulate accelerator.
+#
+# A realistic custom accelerator attached via the CVA6 XIF interface.
+# Accepts operands a, b, and an accumulator; computes a * b + acc.
+#
+# Pipeline constraints:
+# - funct3 must be one of {0x0, 0x1} (MAC or MUL only)
+# - rs1 != rd (no write-after-read with same register) — neq
+# - rs1 >= 0 unsigned (field range)
+# - rs2 >= 0 unsigned (field range)
+# - acc must be within [-128, 127] (signed 8-bit accumulator)
+#
+# Verification space: 4 fields
+#   funct3: 2 values
+#   rs1: 8 values
+#   rs2: 8 values
+#   acc: 256 values
+# Total: 2 * 8 * 8 * 256 = 32,768 combinations. Exhaustive.
+
+target: cva6_xif_mac
+fields:
+  funct3:
+    values: [0, 1]
+  rs1:
+    range: [0, 7]
+  rs2:
+    range: [0, 7]
+  acc:
+    range: [-128, 127]
+constraints:
+  # funct3 must be in {0, 1}
+  - type: oneof
+    field: "funct3"
+    values: [0, 1]
+  # rs1 != rd for hazard avoidance (rd = rs2 in this model)
+  - type: neq
+    field_a: "rs1"
+    field_b: "rs2"
+projector:
+  type: sum

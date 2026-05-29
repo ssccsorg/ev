@@ -67,13 +67,39 @@ impl FieldSpec {
 pub enum ConstraintSpec {
     /// Axis value must be within [min, max].
     #[serde(rename = "range")]
-    Range { axis: usize, min: i64, max: i64 },
+    Range { field: String, min: i64, max: i64 },
     /// Axis value must be even.
     #[serde(rename = "even")]
-    Even { axis: usize },
+    Even { field: String },
     /// Two axis values must be equal.
     #[serde(rename = "eq")]
-    Eq { axis_a: usize, axis_b: usize },
+    Eq { field_a: String, field_b: String },
+    /// Two axis values must not be equal.
+    #[serde(rename = "neq")]
+    Neq { field_a: String, field_b: String },
+    /// Axis value must be less than a constant.
+    #[serde(rename = "lt")]
+    Lt { field: String, value: i64 },
+    /// Axis value must be greater than a constant.
+    #[serde(rename = "gt")]
+    Gt { field: String, value: i64 },
+    /// Axis value must be less than or equal to a constant.
+    #[serde(rename = "le")]
+    Le { field: String, value: i64 },
+    /// Axis value must be greater than or equal to a constant.
+    #[serde(rename = "ge")]
+    Ge { field: String, value: i64 },
+    /// Axis value must be one of the listed values.
+    #[serde(rename = "oneof")]
+    Oneof { field: String, values: Vec<i64> },
+    /// Map field_a values to allowed field_b value sets.
+    /// If field_a's value is not in the mapping, the constraint passes.
+    #[serde(rename = "cross")]
+    Cross {
+        field_a: String,
+        field_b: String,
+        mapping: std::collections::HashMap<i64, Vec<i64>>,
+    },
 }
 
 /// A projector to resolve from the ProjectorRegistry.
@@ -85,18 +111,8 @@ pub enum ProjectorSpec {
     Sum,
     /// Extract a single axis value.
     #[serde(rename = "identity")]
-    Identity {
-        #[serde(default = "default_axis")]
-        axis: usize,
-    },
+    Identity { field: String },
     /// Classify parity of a single axis.
     #[serde(rename = "parity")]
-    Parity {
-        #[serde(default = "default_axis")]
-        axis: usize,
-    },
-}
-
-fn default_axis() -> usize {
-    0
+    Parity { field: String },
 }

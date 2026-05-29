@@ -16,17 +16,17 @@ YAML → Domain Expansion → Field.build() → observe() → Report
 ## Quick Start
 
 ```bash
-./run.sh                  # Full CI pipeline (fmt → clippy → test → verify)
+./run.sh                  # Full pipeline: auto-fix → code → verify
 ./run.sh --demo           # Channel demo: cross-verify SSCCS POC golden anchors
-./run.sh --check          # fmt + check only
+./run.sh --code           # fmt → clippy → build → test (strict)
 ```
 
 Or step-by-step:
 
 ```bash
 cargo build --release
-ev check --target tests/fixtures/all_pass.xif.yaml
-ev check --target tests/fixtures/sample.xif.yaml --json
+ev verify --target tests/fixtures/all_pass.xif.yaml
+ev verify --target tests/fixtures/sample.xif.yaml --json
 cargo test --release
 ```
 
@@ -45,16 +45,16 @@ projector:
   type: sum
 ```
 
-Optional cross-field constraints:
+Optional cross-field constraints reference fields by name (not axis index):
 
 ```yaml
 constraints:
   - type: eq
-    axis_a: 0
-    axis_b: 1       # op_a must equal op_b
+    field_a: "operand_a"
+    field_b: "operand_b"
 ```
 
-Built-in constraint types: `range`, `even`, `eq`.
+Built-in constraint types: `range`, `even`, `eq`, `neq`, `lt`, `gt`, `le`, `ge`, `oneof`.
 Built-in projector types: `sum`, `identity`, `parity`.
 Extensible via `ConstraintRegistry` and `ProjectorRegistry`.
 

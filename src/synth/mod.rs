@@ -186,14 +186,9 @@ fn sv_projector(proj: &crate::spec::ProjectorSpec, field_names: &[&String]) -> S
             .map(|n| n.as_str())
             .collect::<Vec<_>>()
             .join(" + "),
-        crate::spec::ProjectorSpec::Identity { axis } => field_names
-            .get(*axis)
-            .map(|n| n.as_str())
-            .unwrap_or("0")
-            .to_string(),
-        crate::spec::ProjectorSpec::Parity { axis } => {
-            let name = field_names.get(*axis).map(|n| n.as_str()).unwrap_or("0");
-            format!("{}[0]", name)
+        crate::spec::ProjectorSpec::Identity { field } => field.clone(),
+        crate::spec::ProjectorSpec::Parity { field } => {
+            format!("{}[0]", field)
         }
     }
 }
@@ -201,24 +196,65 @@ fn sv_projector(proj: &crate::spec::ProjectorSpec, field_names: &[&String]) -> S
 /// Generate a SystemVerilog assertion for a constraint.
 fn sv_constraint_assertion(
     constraint: &crate::spec::ConstraintSpec,
-    field_names: &[&String],
+    _field_names: &[&String],
 ) -> String {
     match constraint {
-        crate::spec::ConstraintSpec::Range { axis, min, max } => {
-            let name = field_names.get(*axis).map(|n| n.as_str()).unwrap_or("0");
+        crate::spec::ConstraintSpec::Range { field, min, max } => {
             format!(
                 "assert property ({} >= {} && {} <= {}); // range\n",
-                name, min, name, max
+                field, min, field, max
             )
         }
-        crate::spec::ConstraintSpec::Even { axis } => {
-            let name = field_names.get(*axis).map(|n| n.as_str()).unwrap_or("0");
-            format!("assert property ({}[0] == 1'b0); // even\n", name)
+        crate::spec::ConstraintSpec::Even { field } => {
+            format!("assert property ({}[0] == 1'b0); // even\n", field)
         }
-        crate::spec::ConstraintSpec::Eq { axis_a, axis_b } => {
-            let name_a = field_names.get(*axis_a).map(|n| n.as_str()).unwrap_or("0");
-            let name_b = field_names.get(*axis_b).map(|n| n.as_str()).unwrap_or("0");
-            format!("assert property ({} == {}); // eq\n", name_a, name_b)
+        crate::spec::ConstraintSpec::Eq { field_a, field_b } => {
+            format!("assert property ({} == {}); // eq\n", field_a, field_b)
+        }
+        crate::spec::ConstraintSpec::Neq { field_a, field_b } => {
+            format!("assert property ({} != {}); // neq\n", field_a, field_b)
+        }
+        crate::spec::ConstraintSpec::Lt { field, value } => {
+            format!("assert property ({} < {}); // lt\n", field, value)
+        }
+        crate::spec::ConstraintSpec::Gt { field, value } => {
+            format!("assert property ({} > {}); // gt\n", field, value)
+        }
+        crate::spec::ConstraintSpec::Le { field, value } => {
+            format!("assert property ({} <= {}); // le\n", field, value)
+        }
+        crate::spec::ConstraintSpec::Ge { field, value } => {
+            format!("assert property ({} >= {}); // ge\n", field, value)
+        }
+        crate::spec::ConstraintSpec::Oneof { field, values } => {
+            let or_exprs: Vec<String> = values
+                .iter()
+                .map(|v| format!("{} == {}", field, v))
+                .collect();
+            format!("assert property ({}); // oneof\n", or_exprs.join(" || "))
+        }
+        crate::spec::ConstraintSpec::Cross {
+            field_a,
+            field_b,
+            mapping,
+        } => {
+            let name_a = field_a.as_str();
+            let name_b = field_b.as_str();
+            let assertions: Vec<String> = mapping
+                .iter()
+                .map(|(va, vbs)| {
+                    let set = vbs
+                        .iter()
+                        .map(|v| v.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    format!(
+                        "assert property (({} == {}) -> ({} inside {{{}}})); // cross\n",
+                        name_a, va, name_b, set
+                    )
+                })
+                .collect();
+            assertions.join("\n  ")
         }
     }
 }
@@ -402,34 +438,34 @@ mod tests {
     }
 
     #[test]
-    fn projector_identity_axis_0() {
+    fn projector_identity_field_a() {
         let n = names(&["a", "b"]);
         let refs = name_refs(&n);
-        let expr = sv_projector(&ProjectorSpec::Identity { axis: 0 }, &refs);
+        let expr = sv_projector(&ProjectorSpec::Identity { field: "a".into() }, &refs);
         assert_eq!(expr, "a");
     }
 
     #[test]
-    fn projector_identity_axis_1() {
+    fn projector_identity_field_b() {
         let n = names(&["a", "b"]);
         let refs = name_refs(&n);
-        let expr = sv_projector(&ProjectorSpec::Identity { axis: 1 }, &refs);
+        let expr = sv_projector(&ProjectorSpec::Identity { field: "b".into() }, &refs);
         assert_eq!(expr, "b");
     }
 
     #[test]
-    fn projector_identity_out_of_bounds() {
+    fn projector_identity_with_field_name() {
         let n = names(&["a"]);
         let refs = name_refs(&n);
-        let expr = sv_projector(&ProjectorSpec::Identity { axis: 5 }, &refs);
-        assert_eq!(expr, "0");
+        let expr = sv_projector(&ProjectorSpec::Identity { field: "a".into() }, &refs);
+        assert_eq!(expr, "a");
     }
 
     #[test]
     fn projector_parity_extracts_lsb() {
         let n = names(&["x"]);
         let refs = name_refs(&n);
-        let expr = sv_projector(&ProjectorSpec::Parity { axis: 0 }, &refs);
+        let expr = sv_projector(&ProjectorSpec::Parity { field: "x".into() }, &refs);
         assert_eq!(expr, "x[0]");
     }
 
@@ -441,7 +477,7 @@ mod tests {
         let refs = name_refs(&n);
         let s = sv_constraint_assertion(
             &ConstraintSpec::Range {
-                axis: 0,
+                field: "a".into(),
                 min: 0,
                 max: 15,
             },
@@ -456,7 +492,7 @@ mod tests {
     fn constraint_even() {
         let n = names(&["x"]);
         let refs = name_refs(&n);
-        let s = sv_constraint_assertion(&ConstraintSpec::Even { axis: 0 }, &refs);
+        let s = sv_constraint_assertion(&ConstraintSpec::Even { field: "x".into() }, &refs);
         assert!(s.contains("assert property"));
         assert!(s.contains("x[0] == 1'b0"));
     }
@@ -467,13 +503,63 @@ mod tests {
         let refs = name_refs(&n);
         let s = sv_constraint_assertion(
             &ConstraintSpec::Eq {
-                axis_a: 0,
-                axis_b: 1,
+                field_a: "a".into(),
+                field_b: "b".into(),
             },
             &refs,
         );
         assert!(s.contains("assert property"));
         assert!(s.contains("a == b"));
+    }
+
+    // ── New constraint SV assertions ──────────────────────────────
+
+    #[test]
+    fn constraint_neq() {
+        let n = names(&["a", "b"]);
+        let refs = name_refs(&n);
+        let s = sv_constraint_assertion(
+            &ConstraintSpec::Neq {
+                field_a: "a".into(),
+                field_b: "b".into(),
+            },
+            &refs,
+        );
+        assert!(s.contains("assert property"));
+        assert!(s.contains("a != b"));
+    }
+
+    #[test]
+    fn constraint_gt() {
+        let n = names(&["x"]);
+        let refs = name_refs(&n);
+        let s = sv_constraint_assertion(
+            &ConstraintSpec::Gt {
+                field: "x".into(),
+                value: 100,
+            },
+            &refs,
+        );
+        assert!(s.contains("assert property"));
+        assert!(s.contains("x > 100"));
+    }
+
+    #[test]
+    fn constraint_oneof() {
+        let n = names(&["op"]);
+        let refs = name_refs(&n);
+        let s = sv_constraint_assertion(
+            &ConstraintSpec::Oneof {
+                field: "op".into(),
+                values: vec![0, 2, 4],
+            },
+            &refs,
+        );
+        assert!(s.contains("assert property"));
+        assert!(s.contains("op == 0"));
+        assert!(s.contains("op == 2"));
+        assert!(s.contains("op == 4"));
+        assert!(s.contains("||"));
     }
 
     // ── generate_sv ───────────────────────────────────────────────
@@ -489,7 +575,7 @@ mod tests {
                 values: None,
             },
         );
-        let spec = make_spec(fields, ProjectorSpec::Identity { axis: 0 });
+        let spec = make_spec(fields, ProjectorSpec::Identity { field: "op".into() });
 
         let sv_path = generate_sv(&spec).unwrap();
         let content = std::fs::read_to_string(&sv_path).unwrap();
@@ -522,8 +608,8 @@ mod tests {
         );
         let mut spec = make_spec(fields, ProjectorSpec::Sum);
         spec.constraints = vec![ConstraintSpec::Eq {
-            axis_a: 0,
-            axis_b: 1,
+            field_a: "a".into(),
+            field_b: "b".into(),
         }];
 
         let sv_path = generate_sv(&spec).unwrap();
@@ -552,7 +638,7 @@ mod tests {
                 values: None,
             },
         );
-        let spec = make_spec(fields, ProjectorSpec::Parity { axis: 0 });
+        let spec = make_spec(fields, ProjectorSpec::Parity { field: "x".into() });
 
         let sv_path = generate_sv(&spec).unwrap();
         let content = std::fs::read_to_string(&sv_path).unwrap();
@@ -656,7 +742,7 @@ mod tests {
                 values: None,
             },
         );
-        let spec = make_spec(fields, ProjectorSpec::Identity { axis: 0 });
+        let spec = make_spec(fields, ProjectorSpec::Identity { field: "a".into() });
         let rtl_path = SvGenerator.generate(&spec).unwrap();
 
         let metrics = MockSynthesisBackend.run(&rtl_path, "test_module").unwrap();
@@ -676,7 +762,7 @@ mod tests {
                 values: None,
             },
         );
-        let spec = make_spec(fields, ProjectorSpec::Identity { axis: 0 });
+        let spec = make_spec(fields, ProjectorSpec::Identity { field: "a".into() });
         let rtl_path = SvGenerator.generate(&spec).unwrap();
 
         let result = MockSynthesisBackend.run(&rtl_path, "nonexistent_module");

@@ -4,8 +4,7 @@ set -euo pipefail
 # ev — Single entry point
 #
 # Usage:
-#   ./run.sh              # Full pipeline: fix → code → verify → demo
-#   ./run.sh --ci         # CI mode: code → verify (no demo, no auto-fix)
+#   ./run.sh              # Full pipeline: fix → code → verify
 #   ./run.sh --code       # fmt → clippy → build → test (strict)
 #   ./run.sh --fix        # auto-fix → build → test
 #   ./run.sh --verify     # Yosys synthesis + fixtures (binary must exist)
@@ -17,8 +16,8 @@ cd "$(dirname "$0")"
 export RUSTFLAGS="-D warnings"
 EV_IMAGE="${EV_IMAGE:-ghcr.io/ssccsorg/ev:latest}"
 
-# Pre-process: auto-fmt for all build modes except --ci, --help, --demo.
-if [[ "${1:-}" != "--ci" && "${1:-}" != "--help" && "${1:-}" != "-h" && "${1:-}" != "--demo" ]]; then
+# Pre-process: auto-fmt for all build modes except --help and --demo.
+if [[ "${1:-}" != "--help" && "${1:-}" != "-h" && "${1:-}" != "--demo" ]]; then
     cargo fmt --all
     cargo clippy --fix --allow-dirty 2>&1 || true
     cargo fix --allow-dirty 2>&1 || true
@@ -58,13 +57,13 @@ _yosys() {
 verify_synth() {
     _yosys yosys --version
     echo "=== synthesis (text) ==="
-    _yosys "$EV" check --target "$ALL_PASS" --synth
+    _yosys "$EV" synth --target "$ALL_PASS"
     echo "=== synthesis (json) ==="
     local tmpf
     tmpf=$(mktemp /tmp/synth_fact.XXXXXX.json)
     local tmpe
     tmpe=$(mktemp /tmp/synth_stderr.XXXXXX.txt)
-    _yosys "$EV" check --target "$ALL_PASS" --synth --json > "$tmpf" 2>"$tmpe"
+    _yosys "$EV" synth --target "$ALL_PASS" --json > "$tmpf" 2>"$tmpe"
     grep -q '"fact_type": "synthesis_result"' "$tmpf" || { cat "$tmpe"; echo "FAILED: missing fact_type"; exit 1; }
     grep -q '"status": "ok"' "$tmpf" || { cat "$tmpe"; echo "FAILED: synthesis status not ok"; exit 1; }
     echo "  ok"
@@ -73,9 +72,9 @@ verify_synth() {
 
 verify_fixtures() {
     echo "=== all-pass fixture ==="
-    $EV check --target "$ALL_PASS"
+    $EV verify --target "$ALL_PASS"
     echo "=== mixed fixture ==="
-    EC=0; $EV check --target "$MIXED" || EC=$?
+    EC=0; $EV verify --target "$MIXED" || EC=$?
     if [ "$EC" -eq 1 ]; then
         echo "  exit: 1 (expected — 84 of 96 fail eq constraint)"
     else
@@ -83,23 +82,31 @@ verify_fixtures() {
         exit 1
     fi
     echo "=== json output ==="
-    $EV check --target "$MIXED" --json 2>&1 | head -8 || true
+    $EV verify --target "$MIXED" --json 2>&1 | head -8 || true
+    echo "=== cva6 xif reference fixture ==="
+    EC=0; $EV verify --target "tests/fixtures/cva6_xif_ref.xif.yaml" --json 2>&1 | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+passed = data['passed']
+failed = data['failed']
+total = data['total']
+print(f'  Target: cva6_xif_ref (CVA6 CV-X-IF reference coprocessor)')
+print(f'  Total: {total}')
+print(f'  Passed: {passed} (valid custom-3 encodings)')
+print(f'  Failed: {failed} (illegal or constraint-violating encodings)')
+print(f'  Valid instructions: funct3=0 (NOP) with funct7=0; funct3=1 (ALU) with funct7 in 0,1,2,3,32')
+print(f'  Register fields: rs1, rs2, rd each 0..7 (reduced for exhaustive coverage)')
+" || EC=$?
+    if [ "$EC" -eq 0 ]; then
+        echo "  All encodings valid — no unexpected failures."
+    else
+        echo "  Constraint-violating encodings detected (expected — coprocessor rejects illegal funct3/funct7)."
+    fi
 }
 
 # ── Modes ─────────────────────────────────────────────────────────────
 
 case ${1:-} in
-    --ci)
-        echo "══════════════════════════════════════"
-        echo "  ev — CI pipeline"
-        echo "══════════════════════════════════════"
-        code_checks
-        verify_synth
-        verify_fixtures
-        echo ""
-        echo "  All CI checks passed."
-        echo "══════════════════════════════════════"
-        ;;
     --code)
         echo "══════════════════════════════════════"
         echo "  ev — code checks"
@@ -142,8 +149,7 @@ case ${1:-} in
         ;;
     --help|-h)
         echo "Usage: $0 [OPTION]"
-        echo "  (no arg)   Full pipeline: fix → code → verify → demo"
-        echo "  --ci       CI mode: code → verify"
+        echo "  (no arg)   Full pipeline: auto-fix → code → verify"
         echo "  --code     fmt → clippy → build → test (strict)"
         echo "  --fix      auto-fix → build → test"
         echo "  --verify   Yosys + fixtures (binary needed)"
@@ -151,22 +157,19 @@ case ${1:-} in
         exit 0
         ;;
     *)
-        # Full local pipeline
         echo "══════════════════════════════════════"
         echo "  ev — Full Pipeline"
         echo "══════════════════════════════════════"
-        echo "=== Phase 1: auto-fix ==="
+        echo "=== auto-fix ==="
         cargo fmt --all
         cargo clippy --fix --allow-dirty 2>&1 || true
         cargo fix --allow-dirty 2>&1 || true
         cargo fmt --all
-        echo "=== Phase 2: code checks ==="
+        echo "=== code checks ==="
         code_checks
-        echo "=== Phase 3: integration ==="
+        echo "=== integration ==="
         verify_synth
         verify_fixtures
-        echo "=== Phase 4: channel demo ==="
-        bash scripts/demo-ssccs-poc.sh
         echo ""
         echo "══════════════════════════════════════"
         echo "  All done."

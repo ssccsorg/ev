@@ -1,0 +1,39 @@
+# Realistic Ibex ALU extension: CSR-access-like instruction encoding.
+#
+# CSRRW / CSRRS / CSRRC:
+#   funct3 = {001, 010, 011} corresponding to {CSRRW, CSRRS, CSRRC}
+#   rs1    = source GPR (0..31)
+#   rd     = destination GPR (0..31)
+#   csr    = CSR address (0..4095)
+#
+# Pipeline constraint: if rd == 0 then result is NOT written back.
+# Hazard constraint: if rs1 == rd then write-after-read hazard applies.
+#
+# Field domains reflect the actual RISC-V instruction encoding ranges.
+# Constraint space: 3 * 32 * 32 * 4096 = 12,582,912 combinations.
+#
+# To verify a subset without exceeding MAX_COMBINATIONS, reduce csr to [0, 15].
+
+target: cv32e40p_alu_ext
+fields:
+  funct3:
+    values: [1, 2, 3]
+  rs1:
+    range: [0, 31]
+  rd:
+    range: [0, 31]
+  csr_addr:
+    range: [0, 15]
+constraints:
+  # rs1 must be less than 32 (redundant with field range, explicit for synthesis)
+  - type: range
+    field: "rs1"
+    min: 0
+    max: 31
+  # rd must be less than 32 (redundant with field range)
+  - type: range
+    field: "rd"
+    min: 0
+    max: 31
+projector:
+  type: sum
