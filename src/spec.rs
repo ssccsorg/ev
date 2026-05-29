@@ -74,6 +74,24 @@ pub enum ConstraintSpec {
     /// Two axis values must be equal.
     #[serde(rename = "eq")]
     Eq { axis_a: usize, axis_b: usize },
+    /// Two axis values must not be equal.
+    #[serde(rename = "neq")]
+    Neq { axis_a: usize, axis_b: usize },
+    /// Axis value must be less than a constant.
+    #[serde(rename = "lt")]
+    Lt { axis: usize, value: i64 },
+    /// Axis value must be greater than a constant.
+    #[serde(rename = "gt")]
+    Gt { axis: usize, value: i64 },
+    /// Axis value must be less than or equal to a constant.
+    #[serde(rename = "le")]
+    Le { axis: usize, value: i64 },
+    /// Axis value must be greater than or equal to a constant.
+    #[serde(rename = "ge")]
+    Ge { axis: usize, value: i64 },
+    /// Axis value must be one of the listed values.
+    #[serde(rename = "oneof")]
+    Oneof { axis: usize, values: Vec<i64> },
 }
 
 /// A projector to resolve from the ProjectorRegistry.
