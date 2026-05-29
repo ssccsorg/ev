@@ -57,13 +57,13 @@ _yosys() {
 verify_synth() {
     _yosys yosys --version
     echo "=== synthesis (text) ==="
-    _yosys "$EV" verify --target "$ALL_PASS" --synth
+    _yosys "$EV" synth --target "$ALL_PASS"
     echo "=== synthesis (json) ==="
     local tmpf
     tmpf=$(mktemp /tmp/synth_fact.XXXXXX.json)
     local tmpe
     tmpe=$(mktemp /tmp/synth_stderr.XXXXXX.txt)
-    _yosys "$EV" verify --target "$ALL_PASS" --synth --json > "$tmpf" 2>"$tmpe"
+    _yosys "$EV" synth --target "$ALL_PASS" --json > "$tmpf" 2>"$tmpe"
     grep -q '"fact_type": "synthesis_result"' "$tmpf" || { cat "$tmpe"; echo "FAILED: missing fact_type"; exit 1; }
     grep -q '"status": "ok"' "$tmpf" || { cat "$tmpe"; echo "FAILED: synthesis status not ok"; exit 1; }
     echo "  ok"
