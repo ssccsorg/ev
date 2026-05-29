@@ -55,7 +55,7 @@ jobs:
         shell: bash
 
       - name: Full pipeline (host build, container Yosys)
-        run: bash run.sh --ci
+        run: bash run.sh
         env:
           EV_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
         shell: bash
