@@ -626,7 +626,7 @@ mod tests {
             match (op, sub) {
                 (0, 0) => assert!(r.passed, "op=0, sub=0 should pass"),
                 (0, _) => assert!(!r.passed, "op=0, sub={} should fail", sub),
-                (1, 0 | 1 | 2) => assert!(r.passed, "op=1, sub={} should pass", sub),
+                (1, 0..=2) => assert!(r.passed, "op=1, sub={} should pass", sub),
                 (1, 3) => assert!(!r.passed, "op=1, sub=3 should fail"),
                 (2, _) => assert!(r.passed, "op=2 (unmapped) should pass"),
                 _ => {}
