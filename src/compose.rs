@@ -285,17 +285,17 @@ mod tests {
     }
 
     #[test]
-    fn expand_overflow_returns_error() {
-        // 31 fields each with 2 values => 2^31 > usize::MAX on 32-bit, fine on 64-bit.
-        // Use a 64-bit safe overflow: 30 fields of 3 values = 3^30 > 2^64.
+    fn expand_exceeding_max_combinations_large_product() {
+        // 10 fields each with 8 values => 8^10 = 1_073_741_824 > MAX_COMBINATIONS.
+        // This triggers the MAX_COMBINATIONS guard, not overflow.
         let mut fields = BTreeMap::new();
-        for i in 0..30 {
+        for i in 0..10 {
             fields.insert(
                 format!("f{}", i),
                 FieldSpec {
-                    range: None,
+                    range: Some((0, 7)),
                     alignment: None,
-                    values: Some(vec![i as i64, i as i64 + 1, i as i64 + 2]),
+                    values: None,
                 },
             );
         }
@@ -303,7 +303,13 @@ mod tests {
         let result = expand_all(&spec);
         assert!(
             result.is_err(),
-            "30 fields of 3 values should overflow before hitting MAX_COMBINATIONS"
+            "10 fields of 8 values should exceed MAX_COMBINATIONS"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("too large") || err.contains("limit"),
+            "error should mention limit: {}",
+            err
         );
     }
 }

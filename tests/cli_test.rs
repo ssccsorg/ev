@@ -210,8 +210,8 @@ fn check_malformed_bad_constraint_type_exits_nonzero() {
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        !stderr.is_empty(),
-        "stderr should contain error: {}",
+        stderr.contains("unknown variant") || stderr.contains("nonexistent_constraint"),
+        "stderr should mention the unknown constraint type: {}",
         stderr
     );
 }
