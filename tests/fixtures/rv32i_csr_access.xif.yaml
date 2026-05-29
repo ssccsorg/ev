@@ -27,12 +27,12 @@ fields:
 constraints:
   # rs1 must be less than 32 (redundant with field range, explicit for synthesis)
   - type: range
-    axis: 1
+    field: "rs1"
     min: 0
     max: 31
   # rd must be less than 32 (redundant with field range)
   - type: range
-    axis: 2
+    field: "rd"
     min: 0
     max: 31
 projector:

@@ -233,8 +233,8 @@ mod tests {
             target: "test".into(),
             fields,
             constraints: vec![ConstraintSpec::Eq {
-                axis_a: 0,
-                axis_b: 1,
+                field_a: "op".into(),
+                field_b: "rs1".into(),
             }],
             projector: ProjectorSpec::Sum,
         }

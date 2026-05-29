@@ -1,8 +1,8 @@
 //! Type registries — map named constraint/projector types to builders.
 
 use crate::compose::{Coordinates, Point};
-use crate::spec::{ConstraintSpec, ProjectorSpec};
-use std::collections::HashMap;
+use crate::spec::{ConstraintSpec, FieldSpec, ProjectorSpec};
+use std::collections::{BTreeMap, HashMap};
 
 // ============================================================================
 // Check trait
@@ -15,7 +15,12 @@ pub trait Check: std::fmt::Debug + Send + Sync {
 }
 
 /// Builds a boxed check from a specification.
-pub type ConstraintBuilder = fn(spec: &ConstraintSpec) -> AnyCheck;
+pub type ConstraintBuilder = fn(spec: &ConstraintSpec, axis_of: &HashMap<String, usize>) -> AnyCheck;
+
+/// Build an axis index from a field map.
+pub fn build_axis_index(fields: &BTreeMap<String, FieldSpec>) -> HashMap<String, usize> {
+    fields.keys().enumerate().map(|(i, k)| (k.clone(), i)).collect()
+}
 
 /// Type-erased check wrapper.
 #[derive(Debug)]
@@ -56,23 +61,26 @@ impl ConstraintRegistry {
         self.builders.insert(type_name.to_string(), builder);
     }
 
-    pub fn build(&self, spec: &ConstraintSpec) -> Option<AnyCheck> {
+    pub fn build(&self, spec: &ConstraintSpec, axis_of: &HashMap<String, usize>) -> Option<AnyCheck> {
         let type_name = spec_type_name(spec);
-        self.builders.get(type_name).map(|b| b(spec))
+        self.builders.get(type_name).map(|b| b(spec, axis_of))
     }
 
-    pub fn build_all(&self, specs: &[ConstraintSpec]) -> Vec<AnyCheck> {
-        specs.iter().filter_map(|s| self.build(s)).collect()
+    pub fn build_all(&self, specs: &[ConstraintSpec], fields: &BTreeMap<String, FieldSpec>) -> Vec<AnyCheck> {
+        let axis_of = build_axis_index(fields);
+        specs.iter().filter_map(|s| self.build(s, &axis_of)).collect()
     }
 }
 
 impl Default for ConstraintRegistry {
     fn default() -> Self {
         let mut reg = Self::new();
-        reg.register("range", |spec| {
-            if let ConstraintSpec::Range { axis, min, max } = spec {
+        reg.register("range", |spec, axis_of| {
+            if let ConstraintSpec::Range { field, min, max } = spec {
+                let axis = axis_of[field];
                 AnyCheck::new(RangeC {
-                    axis: *axis,
+                    field_name: field.clone(),
+                    axis,
                     min: *min,
                     max: *max,
                 })
@@ -80,77 +88,99 @@ impl Default for ConstraintRegistry {
                 panic!("range builder called on non-range spec")
             }
         });
-        reg.register("even", |spec| {
-            if let ConstraintSpec::Even { axis } = spec {
-                AnyCheck::new(EvenC { axis: *axis })
+        reg.register("even", |spec, axis_of| {
+            if let ConstraintSpec::Even { field } = spec {
+                let axis = axis_of[field];
+                AnyCheck::new(EvenC {
+                    field_name: field.clone(),
+                    axis,
+                })
             } else {
                 panic!("even builder called on non-even spec")
             }
         });
-        reg.register("eq", |spec| {
-            if let ConstraintSpec::Eq { axis_a, axis_b } = spec {
+        reg.register("eq", |spec, axis_of| {
+            if let ConstraintSpec::Eq { field_a, field_b } = spec {
+                let axis_a = axis_of[field_a];
+                let axis_b = axis_of[field_b];
                 AnyCheck::new(EqC {
-                    axis_a: *axis_a,
-                    axis_b: *axis_b,
+                    field_a: field_a.clone(),
+                    axis_a,
+                    field_b: field_b.clone(),
+                    axis_b,
                 })
             } else {
                 panic!("eq builder called on non-eq spec")
             }
         });
-        reg.register("neq", |spec| {
-            if let ConstraintSpec::Neq { axis_a, axis_b } = spec {
+        reg.register("neq", |spec, axis_of| {
+            if let ConstraintSpec::Neq { field_a, field_b } = spec {
+                let axis_a = axis_of[field_a];
+                let axis_b = axis_of[field_b];
                 AnyCheck::new(NeqC {
-                    axis_a: *axis_a,
-                    axis_b: *axis_b,
+                    field_a: field_a.clone(),
+                    axis_a,
+                    field_b: field_b.clone(),
+                    axis_b,
                 })
             } else {
                 panic!("neq builder called on non-neq spec")
             }
         });
-        reg.register("lt", |spec| {
-            if let ConstraintSpec::Lt { axis, value } = spec {
+        reg.register("lt", |spec, axis_of| {
+            if let ConstraintSpec::Lt { field, value } = spec {
+                let axis = axis_of[field];
                 AnyCheck::new(LtC {
-                    axis: *axis,
+                    field_name: field.clone(),
+                    axis,
                     value: *value,
                 })
             } else {
                 panic!("lt builder called on non-lt spec")
             }
         });
-        reg.register("gt", |spec| {
-            if let ConstraintSpec::Gt { axis, value } = spec {
+        reg.register("gt", |spec, axis_of| {
+            if let ConstraintSpec::Gt { field, value } = spec {
+                let axis = axis_of[field];
                 AnyCheck::new(GtC {
-                    axis: *axis,
+                    field_name: field.clone(),
+                    axis,
                     value: *value,
                 })
             } else {
                 panic!("gt builder called on non-gt spec")
             }
         });
-        reg.register("le", |spec| {
-            if let ConstraintSpec::Le { axis, value } = spec {
+        reg.register("le", |spec, axis_of| {
+            if let ConstraintSpec::Le { field, value } = spec {
+                let axis = axis_of[field];
                 AnyCheck::new(LeC {
-                    axis: *axis,
+                    field_name: field.clone(),
+                    axis,
                     value: *value,
                 })
             } else {
                 panic!("le builder called on non-le spec")
             }
         });
-        reg.register("ge", |spec| {
-            if let ConstraintSpec::Ge { axis, value } = spec {
+        reg.register("ge", |spec, axis_of| {
+            if let ConstraintSpec::Ge { field, value } = spec {
+                let axis = axis_of[field];
                 AnyCheck::new(GeC {
-                    axis: *axis,
+                    field_name: field.clone(),
+                    axis,
                     value: *value,
                 })
             } else {
                 panic!("ge builder called on non-ge spec")
             }
         });
-        reg.register("oneof", |spec| {
-            if let ConstraintSpec::Oneof { axis, values } = spec {
+        reg.register("oneof", |spec, axis_of| {
+            if let ConstraintSpec::Oneof { field, values } = spec {
+                let axis = axis_of[field];
                 AnyCheck::new(OneofC {
-                    axis: *axis,
+                    field_name: field.clone(),
+                    axis,
                     values: values.clone(),
                 })
             } else {
@@ -179,6 +209,7 @@ fn spec_type_name(spec: &ConstraintSpec) -> &str {
 
 #[derive(Debug, Clone)]
 struct RangeC {
+    field_name: String,
     axis: usize,
     min: i64,
     max: i64,
@@ -192,12 +223,13 @@ impl Check for RangeC {
             .unwrap_or(false)
     }
     fn describe(&self) -> String {
-        format!("axis[{}] ∈ [{}, {}]", self.axis, self.min, self.max)
+        format!("{} ∈ [{}, {}]", self.field_name, self.min, self.max)
     }
 }
 
 #[derive(Debug, Clone)]
 struct EvenC {
+    field_name: String,
     axis: usize,
 }
 
@@ -209,13 +241,15 @@ impl Check for EvenC {
             .unwrap_or(false)
     }
     fn describe(&self) -> String {
-        format!("axis[{}] is even", self.axis)
+        format!("{} is even", self.field_name)
     }
 }
 
 #[derive(Debug, Clone)]
 struct EqC {
+    field_a: String,
     axis_a: usize,
+    field_b: String,
     axis_b: usize,
 }
 
@@ -226,13 +260,15 @@ impl Check for EqC {
         a.is_some() && b.is_some() && a == b
     }
     fn describe(&self) -> String {
-        format!("axis[{}] == axis[{}]", self.axis_a, self.axis_b)
+        format!("{} == {}", self.field_a, self.field_b)
     }
 }
 
 #[derive(Debug, Clone)]
 struct NeqC {
+    field_a: String,
     axis_a: usize,
+    field_b: String,
     axis_b: usize,
 }
 
@@ -243,12 +279,13 @@ impl Check for NeqC {
         a.is_some() && b.is_some() && a != b
     }
     fn describe(&self) -> String {
-        format!("axis[{}] != axis[{}]", self.axis_a, self.axis_b)
+        format!("{} != {}", self.field_a, self.field_b)
     }
 }
 
 #[derive(Debug, Clone)]
 struct LtC {
+    field_name: String,
     axis: usize,
     value: i64,
 }
@@ -261,12 +298,13 @@ impl Check for LtC {
             .unwrap_or(false)
     }
     fn describe(&self) -> String {
-        format!("axis[{}] < {}", self.axis, self.value)
+        format!("{} < {}", self.field_name, self.value)
     }
 }
 
 #[derive(Debug, Clone)]
 struct GtC {
+    field_name: String,
     axis: usize,
     value: i64,
 }
@@ -279,12 +317,13 @@ impl Check for GtC {
             .unwrap_or(false)
     }
     fn describe(&self) -> String {
-        format!("axis[{}] > {}", self.axis, self.value)
+        format!("{} > {}", self.field_name, self.value)
     }
 }
 
 #[derive(Debug, Clone)]
 struct LeC {
+    field_name: String,
     axis: usize,
     value: i64,
 }
@@ -297,12 +336,13 @@ impl Check for LeC {
             .unwrap_or(false)
     }
     fn describe(&self) -> String {
-        format!("axis[{}] <= {}", self.axis, self.value)
+        format!("{} <= {}", self.field_name, self.value)
     }
 }
 
 #[derive(Debug, Clone)]
 struct GeC {
+    field_name: String,
     axis: usize,
     value: i64,
 }
@@ -315,12 +355,13 @@ impl Check for GeC {
             .unwrap_or(false)
     }
     fn describe(&self) -> String {
-        format!("axis[{}] >= {}", self.axis, self.value)
+        format!("{} >= {}", self.field_name, self.value)
     }
 }
 
 #[derive(Debug, Clone)]
 struct OneofC {
+    field_name: String,
     axis: usize,
     values: Vec<i64>,
 }
@@ -334,8 +375,8 @@ impl Check for OneofC {
     }
     fn describe(&self) -> String {
         format!(
-            "axis[{}] ∈ {{{}}}",
-            self.axis,
+            "{} ∈ {{{}}}",
+            self.field_name,
             self.values
                 .iter()
                 .map(|v| v.to_string())
@@ -365,7 +406,7 @@ impl<E: Evaluator> ErasedEvaluator for E {
     }
 }
 
-pub type EvaluatorBuilder = fn(spec: &ProjectorSpec) -> Box<dyn ErasedEvaluator>;
+pub type EvaluatorBuilder = fn(spec: &ProjectorSpec, axis_of: &HashMap<String, usize>) -> Box<dyn ErasedEvaluator>;
 
 /// Registry of named evaluator types → builders.
 pub struct ProjectorRegistry {
@@ -383,26 +424,33 @@ impl ProjectorRegistry {
         self.builders.insert(type_name.to_string(), builder);
     }
 
-    pub fn build(&self, spec: &ProjectorSpec) -> Option<Box<dyn ErasedEvaluator>> {
+    pub fn build(&self, spec: &ProjectorSpec, axis_of: &HashMap<String, usize>) -> Option<Box<dyn ErasedEvaluator>> {
         let type_name = spec_projector_name(spec);
-        self.builders.get(type_name).map(|b| b(spec))
+        self.builders.get(type_name).map(|b| b(spec, axis_of))
+    }
+
+    pub fn resolve(&self, spec: &ProjectorSpec, fields: &BTreeMap<String, FieldSpec>) -> Option<Box<dyn ErasedEvaluator>> {
+        let axis_of = build_axis_index(fields);
+        self.build(spec, &axis_of)
     }
 }
 
 impl Default for ProjectorRegistry {
     fn default() -> Self {
         let mut reg = Self::new();
-        reg.register("sum", |_spec| Box::new(SumEval));
-        reg.register("identity", |spec| {
-            if let ProjectorSpec::Identity { axis } = spec {
-                Box::new(IdentityEval { axis: *axis })
+        reg.register("sum", |_spec, _axis_of| Box::new(SumEval));
+        reg.register("identity", |spec, axis_of| {
+            if let ProjectorSpec::Identity { field } = spec {
+                let axis = axis_of[field];
+                Box::new(IdentityEval { axis })
             } else {
                 panic!("identity builder called on non-identity spec")
             }
         });
-        reg.register("parity", |spec| {
-            if let ProjectorSpec::Parity { axis } = spec {
-                Box::new(ParityEval { axis: *axis })
+        reg.register("parity", |spec, axis_of| {
+            if let ProjectorSpec::Parity { field } = spec {
+                let axis = axis_of[field];
+                Box::new(ParityEval { axis })
             } else {
                 panic!("parity builder called on non-parity spec")
             }
