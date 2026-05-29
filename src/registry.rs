@@ -203,6 +203,24 @@ impl Default for ConstraintRegistry {
                 panic!("oneof builder called on non-oneof spec")
             }
         });
+        reg.register("cross", |spec, axis_of| {
+            if let ConstraintSpec::Cross {
+                field_a,
+                field_b,
+                mapping,
+            } = spec
+            {
+                AnyCheck::new(CrossC {
+                    field_a: field_a.clone(),
+                    axis_a: axis_of[field_a],
+                    field_b: field_b.clone(),
+                    axis_b: axis_of[field_b],
+                    mapping: mapping.clone(),
+                })
+            } else {
+                panic!("cross builder called on non-cross spec")
+            }
+        });
         reg
     }
 }
@@ -218,6 +236,7 @@ fn spec_type_name(spec: &ConstraintSpec) -> &str {
         ConstraintSpec::Le { .. } => "le",
         ConstraintSpec::Ge { .. } => "ge",
         ConstraintSpec::Oneof { .. } => "oneof",
+        ConstraintSpec::Cross { .. } => "cross",
     }
 }
 
@@ -398,6 +417,53 @@ impl Check for OneofC {
                 .map(|v| v.to_string())
                 .collect::<Vec<_>>()
                 .join(", ")
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
+struct CrossC {
+    field_a: String,
+    axis_a: usize,
+    field_b: String,
+    axis_b: usize,
+    mapping: std::collections::HashMap<i64, Vec<i64>>,
+}
+
+impl Check for CrossC {
+    fn allows(&self, coords: &Coordinates) -> bool {
+        let a = coords.get_axis(self.axis_a);
+        let b = coords.get_axis(self.axis_b);
+        match (a, b) {
+            (Some(va), Some(vb)) => self
+                .mapping
+                .get(&va)
+                .map(|allowed| allowed.contains(&vb))
+                .unwrap_or(true),
+            _ => false,
+        }
+    }
+    fn describe(&self) -> String {
+        let entries: Vec<String> = self
+            .mapping
+            .iter()
+            .map(|(k, v)| {
+                format!(
+                    "{}={} → [{}]",
+                    self.field_a,
+                    k,
+                    v.iter()
+                        .map(|x| x.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            })
+            .collect();
+        format!(
+            "{} → {}: {{{}}}",
+            self.field_a,
+            self.field_b,
+            entries.join("; ")
         )
     }
 }

@@ -233,6 +233,29 @@ fn sv_constraint_assertion(
                 .collect();
             format!("assert property ({}); // oneof\n", or_exprs.join(" || "))
         }
+        crate::spec::ConstraintSpec::Cross {
+            field_a,
+            field_b,
+            mapping,
+        } => {
+            let name_a = field_a.as_str();
+            let name_b = field_b.as_str();
+            let assertions: Vec<String> = mapping
+                .iter()
+                .map(|(va, vbs)| {
+                    let set = vbs
+                        .iter()
+                        .map(|v| v.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    format!(
+                        "assert property (({} == {}) -> ({} inside {{{}}})); // cross\n",
+                        name_a, va, name_b, set
+                    )
+                })
+                .collect();
+            assertions.join("\n  ")
+        }
     }
 }
 
