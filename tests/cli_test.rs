@@ -1,26 +1,26 @@
 use std::process::Command;
 
 #[test]
-fn check_help_succeeds() {
+fn verify_help_succeeds() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
-        .arg("check")
+        .arg("verify")
         .arg("--help")
         .output()
-        .expect("failed to run ev check --help");
-    assert!(output.status.success(), "ev check --help should exit 0");
+        .expect("failed to run ev verify --help");
+    assert!(output.status.success(), "ev verify --help should exit 0");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("--target"), "help should mention --target");
 }
 
 #[test]
-fn check_json_flag_produces_valid_output() {
+fn verify_json_flag_produces_valid_output() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
-        .arg("check")
+        .arg("verify")
         .arg("--target")
         .arg("tests/fixtures/sample.xif.yaml")
         .arg("--json")
         .output()
-        .expect("failed to run ev check --json");
+        .expect("failed to run ev verify --json");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
         stdout.contains("\"passed\": 12"),
@@ -37,23 +37,22 @@ fn check_json_flag_produces_valid_output() {
 }
 
 #[test]
-fn check_json_with_synth_mock() {
+fn verify_json_with_synth_mock() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
-        .arg("check")
+        .arg("verify")
         .arg("--target")
         .arg("tests/fixtures/all_pass.xif.yaml")
         .arg("--json")
         .arg("--synth")
         .env("EV_SYNTH_BACKEND", "mock")
         .output()
-        .expect("failed to run ev check --json --synth with mock backend");
+        .expect("failed to run ev verify --json --synth with mock backend");
     assert!(
         output.status.success(),
-        "ev check --json --synth should exit 0"
+        "ev verify --json --synth should exit 0"
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
 
-    // Must contain both verification report and synthesis Fact.
     assert!(
         stdout.contains("\"field_order\""),
         "json output should include verification field_order"
@@ -73,19 +72,18 @@ fn check_json_with_synth_mock() {
 }
 
 #[test]
-fn check_text_with_synth_mock() {
+fn verify_text_with_synth_mock() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
-        .arg("check")
+        .arg("verify")
         .arg("--target")
         .arg("tests/fixtures/all_pass.xif.yaml")
         .arg("--synth")
         .env("EV_SYNTH_BACKEND", "mock")
         .output()
-        .expect("failed to run ev check --synth with mock backend");
-    assert!(output.status.success(), "ev check --synth should exit 0");
+        .expect("failed to run ev verify --synth with mock backend");
+    assert!(output.status.success(), "ev verify --synth should exit 0");
     let stdout = String::from_utf8_lossy(&output.stdout);
 
-    // Text output must show synthesis summary.
     assert!(
         stdout.contains("Synthesis:"),
         "text output should contain Synthesis summary"
@@ -99,14 +97,14 @@ fn check_text_with_synth_mock() {
 }
 
 #[test]
-fn check_json_all_pass() {
+fn verify_json_all_pass() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
-        .arg("check")
+        .arg("verify")
         .arg("--target")
         .arg("tests/fixtures/all_pass.xif.yaml")
         .arg("--json")
         .output()
-        .expect("failed to run ev check --json on all_pass fixture");
+        .expect("failed to run ev verify --json on all_pass fixture");
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     assert!(
@@ -125,13 +123,13 @@ fn check_json_all_pass() {
 }
 
 #[test]
-fn check_text_mixed_fixture_exits_1() {
+fn verify_text_mixed_fixture_exits_1() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
-        .arg("check")
+        .arg("verify")
         .arg("--target")
         .arg("tests/fixtures/sample.xif.yaml")
         .output()
-        .expect("failed to run ev check on mixed fixture");
+        .expect("failed to run ev verify on mixed fixture");
     assert!(
         !output.status.success(),
         "mixed fixture should exit non-zero"
@@ -141,12 +139,12 @@ fn check_text_mixed_fixture_exits_1() {
 }
 
 #[test]
-fn check_help_mentions_synth_flag() {
+fn verify_help_mentions_synth() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
-        .arg("check")
+        .arg("verify")
         .arg("--help")
         .output()
-        .expect("failed to run ev check --help");
+        .expect("failed to run ev verify --help");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
         stdout.contains("--synth"),
@@ -155,14 +153,14 @@ fn check_help_mentions_synth_flag() {
 }
 
 #[test]
-fn check_rv32i_csr_access_fixture() {
+fn verify_rv32i_csr_access_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
-        .arg("check")
+        .arg("verify")
         .arg("--target")
         .arg("tests/fixtures/rv32i_csr_access.xif.yaml")
         .arg("--json")
         .output()
-        .expect("failed to run ev check on rv32i_csr_access fixture");
+        .expect("failed to run ev verify on rv32i_csr_access fixture");
     assert!(
         output.status.success(),
         "rv32i_csr_access fixture should pass: {}",
@@ -176,34 +174,29 @@ fn check_rv32i_csr_access_fixture() {
 }
 
 #[test]
-fn check_malformed_no_fields_exits_nonzero() {
+fn verify_malformed_no_fields_exits_zero() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
-        .arg("check")
+        .arg("verify")
         .arg("--target")
         .arg("tests/fixtures/malformed_no_fields.xif.yaml")
         .output()
-        .expect("failed to run ev check on malformed fixture");
-    // YAML without fields parses successfully (fields defaults to empty),
-    // then expand_all returns 0 combinations, which exits 0 with 0 passed/0 failed.
-    // This is currently accepted behavior. The malformed_bad_type test covers
-    // the more important error case.
+        .expect("failed to run ev verify on malformed fixture");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains("passed: 0\nfailed: 0")
-            || stdout.contains("\"passed\": 0"),
+        stdout.contains("passed: 0\nfailed: 0") || stdout.contains("\"passed\": 0"),
         "output should mention passed/failed: {}",
         stdout
     );
 }
 
 #[test]
-fn check_malformed_bad_constraint_type_exits_nonzero() {
+fn verify_malformed_bad_constraint_type_exits_nonzero() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
-        .arg("check")
+        .arg("verify")
         .arg("--target")
         .arg("tests/fixtures/malformed_bad_type.xif.yaml")
         .output()
-        .expect("failed to run ev check on malformed constraint fixture");
+        .expect("failed to run ev verify on malformed constraint fixture");
     assert!(
         !output.status.success(),
         "YAML with unknown constraint type should exit non-zero"
@@ -217,17 +210,15 @@ fn check_malformed_bad_constraint_type_exits_nonzero() {
 }
 
 #[test]
-fn check_ibex_alu_ext_fixture() {
+fn verify_ibex_alu_ext_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
-        .arg("check")
+        .arg("verify")
         .arg("--target")
         .arg("tests/fixtures/ibex_alu_ext.xif.yaml")
         .arg("--json")
         .output()
-        .expect("failed to run ev check on ibex_alu_ext fixture");
-    // neq constraint produces 64 failures, so exit code is non-zero.
+        .expect("failed to run ev verify on ibex_alu_ext fixture");
     let stdout = String::from_utf8_lossy(&output.stdout);
-    // 8 * 8 * 8 = 512 total. neq removes 64 (rs1 == rd), so 512 - 64 = 448 pass.
     assert!(
         stdout.contains("\"passed\": 448"),
         "ibex_alu_ext should report 448 passed: {}",
@@ -241,18 +232,15 @@ fn check_ibex_alu_ext_fixture() {
 }
 
 #[test]
-fn check_cva6_xif_mac_fixture() {
+fn verify_cva6_xif_mac_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
-        .arg("check")
+        .arg("verify")
         .arg("--target")
         .arg("tests/fixtures/cva6_xif_mac.xif.yaml")
         .arg("--json")
         .output()
-        .expect("failed to run ev check on cva6_xif_mac fixture");
-    // neq constraint produces 4096 failures, so exit code is non-zero.
+        .expect("failed to run ev verify on cva6_xif_mac fixture");
     let stdout = String::from_utf8_lossy(&output.stdout);
-    // 2 * 8 * 8 * 256 = 32768 total. neq (rs1 != rs2) removes 8 * 2 * 256 = 4096.
-    // 32768 - 4096 = 28672 pass.
     assert!(
         stdout.contains("\"passed\": 28672"),
         "cva6_xif_mac should report 28672 passed: {}",
@@ -266,6 +254,29 @@ fn check_cva6_xif_mac_fixture() {
 }
 
 #[test]
+fn synth_with_mock_backend() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("synth")
+        .arg("--target")
+        .arg("tests/fixtures/all_pass.xif.yaml")
+        .env("EV_SYNTH_BACKEND", "mock")
+        .output()
+        .expect("failed to run ev synth with mock backend");
+    assert!(output.status.success(), "ev synth should exit 0");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Synthesis:"),
+        "text output should contain Synthesis summary"
+    );
+    assert!(stdout.contains("[ok]"), "synthesis should show ok status");
+    assert!(
+        stdout.contains("backend:  mock"),
+        "should mention mock backend"
+    );
+    assert!(stdout.contains("gate count:"), "should show gate count");
+}
+
+#[test]
 fn version_flag_succeeds() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("--version")
@@ -274,4 +285,28 @@ fn version_flag_succeeds() {
     assert!(output.status.success(), "ev --version should exit 0");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("ev"), "version output should contain ev");
+}
+
+#[test]
+fn simulate_help_succeeds() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("simulate")
+        .arg("--help")
+        .output()
+        .expect("failed to run ev simulate --help");
+    assert!(output.status.success(), "ev simulate --help should exit 0");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("--target"), "help should mention --target");
+}
+
+#[test]
+fn synth_help_succeeds() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("synth")
+        .arg("--help")
+        .output()
+        .expect("failed to run ev synth --help");
+    assert!(output.status.success(), "ev synth --help should exit 0");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("--target"), "help should mention --target");
 }

@@ -103,12 +103,8 @@ pub enum ProjectorSpec {
     Sum,
     /// Extract a single axis value.
     #[serde(rename = "identity")]
-    Identity {
-        field: String,
-    },
+    Identity { field: String },
     /// Classify parity of a single axis.
     #[serde(rename = "parity")]
-    Parity {
-        field: String,
-    },
+    Parity { field: String },
 }

@@ -29,8 +29,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Verify an instruction against its field specification
-    Check {
+    /// Static constraint verification against field specification
+    Verify {
         /// Path to the YAML constraint file (XIF format)
         #[arg(short, long)]
         target: PathBuf,
@@ -42,6 +42,24 @@ enum Commands {
         /// Run external synthesis after verification
         #[arg(long)]
         synth: bool,
+    },
+
+    /// ISA simulation verification via Spike
+    Simulate {
+        /// Path to the YAML constraint file
+        #[arg(short, long)]
+        target: PathBuf,
+
+        /// Output results as JSON instead of text
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// SystemVerilog RTL generation and synthesis
+    Synth {
+        /// Path to the YAML constraint file
+        #[arg(short, long)]
+        target: PathBuf,
     },
 }
 
@@ -59,7 +77,7 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Check {
+        Commands::Verify {
             target,
             json,
             synth,
@@ -124,6 +142,28 @@ fn main() -> anyhow::Result<()> {
 
             if !all_passed {
                 std::process::exit(1);
+            }
+        }
+        Commands::Simulate { target: _, json: _ } => {
+            unimplemented!("Spike backend not yet implemented");
+        }
+        Commands::Synth { target } => {
+            let spec = spec::VerificationSpec::from_yaml(&target)?;
+            let rtl_path = SvGenerator.generate(&spec)?;
+            let backend = resolve_synth_backend();
+            let report = backend.run(&rtl_path, &spec.target)?;
+            let status_label = if report.status == "ok" {
+                "ok"
+            } else {
+                "FAILED"
+            };
+            println!("Synthesis: {} [{}]", report.module_name, status_label);
+            println!("  backend:  {}", report.tool);
+            println!("  version:  {}", report.version);
+            println!("  gate count: {:?}", report.gate_count);
+            println!("  cell area:  {:?}", report.cell_area);
+            if !report.status.eq_ignore_ascii_case("ok") {
+                anyhow::bail!("synthesis failed: {}", report.message.unwrap_or_default());
             }
         }
     }

@@ -58,13 +58,13 @@ _yosys() {
 verify_synth() {
     _yosys yosys --version
     echo "=== synthesis (text) ==="
-    _yosys "$EV" check --target "$ALL_PASS" --synth
+    _yosys "$EV" verify --target "$ALL_PASS" --synth
     echo "=== synthesis (json) ==="
     local tmpf
     tmpf=$(mktemp /tmp/synth_fact.XXXXXX.json)
     local tmpe
     tmpe=$(mktemp /tmp/synth_stderr.XXXXXX.txt)
-    _yosys "$EV" check --target "$ALL_PASS" --synth --json > "$tmpf" 2>"$tmpe"
+    _yosys "$EV" verify --target "$ALL_PASS" --synth --json > "$tmpf" 2>"$tmpe"
     grep -q '"fact_type": "synthesis_result"' "$tmpf" || { cat "$tmpe"; echo "FAILED: missing fact_type"; exit 1; }
     grep -q '"status": "ok"' "$tmpf" || { cat "$tmpe"; echo "FAILED: synthesis status not ok"; exit 1; }
     echo "  ok"
@@ -73,9 +73,9 @@ verify_synth() {
 
 verify_fixtures() {
     echo "=== all-pass fixture ==="
-    $EV check --target "$ALL_PASS"
+    $EV verify --target "$ALL_PASS"
     echo "=== mixed fixture ==="
-    EC=0; $EV check --target "$MIXED" || EC=$?
+    EC=0; $EV verify --target "$MIXED" || EC=$?
     if [ "$EC" -eq 1 ]; then
         echo "  exit: 1 (expected — 84 of 96 fail eq constraint)"
     else
@@ -83,7 +83,7 @@ verify_fixtures() {
         exit 1
     fi
     echo "=== json output ==="
-    $EV check --target "$MIXED" --json 2>&1 | head -8 || true
+    $EV verify --target "$MIXED" --json 2>&1 | head -8 || true
 }
 
 # ── Modes ─────────────────────────────────────────────────────────────
