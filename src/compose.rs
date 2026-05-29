@@ -45,8 +45,18 @@ pub struct Combination {
     pub point: Point,
 }
 
+/// Maximum number of combinations expand_all will generate before returning an error.
+///
+/// Set to 10 million to cover typical RISC-V XIF designs (4-6 fields, small domains)
+/// while preventing OOM from accidentally large specifications.
+pub const MAX_COMBINATIONS: usize = 10_000_000;
+
 /// Expand all field domains into the full cartesian product.
-pub fn expand_all(spec: &VerificationSpec) -> Vec<Combination> {
+///
+/// Returns an error if the total number of combinations exceeds `MAX_COMBINATIONS` or
+/// if the product computation overflows `usize`. This prevents accidentally requesting
+/// an infeasibly large search space.
+pub fn expand_all(spec: &VerificationSpec) -> Result<Vec<Combination>, String> {
     let names: Vec<&String> = spec.fields.keys().collect();
     let domains: Vec<Vec<i64>> = names
         .iter()
@@ -57,10 +67,28 @@ pub fn expand_all(spec: &VerificationSpec) -> Vec<Combination> {
         .collect();
 
     if domains.is_empty() {
-        return Vec::new();
+        return Ok(Vec::new());
     }
 
-    let total: usize = domains.iter().map(|d| d.len()).product();
+    // Check for overflow and upper bound before allocating.
+    let mut total: usize = 1;
+    for d in &domains {
+        let len = d.len();
+        total = total.checked_mul(len).ok_or_else(|| {
+            format!(
+                "domain expansion overflow: total combinations exceed usize (field domain size {})",
+                len
+            )
+        })?;
+        if total > MAX_COMBINATIONS {
+            return Err(format!(
+                "domain expansion too large: {} combinations exceed limit of {}. \
+                 Reduce field domain sizes or increase MAX_COMBINATIONS.",
+                total, MAX_COMBINATIONS
+            ));
+        }
+    }
+
     let mut combinations = Vec::with_capacity(total);
 
     let mut indices = vec![0usize; domains.len()];
@@ -94,7 +122,7 @@ pub fn expand_all(spec: &VerificationSpec) -> Vec<Combination> {
         }
     }
 
-    combinations
+    Ok(combinations)
 }
 
 #[cfg(test)]
@@ -124,7 +152,7 @@ mod tests {
             },
         );
         let spec = make_spec(fields);
-        let combos = expand_all(&spec);
+        let combos = expand_all(&spec).unwrap();
         assert_eq!(combos.len(), 2, "2 values = 2 combos");
         assert_eq!(combos[0].values, vec![2]);
         assert_eq!(combos[1].values, vec![4]);
@@ -150,7 +178,7 @@ mod tests {
             },
         );
         let spec = make_spec(fields);
-        let combos = expand_all(&spec);
+        let combos = expand_all(&spec).unwrap();
         // 2 * 3 = 6 combinations
         assert_eq!(combos.len(), 6);
         // First combination: a=1, b=10
@@ -180,7 +208,7 @@ mod tests {
             },
         );
         let spec = make_spec(fields);
-        let combos = expand_all(&spec);
+        let combos = expand_all(&spec).unwrap();
         assert_eq!(combos.len(), 4, "0..=3 = 4 values");
         assert_eq!(combos[0].values, vec![0]);
         assert_eq!(combos[3].values, vec![3]);
@@ -189,7 +217,7 @@ mod tests {
     #[test]
     fn expand_empty_fields_returns_empty() {
         let spec = make_spec(BTreeMap::new());
-        let combos = expand_all(&spec);
+        let combos = expand_all(&spec).unwrap();
         assert!(combos.is_empty());
     }
 
@@ -205,7 +233,7 @@ mod tests {
             },
         );
         let spec = make_spec(fields);
-        let combos = expand_all(&spec);
+        let combos = expand_all(&spec).unwrap();
         // 0, 3, 6, 9
         assert_eq!(combos.len(), 4);
         assert_eq!(combos[0].values, vec![0]);
@@ -226,8 +254,56 @@ mod tests {
             },
         );
         let spec = make_spec(fields);
-        let combos = expand_all(&spec);
+        let combos = expand_all(&spec).unwrap();
         assert_eq!(combos[0].point.coordinates().raw, vec![5]);
         assert_eq!(combos[0].coordinates.raw, vec![5]);
+    }
+
+    #[test]
+    fn expand_exceeding_max_combinations_returns_error() {
+        // 11 small fields = 2^11 = 2048 (fine), but 10M + 1
+        // We override MAX_COMBINATIONS by using a large value domain.
+        let mut fields = BTreeMap::new();
+        // One field with range 0..=MAX_COMBINATIONS (forces overflow)
+        fields.insert(
+            "big".into(),
+            FieldSpec {
+                range: Some((0, MAX_COMBINATIONS as i64)),
+                alignment: None,
+                values: None,
+            },
+        );
+        let spec = make_spec(fields);
+        let result = expand_all(&spec);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("too large") || err.contains("limit"),
+            "error should mention limit: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn expand_overflow_returns_error() {
+        // 31 fields each with 2 values => 2^31 > usize::MAX on 32-bit, fine on 64-bit.
+        // Use a 64-bit safe overflow: 30 fields of 3 values = 3^30 > 2^64.
+        let mut fields = BTreeMap::new();
+        for i in 0..30 {
+            fields.insert(
+                format!("f{}", i),
+                FieldSpec {
+                    range: None,
+                    alignment: None,
+                    values: Some(vec![i as i64, i as i64 + 1, i as i64 + 2]),
+                },
+            );
+        }
+        let spec = make_spec(fields);
+        let result = expand_all(&spec);
+        assert!(
+            result.is_err(),
+            "30 fields of 3 values should overflow before hitting MAX_COMBINATIONS"
+        );
     }
 }

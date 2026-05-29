@@ -1,0 +1,11 @@
+target: bad_spec
+fields:
+  x:
+    range: [0, 10]
+constraints:
+  - type: nonexistent_constraint
+    axis: 0
+    min: 0
+    max: 5
+projector:
+  type: sum

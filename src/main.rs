@@ -71,7 +71,8 @@ fn main() -> anyhow::Result<()> {
             let constraint_registry = ConstraintRegistry::default();
             let projector_registry = ProjectorRegistry::default();
 
-            let combinations = compose::expand_all(&spec);
+            let combinations = compose::expand_all(&spec)
+                .map_err(|e| anyhow::anyhow!("domain expansion failed: {}", e))?;
             let evaluations = evaluate::evaluate_all(
                 &spec,
                 combinations,
