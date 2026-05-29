@@ -67,7 +67,10 @@ fn verify_json_all_pass() {
         stdout.contains("\"spec_hash\""),
         "json output should include spec_hash"
     );
-    assert!(stdout.contains("\"origin\""), "json output should include origin");
+    assert!(
+        stdout.contains("\"origin\""),
+        "json output should include origin"
+    );
 }
 
 #[test]
@@ -278,8 +281,5 @@ fn synth_help_succeeds() {
         .expect("failed to run ev synth --help");
     assert!(output.status.success(), "ev synth --help should exit 0");
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(
-        stdout.contains("--target"),
-        "help should mention --target"
-    );
+    assert!(stdout.contains("--target"), "help should mention --target");
 }
