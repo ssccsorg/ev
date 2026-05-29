@@ -220,6 +220,35 @@ fn sv_constraint_assertion(
             let name_b = field_names.get(*axis_b).map(|n| n.as_str()).unwrap_or("0");
             format!("assert property ({} == {}); // eq\n", name_a, name_b)
         }
+        crate::spec::ConstraintSpec::Neq { axis_a, axis_b } => {
+            let name_a = field_names.get(*axis_a).map(|n| n.as_str()).unwrap_or("0");
+            let name_b = field_names.get(*axis_b).map(|n| n.as_str()).unwrap_or("0");
+            format!("assert property ({} != {}); // neq\n", name_a, name_b)
+        }
+        crate::spec::ConstraintSpec::Lt { axis, value } => {
+            let name = field_names.get(*axis).map(|n| n.as_str()).unwrap_or("0");
+            format!("assert property ({} < {}); // lt\n", name, value)
+        }
+        crate::spec::ConstraintSpec::Gt { axis, value } => {
+            let name = field_names.get(*axis).map(|n| n.as_str()).unwrap_or("0");
+            format!("assert property ({} > {}); // gt\n", name, value)
+        }
+        crate::spec::ConstraintSpec::Le { axis, value } => {
+            let name = field_names.get(*axis).map(|n| n.as_str()).unwrap_or("0");
+            format!("assert property ({} <= {}); // le\n", name, value)
+        }
+        crate::spec::ConstraintSpec::Ge { axis, value } => {
+            let name = field_names.get(*axis).map(|n| n.as_str()).unwrap_or("0");
+            format!("assert property ({} >= {}); // ge\n", name, value)
+        }
+        crate::spec::ConstraintSpec::Oneof { axis, values } => {
+            let name = field_names.get(*axis).map(|n| n.as_str()).unwrap_or("0");
+            let or_exprs: Vec<String> = values
+                .iter()
+                .map(|v| format!("{} == {}", name, v))
+                .collect();
+            format!("assert property ({}); // oneof\n", or_exprs.join(" || "))
+        }
     }
 }
 
@@ -474,6 +503,56 @@ mod tests {
         );
         assert!(s.contains("assert property"));
         assert!(s.contains("a == b"));
+    }
+
+    // ── New constraint SV assertions ──────────────────────────────
+
+    #[test]
+    fn constraint_neq() {
+        let n = names(&["a", "b"]);
+        let refs = name_refs(&n);
+        let s = sv_constraint_assertion(
+            &ConstraintSpec::Neq {
+                axis_a: 0,
+                axis_b: 1,
+            },
+            &refs,
+        );
+        assert!(s.contains("assert property"));
+        assert!(s.contains("a != b"));
+    }
+
+    #[test]
+    fn constraint_gt() {
+        let n = names(&["x"]);
+        let refs = name_refs(&n);
+        let s = sv_constraint_assertion(
+            &ConstraintSpec::Gt {
+                axis: 0,
+                value: 100,
+            },
+            &refs,
+        );
+        assert!(s.contains("assert property"));
+        assert!(s.contains("x > 100"));
+    }
+
+    #[test]
+    fn constraint_oneof() {
+        let n = names(&["op"]);
+        let refs = name_refs(&n);
+        let s = sv_constraint_assertion(
+            &ConstraintSpec::Oneof {
+                axis: 0,
+                values: vec![0, 2, 4],
+            },
+            &refs,
+        );
+        assert!(s.contains("assert property"));
+        assert!(s.contains("op == 0"));
+        assert!(s.contains("op == 2"));
+        assert!(s.contains("op == 4"));
+        assert!(s.contains("||"));
     }
 
     // ── generate_sv ───────────────────────────────────────────────

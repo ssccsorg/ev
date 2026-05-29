@@ -97,6 +97,66 @@ impl Default for ConstraintRegistry {
                 panic!("eq builder called on non-eq spec")
             }
         });
+        reg.register("neq", |spec| {
+            if let ConstraintSpec::Neq { axis_a, axis_b } = spec {
+                AnyCheck::new(NeqC {
+                    axis_a: *axis_a,
+                    axis_b: *axis_b,
+                })
+            } else {
+                panic!("neq builder called on non-neq spec")
+            }
+        });
+        reg.register("lt", |spec| {
+            if let ConstraintSpec::Lt { axis, value } = spec {
+                AnyCheck::new(LtC {
+                    axis: *axis,
+                    value: *value,
+                })
+            } else {
+                panic!("lt builder called on non-lt spec")
+            }
+        });
+        reg.register("gt", |spec| {
+            if let ConstraintSpec::Gt { axis, value } = spec {
+                AnyCheck::new(GtC {
+                    axis: *axis,
+                    value: *value,
+                })
+            } else {
+                panic!("gt builder called on non-gt spec")
+            }
+        });
+        reg.register("le", |spec| {
+            if let ConstraintSpec::Le { axis, value } = spec {
+                AnyCheck::new(LeC {
+                    axis: *axis,
+                    value: *value,
+                })
+            } else {
+                panic!("le builder called on non-le spec")
+            }
+        });
+        reg.register("ge", |spec| {
+            if let ConstraintSpec::Ge { axis, value } = spec {
+                AnyCheck::new(GeC {
+                    axis: *axis,
+                    value: *value,
+                })
+            } else {
+                panic!("ge builder called on non-ge spec")
+            }
+        });
+        reg.register("oneof", |spec| {
+            if let ConstraintSpec::Oneof { axis, values } = spec {
+                AnyCheck::new(OneofC {
+                    axis: *axis,
+                    values: values.clone(),
+                })
+            } else {
+                panic!("oneof builder called on non-oneof spec")
+            }
+        });
         reg
     }
 }
@@ -106,6 +166,12 @@ fn spec_type_name(spec: &ConstraintSpec) -> &str {
         ConstraintSpec::Range { .. } => "range",
         ConstraintSpec::Even { .. } => "even",
         ConstraintSpec::Eq { .. } => "eq",
+        ConstraintSpec::Neq { .. } => "neq",
+        ConstraintSpec::Lt { .. } => "lt",
+        ConstraintSpec::Gt { .. } => "gt",
+        ConstraintSpec::Le { .. } => "le",
+        ConstraintSpec::Ge { .. } => "ge",
+        ConstraintSpec::Oneof { .. } => "oneof",
     }
 }
 
@@ -161,6 +227,121 @@ impl Check for EqC {
     }
     fn describe(&self) -> String {
         format!("axis[{}] == axis[{}]", self.axis_a, self.axis_b)
+    }
+}
+
+#[derive(Debug, Clone)]
+struct NeqC {
+    axis_a: usize,
+    axis_b: usize,
+}
+
+impl Check for NeqC {
+    fn allows(&self, coords: &Coordinates) -> bool {
+        let a = coords.get_axis(self.axis_a);
+        let b = coords.get_axis(self.axis_b);
+        a.is_some() && b.is_some() && a != b
+    }
+    fn describe(&self) -> String {
+        format!("axis[{}] != axis[{}]", self.axis_a, self.axis_b)
+    }
+}
+
+#[derive(Debug, Clone)]
+struct LtC {
+    axis: usize,
+    value: i64,
+}
+
+impl Check for LtC {
+    fn allows(&self, coords: &Coordinates) -> bool {
+        coords
+            .get_axis(self.axis)
+            .map(|v| v < self.value)
+            .unwrap_or(false)
+    }
+    fn describe(&self) -> String {
+        format!("axis[{}] < {}", self.axis, self.value)
+    }
+}
+
+#[derive(Debug, Clone)]
+struct GtC {
+    axis: usize,
+    value: i64,
+}
+
+impl Check for GtC {
+    fn allows(&self, coords: &Coordinates) -> bool {
+        coords
+            .get_axis(self.axis)
+            .map(|v| v > self.value)
+            .unwrap_or(false)
+    }
+    fn describe(&self) -> String {
+        format!("axis[{}] > {}", self.axis, self.value)
+    }
+}
+
+#[derive(Debug, Clone)]
+struct LeC {
+    axis: usize,
+    value: i64,
+}
+
+impl Check for LeC {
+    fn allows(&self, coords: &Coordinates) -> bool {
+        coords
+            .get_axis(self.axis)
+            .map(|v| v <= self.value)
+            .unwrap_or(false)
+    }
+    fn describe(&self) -> String {
+        format!("axis[{}] <= {}", self.axis, self.value)
+    }
+}
+
+#[derive(Debug, Clone)]
+struct GeC {
+    axis: usize,
+    value: i64,
+}
+
+impl Check for GeC {
+    fn allows(&self, coords: &Coordinates) -> bool {
+        coords
+            .get_axis(self.axis)
+            .map(|v| v >= self.value)
+            .unwrap_or(false)
+    }
+    fn describe(&self) -> String {
+        format!("axis[{}] >= {}", self.axis, self.value)
+    }
+}
+
+#[derive(Debug, Clone)]
+struct OneofC {
+    axis: usize,
+    values: Vec<i64>,
+}
+
+impl Check for OneofC {
+    fn allows(&self, coords: &Coordinates) -> bool {
+        coords
+            .get_axis(self.axis)
+            .map(|v| self.values.contains(&v))
+            .unwrap_or(false)
+    }
+    fn describe(&self) -> String {
+        format!(
+            "axis[{}] ∈ {{{}}}",
+            self.axis,
+            self.values
+                .iter()
+                .map(|v| v.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
     }
 }
 

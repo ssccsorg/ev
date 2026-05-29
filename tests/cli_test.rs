@@ -217,6 +217,53 @@ fn check_malformed_bad_constraint_type_exits_nonzero() {
 }
 
 #[test]
+fn check_ibex_alu_ext_fixture() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("check")
+        .arg("--target")
+        .arg("tests/fixtures/ibex_alu_ext.xif.yaml")
+        .arg("--json")
+        .output()
+        .expect("failed to run ev check on ibex_alu_ext fixture");
+    assert!(
+        output.status.success(),
+        "ibex_alu_ext fixture should pass: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // 8 * 8 * 8 = 512 total. neq removes (8*8 - 8*1) = 56, so 512-56 = 456 pass.
+    assert!(
+        stdout.contains("\"passed\": 456"),
+        "ibex_alu_ext should report 456 passed: {}",
+        stdout
+    );
+}
+
+#[test]
+fn check_cva6_xif_mac_fixture() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("check")
+        .arg("--target")
+        .arg("tests/fixtures/cva6_xif_mac.xif.yaml")
+        .arg("--json")
+        .output()
+        .expect("failed to run ev check on cva6_xif_mac fixture");
+    assert!(
+        output.status.success(),
+        "cva6_xif_mac fixture should pass: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // 2 * 8 * 8 * 256 = 32768 total. neq removes (64*256 - 8*256) = 14336.
+    // so 32768 - 14336 = 18432 pass.
+    assert!(
+        stdout.contains("\"passed\": 18432"),
+        "cva6_xif_mac should report 18432 passed: {}",
+        stdout
+    );
+}
+
+#[test]
 fn version_flag_succeeds() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("--version")

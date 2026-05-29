@@ -326,6 +326,241 @@ mod tests {
         }
     }
 
+    // ── New constraint types ──────────────────────────────────────
+
+    #[test]
+    fn neq_constraint_allows_unequal() {
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "a".into(),
+            FieldSpec {
+                range: None,
+                alignment: None,
+                values: Some(vec![3]),
+            },
+        );
+        fields.insert(
+            "b".into(),
+            FieldSpec {
+                range: None,
+                alignment: None,
+                values: Some(vec![7]),
+            },
+        );
+        let spec = make_spec(
+            fields,
+            vec![ConstraintSpec::Neq {
+                axis_a: 0,
+                axis_b: 1,
+            }],
+            ProjectorSpec::Sum,
+        );
+        let combos = crate::compose::expand_all(&spec).unwrap();
+        assert_eq!(combos.len(), 1);
+        let results = evaluate_all(
+            &spec,
+            combos,
+            &ConstraintRegistry::default(),
+            &ProjectorRegistry::default(),
+        );
+        assert!(results[0].passed, "a=3, b=7 should pass neq");
+    }
+
+    #[test]
+    fn neq_constraint_rejects_equal() {
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "a".into(),
+            FieldSpec {
+                range: None,
+                alignment: None,
+                values: Some(vec![5]),
+            },
+        );
+        fields.insert(
+            "b".into(),
+            FieldSpec {
+                range: None,
+                alignment: None,
+                values: Some(vec![5]),
+            },
+        );
+        let spec = make_spec(
+            fields,
+            vec![ConstraintSpec::Neq {
+                axis_a: 0,
+                axis_b: 1,
+            }],
+            ProjectorSpec::Sum,
+        );
+        let combos = crate::compose::expand_all(&spec).unwrap();
+        let results = evaluate_all(
+            &spec,
+            combos,
+            &ConstraintRegistry::default(),
+            &ProjectorRegistry::default(),
+        );
+        assert!(!results[0].passed, "a=5, b=5 should fail neq");
+        assert!(results[0].reason.contains("!="), "reason should mention !=");
+    }
+
+    #[test]
+    fn lt_constraint() {
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "x".into(),
+            FieldSpec {
+                range: None,
+                alignment: None,
+                values: Some(vec![1, 5, 10]),
+            },
+        );
+        let spec = make_spec(
+            fields,
+            vec![ConstraintSpec::Lt {
+                axis: 0,
+                value: 5,
+            }],
+            ProjectorSpec::Identity { axis: 0 },
+        );
+        let combos = crate::compose::expand_all(&spec).unwrap();
+        assert_eq!(combos.len(), 3);
+        let results = evaluate_all(
+            &spec,
+            combos,
+            &ConstraintRegistry::default(),
+            &ProjectorRegistry::default(),
+        );
+        assert!(results[0].passed, "1 < 5 should pass");
+        assert!(!results[1].passed, "5 < 5 should fail");
+        assert!(!results[2].passed, "10 < 5 should fail");
+    }
+
+    #[test]
+    fn gt_constraint() {
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "x".into(),
+            FieldSpec {
+                range: None,
+                alignment: None,
+                values: Some(vec![1, 5, 10]),
+            },
+        );
+        let spec = make_spec(
+            fields,
+            vec![ConstraintSpec::Gt {
+                axis: 0,
+                value: 5,
+            }],
+            ProjectorSpec::Identity { axis: 0 },
+        );
+        let combos = crate::compose::expand_all(&spec).unwrap();
+        let results = evaluate_all(
+            &spec,
+            combos,
+            &ConstraintRegistry::default(),
+            &ProjectorRegistry::default(),
+        );
+        assert!(!results[0].passed, "1 > 5 should fail");
+        assert!(!results[1].passed, "5 > 5 should fail");
+        assert!(results[2].passed, "10 > 5 should pass");
+    }
+
+    #[test]
+    fn le_constraint() {
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "x".into(),
+            FieldSpec {
+                range: None,
+                alignment: None,
+                values: Some(vec![1, 5, 10]),
+            },
+        );
+        let spec = make_spec(
+            fields,
+            vec![ConstraintSpec::Le {
+                axis: 0,
+                value: 5,
+            }],
+            ProjectorSpec::Identity { axis: 0 },
+        );
+        let combos = crate::compose::expand_all(&spec).unwrap();
+        let results = evaluate_all(
+            &spec,
+            combos,
+            &ConstraintRegistry::default(),
+            &ProjectorRegistry::default(),
+        );
+        assert!(results[0].passed, "1 <= 5 should pass");
+        assert!(results[1].passed, "5 <= 5 should pass");
+        assert!(!results[2].passed, "10 <= 5 should fail");
+    }
+
+    #[test]
+    fn ge_constraint() {
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "x".into(),
+            FieldSpec {
+                range: None,
+                alignment: None,
+                values: Some(vec![1, 5, 10]),
+            },
+        );
+        let spec = make_spec(
+            fields,
+            vec![ConstraintSpec::Ge {
+                axis: 0,
+                value: 5,
+            }],
+            ProjectorSpec::Identity { axis: 0 },
+        );
+        let combos = crate::compose::expand_all(&spec).unwrap();
+        let results = evaluate_all(
+            &spec,
+            combos,
+            &ConstraintRegistry::default(),
+            &ProjectorRegistry::default(),
+        );
+        assert!(!results[0].passed, "1 >= 5 should fail");
+        assert!(results[1].passed, "5 >= 5 should pass");
+        assert!(results[2].passed, "10 >= 5 should pass");
+    }
+
+    #[test]
+    fn oneof_constraint() {
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "x".into(),
+            FieldSpec {
+                range: None,
+                alignment: None,
+                values: Some(vec![2, 4, 7]),
+            },
+        );
+        let spec = make_spec(
+            fields,
+            vec![ConstraintSpec::Oneof {
+                axis: 0,
+                values: vec![0, 2, 4],
+            }],
+            ProjectorSpec::Identity { axis: 0 },
+        );
+        let combos = crate::compose::expand_all(&spec).unwrap();
+        assert_eq!(combos.len(), 3);
+        let results = evaluate_all(
+            &spec,
+            combos,
+            &ConstraintRegistry::default(),
+            &ProjectorRegistry::default(),
+        );
+        assert!(results[0].passed, "2 in set should pass");
+        assert!(results[1].passed, "4 in set should pass");
+        assert!(!results[2].passed, "7 not in set should fail");
+    }
+
     // ── Edge cases ────────────────────────────────────────────────
 
     #[test]
