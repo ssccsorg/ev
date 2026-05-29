@@ -37,7 +37,7 @@ synth/backends/  External synthesis backends (YosysBackend)
 - **Overflow guard**: `MAX_COMBINATIONS = 10_000_000`, checked multiplication, `Result` return
 - **Synthesis channel**: SV generation + YosysBackend + MockSynthesisBackend
 - **Fact envelope**: `Fact` struct with type tags, timestamps, payload for neXus pipeline
-- **CLI**: `ev verify` (static constraint), `ev simulate` (ISA simulation, WIP), `ev synth` (SV generation + synthesis)
+- **CLI**: `ev verify` (static constraint), `ev synth` (SV generation + synthesis)
 - **69 tests** (56 lib + 13 CLI), all passing
 - **Real RISC-V fixtures**: `ibex_alu_ext.xif.yaml` (456 combinations), `cva6_xif_mac.xif.yaml` (32,768 combinations)
 - **CI**: fmt + clippy + test + verify (run.sh)
