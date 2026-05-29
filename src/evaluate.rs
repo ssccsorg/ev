@@ -573,6 +573,67 @@ mod tests {
         assert!(!results[2].passed, "7 not in set should fail");
     }
 
+    #[test]
+    fn cross_constraint() {
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "op".into(),
+            FieldSpec {
+                range: None,
+                alignment: None,
+                values: Some(vec![0, 1, 2]),
+            },
+        );
+        fields.insert(
+            "sub".into(),
+            FieldSpec {
+                range: None,
+                alignment: None,
+                values: Some(vec![0, 1, 2, 3]),
+            },
+        );
+        let mapping: std::collections::HashMap<i64, Vec<i64>> = [
+            (0, vec![0]),
+            (1, vec![0, 1, 2]),
+        ]
+        .into();
+        let spec = make_spec(
+            fields,
+            vec![ConstraintSpec::Cross {
+                field_a: "op".into(),
+                field_b: "sub".into(),
+                mapping,
+            }],
+            ProjectorSpec::Identity { field: "op".into() },
+        );
+        let combos = crate::compose::expand_all(&spec).unwrap();
+        // 3 × 4 = 12 raw combinations
+        assert_eq!(combos.len(), 12);
+        let results = evaluate_all(
+            &spec,
+            combos,
+            &ConstraintRegistry::default(),
+            &ProjectorRegistry::default(),
+        );
+        // op=0, sub=0: passes (mapped, sub in allowed)
+        // op=0, sub=1,2,3: fails (sub not in [0])
+        // op=1, sub=0,1,2: passes (mapped, sub in [0,1,2])
+        // op=1, sub=3: fails (3 not in [0,1,2])
+        // op=2: passes trivially (not in mapping, unrestrict)
+        for r in &results {
+            let op = r.combination.values[0];
+            let sub = r.combination.values[1];
+            match (op, sub) {
+                (0, 0) => assert!(r.passed, "op=0, sub=0 should pass"),
+                (0, _) => assert!(!r.passed, "op=0, sub={} should fail", sub),
+                (1, 0 | 1 | 2) => assert!(r.passed, "op=1, sub={} should pass", sub),
+                (1, 3) => assert!(!r.passed, "op=1, sub=3 should fail"),
+                (2, _) => assert!(r.passed, "op=2 (unmapped) should pass"),
+                _ => {}
+            }
+        }
+    }
+
     // ── Edge cases ────────────────────────────────────────────────
 
     #[test]
