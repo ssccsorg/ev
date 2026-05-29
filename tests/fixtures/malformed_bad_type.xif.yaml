@@ -4,7 +4,7 @@ fields:
     range: [0, 10]
 constraints:
   - type: nonexistent_constraint
-    axis: 0
+    field: "x"
     min: 0
     max: 5
 projector:

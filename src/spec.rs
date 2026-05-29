@@ -67,31 +67,31 @@ impl FieldSpec {
 pub enum ConstraintSpec {
     /// Axis value must be within [min, max].
     #[serde(rename = "range")]
-    Range { axis: usize, min: i64, max: i64 },
+    Range { field: String, min: i64, max: i64 },
     /// Axis value must be even.
     #[serde(rename = "even")]
-    Even { axis: usize },
+    Even { field: String },
     /// Two axis values must be equal.
     #[serde(rename = "eq")]
-    Eq { axis_a: usize, axis_b: usize },
+    Eq { field_a: String, field_b: String },
     /// Two axis values must not be equal.
     #[serde(rename = "neq")]
-    Neq { axis_a: usize, axis_b: usize },
+    Neq { field_a: String, field_b: String },
     /// Axis value must be less than a constant.
     #[serde(rename = "lt")]
-    Lt { axis: usize, value: i64 },
+    Lt { field: String, value: i64 },
     /// Axis value must be greater than a constant.
     #[serde(rename = "gt")]
-    Gt { axis: usize, value: i64 },
+    Gt { field: String, value: i64 },
     /// Axis value must be less than or equal to a constant.
     #[serde(rename = "le")]
-    Le { axis: usize, value: i64 },
+    Le { field: String, value: i64 },
     /// Axis value must be greater than or equal to a constant.
     #[serde(rename = "ge")]
-    Ge { axis: usize, value: i64 },
+    Ge { field: String, value: i64 },
     /// Axis value must be one of the listed values.
     #[serde(rename = "oneof")]
-    Oneof { axis: usize, values: Vec<i64> },
+    Oneof { field: String, values: Vec<i64> },
 }
 
 /// A projector to resolve from the ProjectorRegistry.
@@ -104,17 +104,11 @@ pub enum ProjectorSpec {
     /// Extract a single axis value.
     #[serde(rename = "identity")]
     Identity {
-        #[serde(default = "default_axis")]
-        axis: usize,
+        field: String,
     },
     /// Classify parity of a single axis.
     #[serde(rename = "parity")]
     Parity {
-        #[serde(default = "default_axis")]
-        axis: usize,
+        field: String,
     },
-}
-
-fn default_axis() -> usize {
-    0
 }

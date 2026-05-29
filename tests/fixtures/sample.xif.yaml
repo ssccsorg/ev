@@ -11,7 +11,7 @@ fields:
     values: [true, false]
 constraints:
   - type: eq
-    axis_a: 0
-    axis_b: 1
+    field_a: "operand_a"
+    field_b: "operand_b"
 projector:
   type: sum

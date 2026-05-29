@@ -19,21 +19,15 @@ fields:
     range: [0, 7]
   rd:
     range: [0, 7]
-# WARNING: axis numbers follow BTreeMap (alphabetical) field order, not YAML order.
-# Actual field order: op_select(0), rd(1), rs1(2)
-#
-#   YAML order:  op_select, rs1, rd
-#   BTree order: op_select, rd, rs1  (r < rs)
-#
 constraints:
-  # op_select must be in {0..=7} (oneof, explicit) — axis 0 = op_select
+  # op_select must be in {0..=7} (oneof, explicit)
   - type: oneof
-    axis: 0
+    field: "op_select"
     values: [0, 1, 2, 3, 4, 5, 6, 7]
-  # rs1 must not equal rd — axis 2 (rs1) != axis 1 (rd)
+  # rs1 must not equal rd (write-after-read hazard avoidance)
   - type: neq
-    axis_a: 2
-    axis_b: 1
+    field_a: "rs1"
+    field_b: "rd"
 projector:
   type: identity
-  axis: 0
+  field: "op_select"

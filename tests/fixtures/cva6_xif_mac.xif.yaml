@@ -30,11 +30,11 @@ fields:
 constraints:
   # funct3 must be in {0, 1}
   - type: oneof
-    axis: 0
+    field: "funct3"
     values: [0, 1]
   # rs1 != rd for hazard avoidance (rd = rs2 in this model)
   - type: neq
-    axis_a: 1
-    axis_b: 2
+    field_a: "rs1"
+    field_b: "rs2"
 projector:
   type: sum

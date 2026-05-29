@@ -19,7 +19,7 @@ pub struct Evaluation {
 fn build_checks(spec: &VerificationSpec, registry: &ConstraintRegistry) -> Vec<Box<dyn Check>> {
     let mut checks: Vec<Box<dyn Check>> = Vec::new();
 
-    for c in registry.build_all(&spec.constraints) {
+    for c in registry.build_all(&spec.constraints, &spec.fields) {
         checks.push(c.into_check());
     }
 
@@ -35,7 +35,7 @@ pub fn evaluate_all(
 ) -> Vec<Evaluation> {
     let checks = build_checks(spec, constraint_registry);
     let evaluator = projector_registry
-        .build(&spec.projector)
+        .resolve(&spec.projector, &spec.fields)
         .expect("projector type must be registered");
 
     combinations
@@ -134,7 +134,7 @@ mod tests {
                 values: Some(vec![value]),
             },
         );
-        let spec = make_spec(fields, vec![], ProjectorSpec::Identity { axis: 0 });
+        let spec = make_spec(fields, vec![], ProjectorSpec::Identity { field: "x".into() });
         let combos = crate::compose::expand_all(&spec).expect("expand should succeed");
         (spec, combos)
     }
@@ -169,7 +169,7 @@ mod tests {
         );
         // expand_all will only produce values 0..=10, so we manually
         // construct a combination with an out-of-range value.
-        let spec = make_spec(fields, vec![], ProjectorSpec::Identity { axis: 0 });
+        let spec = make_spec(fields, vec![], ProjectorSpec::Identity { field: "x".into() });
         let coord = crate::compose::Coordinates::new(vec![20]);
         let point = crate::compose::Point::new(coord.clone());
         let combo = crate::compose::Combination {
@@ -216,8 +216,8 @@ mod tests {
         let spec = make_spec(
             fields,
             vec![ConstraintSpec::Eq {
-                axis_a: 0,
-                axis_b: 1,
+                field_a: "a".into(),
+                field_b: "b".into(),
             }],
             ProjectorSpec::Sum,
         );
@@ -255,8 +255,8 @@ mod tests {
         let spec = make_spec(
             fields,
             vec![ConstraintSpec::Eq {
-                axis_a: 0,
-                axis_b: 1,
+                field_a: "a".into(),
+                field_b: "b".into(),
             }],
             ProjectorSpec::Sum,
         );
@@ -288,14 +288,14 @@ mod tests {
         let spec = make_spec(
             fields,
             vec![
-                ConstraintSpec::Even { axis: 0 },
+                ConstraintSpec::Even { field: "coord".into() },
                 ConstraintSpec::Range {
-                    axis: 0,
+                    field: "coord".into(),
                     min: 0,
                     max: 10,
                 },
             ],
-            ProjectorSpec::Identity { axis: 0 },
+            ProjectorSpec::Identity { field: "coord".into() },
         );
         let combos = crate::compose::expand_all(&spec).unwrap();
         assert_eq!(combos.len(), 3, "3 field values");
@@ -350,8 +350,8 @@ mod tests {
         let spec = make_spec(
             fields,
             vec![ConstraintSpec::Neq {
-                axis_a: 0,
-                axis_b: 1,
+                field_a: "a".into(),
+                field_b: "b".into(),
             }],
             ProjectorSpec::Sum,
         );
@@ -388,8 +388,8 @@ mod tests {
         let spec = make_spec(
             fields,
             vec![ConstraintSpec::Neq {
-                axis_a: 0,
-                axis_b: 1,
+                field_a: "a".into(),
+                field_b: "b".into(),
             }],
             ProjectorSpec::Sum,
         );
@@ -418,10 +418,10 @@ mod tests {
         let spec = make_spec(
             fields,
             vec![ConstraintSpec::Lt {
-                axis: 0,
+                field: "x".into(),
                 value: 5,
             }],
-            ProjectorSpec::Identity { axis: 0 },
+            ProjectorSpec::Identity { field: "x".into() },
         );
         let combos = crate::compose::expand_all(&spec).unwrap();
         assert_eq!(combos.len(), 3);
@@ -450,10 +450,10 @@ mod tests {
         let spec = make_spec(
             fields,
             vec![ConstraintSpec::Gt {
-                axis: 0,
+                field: "x".into(),
                 value: 5,
             }],
-            ProjectorSpec::Identity { axis: 0 },
+            ProjectorSpec::Identity { field: "x".into() },
         );
         let combos = crate::compose::expand_all(&spec).unwrap();
         let results = evaluate_all(
@@ -481,10 +481,10 @@ mod tests {
         let spec = make_spec(
             fields,
             vec![ConstraintSpec::Le {
-                axis: 0,
+                field: "x".into(),
                 value: 5,
             }],
-            ProjectorSpec::Identity { axis: 0 },
+            ProjectorSpec::Identity { field: "x".into() },
         );
         let combos = crate::compose::expand_all(&spec).unwrap();
         let results = evaluate_all(
@@ -512,10 +512,10 @@ mod tests {
         let spec = make_spec(
             fields,
             vec![ConstraintSpec::Ge {
-                axis: 0,
+                field: "x".into(),
                 value: 5,
             }],
-            ProjectorSpec::Identity { axis: 0 },
+            ProjectorSpec::Identity { field: "x".into() },
         );
         let combos = crate::compose::expand_all(&spec).unwrap();
         let results = evaluate_all(
@@ -543,10 +543,10 @@ mod tests {
         let spec = make_spec(
             fields,
             vec![ConstraintSpec::Oneof {
-                axis: 0,
+                field: "x".into(),
                 values: vec![0, 2, 4],
             }],
-            ProjectorSpec::Identity { axis: 0 },
+            ProjectorSpec::Identity { field: "x".into() },
         );
         let combos = crate::compose::expand_all(&spec).unwrap();
         assert_eq!(combos.len(), 3);

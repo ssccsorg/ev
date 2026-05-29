@@ -225,16 +225,17 @@ fn check_ibex_alu_ext_fixture() {
         .arg("--json")
         .output()
         .expect("failed to run ev check on ibex_alu_ext fixture");
-    assert!(
-        output.status.success(),
-        "ibex_alu_ext fixture should pass: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    // neq constraint produces 64 failures, so exit code is non-zero.
     let stdout = String::from_utf8_lossy(&output.stdout);
-    // 8 * 8 * 8 = 512 total. neq removes (8*8 - 8*1) = 56, so 512-56 = 456 pass.
+    // 8 * 8 * 8 = 512 total. neq removes 64 (rs1 == rd), so 512 - 64 = 448 pass.
     assert!(
-        stdout.contains("\"passed\": 456"),
-        "ibex_alu_ext should report 456 passed: {}",
+        stdout.contains("\"passed\": 448"),
+        "ibex_alu_ext should report 448 passed: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("\"failed\": 64"),
+        "ibex_alu_ext should report 64 failed: {}",
         stdout
     );
 }
@@ -248,17 +249,18 @@ fn check_cva6_xif_mac_fixture() {
         .arg("--json")
         .output()
         .expect("failed to run ev check on cva6_xif_mac fixture");
-    assert!(
-        output.status.success(),
-        "cva6_xif_mac fixture should pass: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    // neq constraint produces 4096 failures, so exit code is non-zero.
     let stdout = String::from_utf8_lossy(&output.stdout);
-    // 2 * 8 * 8 * 256 = 32768 total. neq removes (64*256 - 8*256) = 14336.
-    // so 32768 - 14336 = 18432 pass.
+    // 2 * 8 * 8 * 256 = 32768 total. neq (rs1 != rs2) removes 8 * 2 * 256 = 4096.
+    // 32768 - 4096 = 28672 pass.
     assert!(
-        stdout.contains("\"passed\": 18432"),
-        "cva6_xif_mac should report 18432 passed: {}",
+        stdout.contains("\"passed\": 28672"),
+        "cva6_xif_mac should report 28672 passed: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("\"failed\": 4096"),
+        "cva6_xif_mac should report 4096 failed: {}",
         stdout
     );
 }
