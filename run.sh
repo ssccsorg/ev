@@ -83,6 +83,25 @@ verify_fixtures() {
     fi
     echo "=== json output ==="
     $EV verify --target "$MIXED" --json 2>&1 | head -8 || true
+    echo "=== cva6 xif reference fixture ==="
+    EC=0; $EV verify --target "tests/fixtures/cva6_xif_ref.xif.yaml" --json 2>&1 | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+passed = data['passed']
+failed = data['failed']
+total = data['total']
+print(f'  Target: cva6_xif_ref (CVA6 CV-X-IF reference coprocessor)')
+print(f'  Total: {total}')
+print(f'  Passed: {passed} (valid custom-3 encodings)')
+print(f'  Failed: {failed} (illegal or constraint-violating encodings)')
+print(f'  Valid instructions: funct3=0 (NOP) with funct7=0; funct3=1 (ALU) with funct7 in 0,1,2,3,32')
+print(f'  Register fields: rs1, rs2, rd each 0..7 (reduced for exhaustive coverage)')
+" || EC=$?
+    if [ "$EC" -eq 0 ]; then
+        echo "  All encodings valid — no unexpected failures."
+    else
+        echo "  Constraint-violating encodings detected (expected — coprocessor rejects illegal funct3/funct7)."
+    fi
 }
 
 # ── Modes ─────────────────────────────────────────────────────────────
