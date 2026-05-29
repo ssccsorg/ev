@@ -1,0 +1,5 @@
+target: bad_spec
+# missing fields section entirely
+constraints: []
+projector:
+  type: sum
