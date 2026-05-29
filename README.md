@@ -25,8 +25,8 @@ Or step-by-step:
 
 ```bash
 cargo build --release
-ev check --target tests/fixtures/all_pass.xif.yaml
-ev check --target tests/fixtures/sample.xif.yaml --json
+ev verify --target tests/fixtures/all_pass.xif.yaml
+ev verify --target tests/fixtures/sample.xif.yaml --json
 cargo test --release
 ```
 

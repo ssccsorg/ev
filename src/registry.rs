@@ -15,11 +15,16 @@ pub trait Check: std::fmt::Debug + Send + Sync {
 }
 
 /// Builds a boxed check from a specification.
-pub type ConstraintBuilder = fn(spec: &ConstraintSpec, axis_of: &HashMap<String, usize>) -> AnyCheck;
+pub type ConstraintBuilder =
+    fn(spec: &ConstraintSpec, axis_of: &HashMap<String, usize>) -> AnyCheck;
 
 /// Build an axis index from a field map.
 pub fn build_axis_index(fields: &BTreeMap<String, FieldSpec>) -> HashMap<String, usize> {
-    fields.keys().enumerate().map(|(i, k)| (k.clone(), i)).collect()
+    fields
+        .keys()
+        .enumerate()
+        .map(|(i, k)| (k.clone(), i))
+        .collect()
 }
 
 /// Type-erased check wrapper.
@@ -61,14 +66,25 @@ impl ConstraintRegistry {
         self.builders.insert(type_name.to_string(), builder);
     }
 
-    pub fn build(&self, spec: &ConstraintSpec, axis_of: &HashMap<String, usize>) -> Option<AnyCheck> {
+    pub fn build(
+        &self,
+        spec: &ConstraintSpec,
+        axis_of: &HashMap<String, usize>,
+    ) -> Option<AnyCheck> {
         let type_name = spec_type_name(spec);
         self.builders.get(type_name).map(|b| b(spec, axis_of))
     }
 
-    pub fn build_all(&self, specs: &[ConstraintSpec], fields: &BTreeMap<String, FieldSpec>) -> Vec<AnyCheck> {
+    pub fn build_all(
+        &self,
+        specs: &[ConstraintSpec],
+        fields: &BTreeMap<String, FieldSpec>,
+    ) -> Vec<AnyCheck> {
         let axis_of = build_axis_index(fields);
-        specs.iter().filter_map(|s| self.build(s, &axis_of)).collect()
+        specs
+            .iter()
+            .filter_map(|s| self.build(s, &axis_of))
+            .collect()
     }
 }
 
@@ -406,7 +422,8 @@ impl<E: Evaluator> ErasedEvaluator for E {
     }
 }
 
-pub type EvaluatorBuilder = fn(spec: &ProjectorSpec, axis_of: &HashMap<String, usize>) -> Box<dyn ErasedEvaluator>;
+pub type EvaluatorBuilder =
+    fn(spec: &ProjectorSpec, axis_of: &HashMap<String, usize>) -> Box<dyn ErasedEvaluator>;
 
 /// Registry of named evaluator types → builders.
 pub struct ProjectorRegistry {
@@ -424,12 +441,20 @@ impl ProjectorRegistry {
         self.builders.insert(type_name.to_string(), builder);
     }
 
-    pub fn build(&self, spec: &ProjectorSpec, axis_of: &HashMap<String, usize>) -> Option<Box<dyn ErasedEvaluator>> {
+    pub fn build(
+        &self,
+        spec: &ProjectorSpec,
+        axis_of: &HashMap<String, usize>,
+    ) -> Option<Box<dyn ErasedEvaluator>> {
         let type_name = spec_projector_name(spec);
         self.builders.get(type_name).map(|b| b(spec, axis_of))
     }
 
-    pub fn resolve(&self, spec: &ProjectorSpec, fields: &BTreeMap<String, FieldSpec>) -> Option<Box<dyn ErasedEvaluator>> {
+    pub fn resolve(
+        &self,
+        spec: &ProjectorSpec,
+        fields: &BTreeMap<String, FieldSpec>,
+    ) -> Option<Box<dyn ErasedEvaluator>> {
         let axis_of = build_axis_index(fields);
         self.build(spec, &axis_of)
     }

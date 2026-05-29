@@ -134,7 +134,11 @@ mod tests {
                 values: Some(vec![value]),
             },
         );
-        let spec = make_spec(fields, vec![], ProjectorSpec::Identity { field: "x".into() });
+        let spec = make_spec(
+            fields,
+            vec![],
+            ProjectorSpec::Identity { field: "x".into() },
+        );
         let combos = crate::compose::expand_all(&spec).expect("expand should succeed");
         (spec, combos)
     }
@@ -169,7 +173,11 @@ mod tests {
         );
         // expand_all will only produce values 0..=10, so we manually
         // construct a combination with an out-of-range value.
-        let spec = make_spec(fields, vec![], ProjectorSpec::Identity { field: "x".into() });
+        let spec = make_spec(
+            fields,
+            vec![],
+            ProjectorSpec::Identity { field: "x".into() },
+        );
         let coord = crate::compose::Coordinates::new(vec![20]);
         let point = crate::compose::Point::new(coord.clone());
         let combo = crate::compose::Combination {
@@ -288,14 +296,18 @@ mod tests {
         let spec = make_spec(
             fields,
             vec![
-                ConstraintSpec::Even { field: "coord".into() },
+                ConstraintSpec::Even {
+                    field: "coord".into(),
+                },
                 ConstraintSpec::Range {
                     field: "coord".into(),
                     min: 0,
                     max: 10,
                 },
             ],
-            ProjectorSpec::Identity { field: "coord".into() },
+            ProjectorSpec::Identity {
+                field: "coord".into(),
+            },
         );
         let combos = crate::compose::expand_all(&spec).unwrap();
         assert_eq!(combos.len(), 3, "3 field values");
