@@ -4,8 +4,7 @@ set -euo pipefail
 # ev — Single entry point
 #
 # Usage:
-#   ./run.sh              # Full pipeline: fix → code → verify → demo
-#   ./run.sh --ci         # CI mode: code → verify (no demo, no auto-fix)
+#   ./run.sh              # Full pipeline: fix → code → verify
 #   ./run.sh --code       # fmt → clippy → build → test (strict)
 #   ./run.sh --fix        # auto-fix → build → test
 #   ./run.sh --verify     # Yosys synthesis + fixtures (binary must exist)
@@ -17,8 +16,8 @@ cd "$(dirname "$0")"
 export RUSTFLAGS="-D warnings"
 EV_IMAGE="${EV_IMAGE:-ghcr.io/ssccsorg/ev:latest}"
 
-# Pre-process: auto-fmt for all build modes except --ci, --help, --demo.
-if [[ "${1:-}" != "--ci" && "${1:-}" != "--help" && "${1:-}" != "-h" && "${1:-}" != "--demo" ]]; then
+# Pre-process: auto-fmt for all build modes except --help and --demo.
+if [[ "${1:-}" != "--help" && "${1:-}" != "-h" && "${1:-}" != "--demo" ]]; then
     cargo fmt --all
     cargo clippy --fix --allow-dirty 2>&1 || true
     cargo fix --allow-dirty 2>&1 || true
@@ -89,17 +88,6 @@ verify_fixtures() {
 # ── Modes ─────────────────────────────────────────────────────────────
 
 case ${1:-} in
-    --ci)
-        echo "══════════════════════════════════════"
-        echo "  ev — CI pipeline"
-        echo "══════════════════════════════════════"
-        code_checks
-        verify_synth
-        verify_fixtures
-        echo ""
-        echo "  All CI checks passed."
-        echo "══════════════════════════════════════"
-        ;;
     --code)
         echo "══════════════════════════════════════"
         echo "  ev — code checks"
@@ -142,8 +130,7 @@ case ${1:-} in
         ;;
     --help|-h)
         echo "Usage: $0 [OPTION]"
-        echo "  (no arg)   Full pipeline: fix → code → verify → demo"
-        echo "  --ci       CI mode: code → verify"
+        echo "  (no arg)   Full pipeline: auto-fix → code → verify"
         echo "  --code     fmt → clippy → build → test (strict)"
         echo "  --fix      auto-fix → build → test"
         echo "  --verify   Yosys + fixtures (binary needed)"
@@ -151,22 +138,19 @@ case ${1:-} in
         exit 0
         ;;
     *)
-        # Full local pipeline
         echo "══════════════════════════════════════"
         echo "  ev — Full Pipeline"
         echo "══════════════════════════════════════"
-        echo "=== Phase 1: auto-fix ==="
+        echo "=== auto-fix ==="
         cargo fmt --all
         cargo clippy --fix --allow-dirty 2>&1 || true
         cargo fix --allow-dirty 2>&1 || true
         cargo fmt --all
-        echo "=== Phase 2: code checks ==="
+        echo "=== code checks ==="
         code_checks
-        echo "=== Phase 3: integration ==="
+        echo "=== integration ==="
         verify_synth
         verify_fixtures
-        echo "=== Phase 4: channel demo ==="
-        bash scripts/demo-ssccs-poc.sh
         echo ""
         echo "══════════════════════════════════════"
         echo "  All done."

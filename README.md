@@ -16,9 +16,9 @@ YAML → Domain Expansion → Field.build() → observe() → Report
 ## Quick Start
 
 ```bash
-./run.sh                  # Full CI pipeline (fmt → clippy → test → verify)
+./run.sh                  # Full pipeline: auto-fix → code → verify
 ./run.sh --demo           # Channel demo: cross-verify SSCCS POC golden anchors
-./run.sh --check          # fmt + check only
+./run.sh --code           # fmt → clippy → build → test (strict)
 ```
 
 Or step-by-step:
