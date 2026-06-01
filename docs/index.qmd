@@ -26,7 +26,7 @@ ev check --target tests/fixtures/sample.xif.yaml --json
 
 ## Architecture
 
-```
+```text
 src/
   main.rs         CLI (clap: check, certify)
   spec.rs         VerificationSpec — format-agnostic internal IR
@@ -68,7 +68,7 @@ projector: { type: sum }
 
 ev independently cross-verifies against hand-written RISC-V assembly from the [SSCCS PoC](https://github.com/ssccsorg/ssccs):
 
-```
+```text
 narrow:   even ∧ range_0_10  →  2,REJECT,REJECT,10,REJECT  ✓
 broad:    no constraints     →  2,3,5,10,12                ✓
 sum3d_a:  (2,1,0)            →  3                          ✓
@@ -82,7 +82,7 @@ Same constraints, same results -- two completely independent paths: handwritten 
 
 The SSCCS PoC that ev cross-verifies against implements the same constraint pipeline across three independent substrates:
 
-```
+```text
 RISC-V Assembly (.S)  ──┐
                          ├── Golden Anchors (19, auto-verified by Python)
 SystemVerilog (.sv)    ──┤
