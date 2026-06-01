@@ -3,8 +3,7 @@
 
 | Updated | Document |
 |----------|---------|
-| 2026-06-01 | Notes > [CVA6 XIF: ev Exhaustive vs riscv-dv Random — Cross-Validation](/notes/cross-validation-cva6.html) <sup style="background:#2c8;color:#fff;font-size:.65em;padding:0 .4em;border-radius:3px;">N</sup> |
-| 2026-06-01 | Notes > [CVA6 XIF Spec Space — ev Verification Fixture Design](/notes/cva6-xif-analysis.html) <sup style="background:#2c8;color:#fff;font-size:.65em;padding:0 .4em;border-radius:3px;">N</sup> |
+| 2026-06-01 | Notes > [Cva6 Xif Spec](/notes/cva6-xif-spec.html) <sup style="background:#2c8;color:#fff;font-size:.65em;padding:0 .4em;border-radius:3px;">N</sup> |
 | 2026-06-01 | [ev — ExaVerif](/index.html) |
 
 
