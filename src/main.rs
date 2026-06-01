@@ -171,19 +171,12 @@ fn main() -> anyhow::Result<()> {
         }
         Commands::Simulate { target, json } => {
             let result = run_sim(&target)?;
-            let reporter: Box<dyn ReporterCapable> = if json {
-                Box::new(JsonReporter)
-            } else {
-                Box::new(TextReporter)
-            };
-            // Use first evaluation's field values to determine count
             let n = result.evaluations.len();
             let passed = result.evaluations.iter().filter(|e| e.passed).count();
             let failed = n - passed;
             if json {
-                let field_order: Vec<String> = vec![];
-                let spec_hash = reporter::hash_evaluations(&result.evaluations);
-                reporter.report("simulation", &spec_hash, &field_order, &result.evaluations);
+                let fact: fih::Fact = (&result).into();
+                println!("{}", serde_json::to_string_pretty(&fact).unwrap());
             } else {
                 println!("target: simulation ({} backend)", result.tool);
                 println!("total:  {}", n);

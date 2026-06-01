@@ -113,6 +113,20 @@ pub trait CoverageCapable: RunSimulation {
 ///
 /// Behaviour: all encodings that passed static verification are reported
 /// as passed. No tool is invoked.
+impl From<&SimulationResult> for crate::fih::Fact {
+    fn from(r: &SimulationResult) -> Self {
+        let origin = format!("ev/simulation/{}", r.tool);
+        let payload = serde_json::json!({
+            "tool": r.tool,
+            "version": r.version,
+            "total": r.evaluations.len(),
+            "passed": r.evaluations.iter().filter(|e| e.passed).count(),
+            "failed": r.evaluations.iter().filter(|e| !e.passed).count(),
+        });
+        crate::fih::Fact::new("simulation_result", &origin, "simulation", payload)
+    }
+}
+
 pub struct MockSimBackend;
 
 impl RunSimulation for MockSimBackend {
