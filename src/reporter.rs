@@ -186,8 +186,22 @@ pub fn hash_spec(spec: &crate::spec::VerificationSpec) -> String {
     format!("{:x}", h.finalize())
 }
 
+/// Hash all evaluations into a single content ID for simulation results.
+pub fn hash_evaluations(evaluations: &[Evaluation]) -> String {
+    let mut h = Sha256::new();
+    for e in evaluations {
+        h.update(e.combination.values.len().to_le_bytes());
+        for v in &e.combination.values {
+            h.update(v.to_le_bytes());
+        }
+        h.update(if e.passed { b"1" } else { b"0" });
+        h.update(e.reason.as_bytes());
+    }
+    format!("{:x}", h.finalize())
+}
+
 /// Hash a single evaluation result. Tied to its parent spec via spec_hash.
-fn hash_evaluation(
+pub fn hash_evaluation(
     spec_hash: &str,
     values: &[i64],
     passed: bool,
