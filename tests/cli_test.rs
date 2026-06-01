@@ -261,13 +261,14 @@ fn verify_cva6_xif_ref_fixture() {
         .expect("failed to run ev verify on cva6_xif_ref fixture");
     let stdout = String::from_utf8_lossy(&output.stdout);
     // rs1/rs2/rd reduced to [0,7] to stay under MAX_COMBINATIONS.
-    // oneof: funct3 ∈ {0,1} + cross: funct3→funct7 mapping
-    // funct3=0→funct7=0: 1 × 8 × 8 × 8 = 512
-    // funct3=1→funct7∈{0,1,2,3,32}: 5 × 8 × 8 × 8 = 2,560
-    // Total valid: 3,072 pass
+    // Verification suite encoding:
+    // funct3=0→funct7∈{2,6,8}: 3 × 8 × 8 × 8 = 1,536
+    // funct3=1→funct7=0:       1 × 8 × 8 × 8 = 512
+    // funct3=2→funct7=96:      1 × 8 × 8 × 8 = 512
+    // Total valid: 2,560 pass
     assert!(
-        stdout.contains("\"passed\": 3072"),
-        "cva6_xif_ref should report 3072 passed: {}",
+        stdout.contains("\"passed\": 2560"),
+        "cva6_xif_ref should report 2560 passed: {}",
         stdout
     );
 }
