@@ -3,6 +3,17 @@
 //! Every output ev produces (verification results, synthesis reports) is
 //! wrapped in a Fact. This is the only interface between ev and any
 //! downstream colony.
+//!
+//! # Design
+//!
+//! The Fact struct uses `Vec<u8>` (blob) for its payload. No schema is
+//! embedded at this layer — consumers interpret the blob as they see fit
+//! (JSON, CBOR, protobuf, or raw binary). The `fact_type` field serves
+//! as a discriminator for consumer-side deserialization.
+//!
+//! Extension layers (e.g., Nexus ingestion) can attach schema hints via
+//! the `extra` field or through side-channel negotiation (content-type
+//! header, file extension, etc.).
 
 use serde::{Deserialize, Serialize};
 
@@ -15,8 +26,9 @@ pub struct Fact {
     pub origin: String,
     /// Target module or instruction identifier.
     pub target: String,
-    /// Type-specific payload — the actual data.
-    pub payload: serde_json::Value,
+    /// Opaque payload blob. Consumers interpret based on fact_type.
+    /// Common encodings: JSON, CBOR, msgpack, raw binary.
+    pub payload: Vec<u8>,
     /// ISO 8601 timestamp of observation.
     pub timestamp: String,
     /// Optional hash of the parent Fact that triggered this observation.
@@ -25,11 +37,13 @@ pub struct Fact {
 
 impl Fact {
     /// Create a Fact with the current UTC timestamp.
+    ///
+    /// `payload` is an opaque byte vector — no schema assumed.
     pub fn new(
         fact_type: impl Into<String>,
         origin: impl Into<String>,
         target: impl Into<String>,
-        payload: serde_json::Value,
+        payload: Vec<u8>,
     ) -> Self {
         let timestamp = chrono::Utc::now().to_rfc3339();
         Self {

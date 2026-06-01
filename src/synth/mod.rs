@@ -59,7 +59,12 @@ impl From<SynthesisMetrics> for crate::fih::Fact {
         if let Some(ref extra) = m.extra {
             payload["extra"] = extra.clone();
         }
-        crate::fih::Fact::new("synthesis_result", &origin, &m.module_name, payload)
+        crate::fih::Fact::new(
+            "synthesis_result",
+            &origin,
+            &m.module_name,
+            serde_json::to_vec(&payload).unwrap_or_default(),
+        )
     }
 }
 
@@ -707,10 +712,11 @@ mod tests {
         assert_eq!(fact.fact_type, "synthesis_result");
         assert_eq!(fact.origin, "ev/synthesis/yosys");
         assert_eq!(fact.target, "my_alu");
-        assert_eq!(fact.payload["tool"], "yosys");
-        assert_eq!(fact.payload["gate_count"], 142);
-        assert_eq!(fact.payload["extra"]["dot_path"], "/tmp/netlist.dot");
-        assert_eq!(fact.payload["status"], "ok");
+        let p: serde_json::Value = serde_json::from_slice(&fact.payload).unwrap();
+        assert_eq!(p["tool"], "yosys");
+        assert_eq!(p["gate_count"], 142);
+        assert_eq!(p["extra"]["dot_path"], "/tmp/netlist.dot");
+        assert_eq!(p["status"], "ok");
         assert!(!fact.timestamp.is_empty());
     }
 
@@ -730,9 +736,10 @@ mod tests {
         let fact: crate::fih::Fact = metrics.into();
 
         assert_eq!(fact.fact_type, "synthesis_result");
-        assert_eq!(fact.payload["status"], "error");
-        assert_eq!(fact.payload["message"], "yosys not found");
-        assert!(fact.payload["gate_count"].is_null());
+        let p: serde_json::Value = serde_json::from_slice(&fact.payload).unwrap();
+        assert_eq!(p["status"], "error");
+        assert_eq!(p["message"], "yosys not found");
+        assert!(p["gate_count"].is_null());
     }
 
     // ── MockSynthesisBackend ───────────────────────────────────────
