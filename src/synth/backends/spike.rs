@@ -246,20 +246,8 @@ fn generate_c_constraints(constraints: &[ConstraintSpec], field_names: &[&String
 /// Generate C expression for a single constraint type.
 fn generate_c_constraint_expr(
     constraint: &ConstraintSpec,
-    field_names: &[&String],
+    _field_names: &[&String],
 ) -> String {
-    // Helper: get field index macro name (e.g., "IDX_funct3").
-    // Panics if the field is not found — this indicates a spec error.
-    let _idx = |field: &str| -> String {
-        if field_names.iter().any(|n| n.as_str() == field) {
-            format!("IDX_{}", field)
-        } else {
-            // Field not found: this should not happen with valid specs.
-            // Generate a compile-time error by using an undefined macro.
-            format!("IDX_{}_NOT_FOUND", field)
-        }
-    };
-
     match constraint {
         ConstraintSpec::Range { field, min, max } => {
             format!(
