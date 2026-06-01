@@ -50,7 +50,7 @@ fixture because their offloadability depends on FP configuration state.
 
 ## Constraints
 
-```
+```text
 oneof:  funct3 in {0, 1, 2}
 cross:  funct3=0 -> funct7 in {2, 6, 8, 32}
         funct3=1 -> funct7 = 0
@@ -68,6 +68,7 @@ cross:  funct3=0 -> funct7 in {2, 6, 8, 32}
 | Spike cross-validation | 196,608 / 196,608 passed (100%) |
 
 Valid breakdown by funct3:
+
 - funct3=0: 4 x 32 x 32 x 32 = 131,072 (U_ADD, S_ADD, ADD_MULTI, ADD_RS3)
 - funct3=1: 1 x 32 x 32 x 32 = 32,768 (CUS_ADD)
 - funct3=2: 1 x 32 x 32 x 32 = 32,768 (CUS_EXC)
