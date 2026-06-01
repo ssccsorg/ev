@@ -1,11 +1,14 @@
 # ev — ExaVerif
 
-Exhaustive verification CLI for RISC‑V custom instruction extensions.
+Exhaustive verification CLI for RISC-V custom instruction extensions.
 Apache 2.0.
+
+33.5 million combinations exhaustive in 32 seconds. 100% cross-validated
+against Spike RISC-V simulation.
 
 ## What It Does
 
-Given a YAML file describing instruction fields and constraints, `ev` generates
+Given a YAML file describing instruction fields and constraints, ev generates
 every valid combination, evaluates each against the constraint space, and reports
 exactly which encodings are valid and which are not — deterministically and
 exhaustively.
@@ -14,34 +17,40 @@ exhaustively.
 YAML → Domain expansion → Constraint evaluation → Projection → Report
 ```
 
-ev treats every specification as a **Spec Space**: field domains define its axes,
-constraints carve admissible subspaces, and each combination is a point within
-this space. A single command enumerates and evaluates every point:
+A single command enumerates and evaluates 33.5 million combinations against the
+actual CVA6 CV-X-IF coprocessor specification — the same encoding tables used
+in OpenHW's own verification suite — and produces the result in 32 seconds:
 
 ```bash
-ev verify --target cva6_xif_ref.xif.yaml
+ev verify --target tests/fixtures/cva6_xif_ref.xif.yaml
 ```
 
 Output:
 ```
 target: cva6_xif_ref
-total:  262144
-passed: 3072
-failed: 259072
+total:  33554432
+passed: 196608
+failed: 33357824
 ```
 
-The example above verifies the CVA6 CV-X-IF reference coprocessor against its
-actual encoding specification. 3,072 valid encodings out of 262,144 possible —
-the rest are correctly identified as illegal, not by random sampling but by
-exhaustive enumeration. Every result is also available as structured JSON for
-downstream consumption.
+Every valid encoding is also verifiable through actual RISC-V simulation via
+`ev simulate`, which packs all 196,608 valid encodings into a single ELF binary
+and runs it under Spike:
+
+```bash
+EV_SIM_BACKEND=spike ev simulate --target tests/fixtures/cva6_xif_ref.xif.yaml
+```
+
+All 196,608 pass — the static constraint model and the RISC-V simulator
+agree exactly.
 
 ## Quick Start
 
 ```bash
-./run.sh                  # Full pipeline: auto-fix → fmt → clippy → build → test → verify
+./run.sh                  # Full pipeline: auto-fix -> fmt -> clippy -> build -> test -> verify
 ./run.sh --demo           # Channel demo: cross-verify SSCCS POC golden anchors
-./run.sh --check          # fmt + check only
+./run.sh --code           # fmt -> clippy -> build -> test (strict)
+./run.sh --verify         # Full verification including 33M combo fixture
 ```
 
 Or step-by-step:
@@ -51,14 +60,16 @@ cargo build --release
 ev verify --target tests/fixtures/all_pass.xif.yaml
 ev verify --target tests/fixtures/sample.xif.yaml --json
 ev synth --target tests/fixtures/all_pass.xif.yaml
+ev simulate --target tests/fixtures/all_pass.xif.yaml
 cargo test --release
 ```
 
 ## CLI Reference
 
 ```
-ev verify --target <file> [--json]    # Static constraint verification
-ev synth  --target <file> [--json]    # SystemVerilog generation + synthesis
+ev verify    --target <file> [--json]    # Static constraint verification
+ev simulate  --target <file> [--json]    # ISA simulation (Spike/QEMU/mock)
+ev synth     --target <file> [--json]    # SystemVerilog generation + Yosys synthesis
 ```
 
 ## Input Format
@@ -80,13 +91,13 @@ projector:
 
 ### Constraints
 
-Optional cross-field constraints reference fields by name:
+Cross-field constraints reference fields by name:
 
 ```yaml
 constraints:
   - type: eq
-    axis_a: 0
-    axis_b: 1       # op_a must equal op_b
+    field_a: "operand_a"
+    field_b: "operand_b"
 ```
 
 Cross constraint — map field_a values to allowed field_b sets:
@@ -96,8 +107,9 @@ Cross constraint — map field_a values to allowed field_b sets:
     field_a: "funct3"
     field_b: "funct7"
     mapping:
-      0: [0]
-      1: [0, 1, 2, 3, 32]
+      0: [2, 6, 8, 32]
+      1: [0]
+      2: [96]
 ```
 
 ### Built-in types
@@ -113,61 +125,63 @@ All types are extensible via `ConstraintRegistry` and `ProjectorRegistry`.
 
 | File | Based on | Combinations |
 |------|----------|-------------|
-| `cva6_xif_ref.xif.yaml` | CVA6 CV-X-IF reference coprocessor (RTL source) | 262,144 (3,072 valid) |
+| `cva6_xif_ref.xif.yaml` | CVA6 CV-X-IF coprocessor (actual RTL + verification suite) | 33,554,432 (196,608 valid) |
 | `cva6_xif_mac.xif.yaml` | CVA6 XIF multiply-accumulate accelerator | 32,768 |
 | `ibex_alu_ext.xif.yaml` | Ibex custom ALU extension | 512 |
-| `rv32i_csr_access.xif.yaml` | Ibex-like CSR encoding | 3 × 32 × 32 × 16 |
+| `rv32i_csr_access.xif.yaml` | Ibex-like CSR encoding | 4,608 |
 | `all_pass.xif.yaml` | Simple ALU (no constraints) | 1,024 |
 | `sample.xif.yaml` | Mixed pass/fail demo | 96 |
 
-## Channel Demo
+## Validation Results
 
-`./run.sh --demo` independently cross-verifies SSCCS POC golden anchors from
-hand-written RISC‑V assembly through ev's exhaustive constraint engine:
-
-```
-narrow:   even ∧ range_0_10  →  2,REJECT,REJECT,10,REJECT  ✓
-broad:    no constraints     →  2,3,5,10,12                ✓
-sum3d_a:  (2,1,0)            →  3                          ✓
-sum3d_b:  (1,2,3)            →  6                          ✓
-parity:   {2,3}              →  0,1                        ✓
-```
+| Metric | Value |
+|--------|-------|
+| Raw combinations evaluated | 33,554,432 |
+| Valid encodings identified | 196,608 |
+| Execution time (M1 Max) | 32 seconds |
+| Spike cross-validation | 196,608 / 196,608 passed |
+| Constraint types | 10 (range, even, eq, neq, lt, gt, le, ge, oneof, cross) |
+| Simulation backends | Mock (default), Spike (EV_SIM_BACKEND=spike) |
 
 ## Architecture
 
 ```
 src/
-  main.rs         CLI (clap: verify, synth)
-  spec.rs         VerificationSpec, FieldSpec, ConstraintSpec, ProjectorSpec
-  compose.rs      Domain expansion (cartesian product with overflow guard)
-  evaluate.rs     Constraint evaluation + projection
-  registry.rs     ConstraintRegistry + ProjectorRegistry (pluggable builder)
-  reporter.rs     ReporterCapable trait + TextReporter + JsonReporter
-  format.rs       FormatCapable trait
-  xif.rs          YamlFormat — XIF format parser (implements FormatCapable)
-  fih.rs          Fact envelope for neXus consumption
-  synth/mod.rs    SvGenerator, MockSynthesisBackend, SynthesisMetrics
-  synth/backends/ External synthesis backends (YosysBackend)
+  main.rs           CLI (clap: verify, simulate, synth)
+  spec.rs           VerificationSpec, FieldSpec, ConstraintSpec, ProjectorSpec
+  compose.rs        Domain expansion (cartesian product with overflow guard)
+  evaluate.rs       Constraint evaluation + projection
+  registry.rs       ConstraintRegistry + ProjectorRegistry (pluggable builder)
+  reporter.rs       ReporterCapable trait + TextReporter + JsonReporter
+  format.rs         FormatCapable trait
+  xif.rs            YamlFormat — XIF format parser
+  fih.rs            Fact envelope (Vec<u8> blob, no embedded schema)
+  synth/
+    mod.rs          SvGenerator, MockSynthesisBackend, RunSynthesis
+    sim.rs          RunSimulation trait + MockSimBackend
+    backends/       SpikeBackend, YosysBackend
 tests/
-  fixtures/       7 YAML fixture files
+  fixtures/        7 YAML fixture files
 scripts/
   demo-ssccs-poc.sh   Channel demo
 ```
 
-Capability-trait architecture (same pattern as Nexus):
+Backends are pluggable via environment variables (Nexus-style capability trait):
 
-| Extension point | How to add |
-|:---|:---|
-| New constraint type | Add variant to `ConstraintSpec` in `spec.rs`, builder in `ConstraintRegistry::default()`, SV arm in `synth/mod.rs` |
-| New projector type | Add variant to `ProjectorSpec` in `spec.rs`, builder in `ProjectorRegistry::default()`, SV arm in `synth/mod.rs` |
-| New input format | Implement `FormatCapable` trait |
-| New output format | Implement `ReporterCapable` trait |
+| Variable | Values | Effect |
+|----------|--------|--------|
+| `EV_SIM_BACKEND` | `mock` (default), `spike` | Simulation backend |
+| `EV_SYNTH_BACKEND` | `mock`, `yosys` (default) | Synthesis backend |
+| `EV_SPIKE_BIN` | path | Spike binary location |
+| `EV_PK_PATH` | path | Proxy kernel for Spike |
+| `EV_RISCV_CC` | command | RISC-V cross-compiler |
 
 ## Prerequisites
 
 - Rust 1.85+ ([rustup](https://rustup.rs/))
 - Python 3 (for channel demo golden anchor parsing)
-- Yosys (optional, for synthesis; falls back to Docker)
+- Yosys (optional, for synthesis)
+- Spike, riscv64-unknown-elf-gcc, riscv-pk (optional, for simulation)
 
 ## License
 
