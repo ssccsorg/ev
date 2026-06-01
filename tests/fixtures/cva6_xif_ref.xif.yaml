@@ -46,7 +46,7 @@ constraints:
     field_a: "funct3"
     field_b: "funct7"
     mapping:
-      0: [2, 6, 8]
+      0: [2, 6, 8, 32]
       1: [0]
       2: [96]
 projector:
