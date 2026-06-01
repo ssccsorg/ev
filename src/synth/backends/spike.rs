@@ -161,8 +161,6 @@ fn merge_results_with_indices(
 ///
 /// All fields are included in the encoding array. Constraint evaluation is
 /// generated from the spec's constraint list, not hardcoded.
-///
-/// Public for testing. Use `SpikeBackend::run()` in production.
 fn generate_c_source(
     field_names: &[&String],
     constraints: &[ConstraintSpec],
@@ -209,14 +207,14 @@ static void init(void) {{ setbuf(stdout, NULL); setbuf(stderr, NULL); }}
 
 {field_indexes}
 
-int64_t ENCODINGS[{nenc}][{nfields}] = {{
+static const int64_t ENCODINGS[{nenc}][{nfields}] = {{
 {data}
 }};
 
 const uint64_t NUM_ENCODINGS = {nenc};
 const uint64_t NUM_FIELDS = {nfields};
 
-static int check_encoding(int64_t enc[]) {{
+static int check_encoding(const int64_t enc[]) {{
 {constraint_code}
     return 1;
 }}
