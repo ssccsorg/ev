@@ -59,13 +59,16 @@ verify_synth() {
     echo "=== synthesis (text) ==="
     _yosys "$EV" synth --target "$ALL_PASS"
     echo "=== synthesis (json) ==="
-    local tmpf
-    tmpf=$(mktemp /tmp/synth_fact.XXXXXX.json)
+    local tmpf tmp_suffix
+    tmp_suffix=$(date +%s%N)
+    tmpf="/tmp/synth_fact_${tmp_suffix}.json"
     local tmpe
-    tmpe=$(mktemp /tmp/synth_stderr.XXXXXX.txt)
+    tmpe="/tmp/synth_stderr_${tmp_suffix}.txt"
     _yosys "$EV" synth --target "$ALL_PASS" --json > "$tmpf" 2>"$tmpe"
+    # Fact envelope must contain fact_type; status is inside payload
     grep -q '"fact_type": "synthesis_result"' "$tmpf" || { cat "$tmpe"; echo "FAILED: missing fact_type"; exit 1; }
-    grep -q '"status": "ok"' "$tmpf" || { cat "$tmpe"; echo "FAILED: synthesis status not ok"; exit 1; }
+    # Check that payload is non-empty and contains status='ok'
+    python3 -c "import json,sys; d=json.load(open('$tmpf')); p=json.loads(bytes(d['payload']).decode()); assert p['status']=='ok', f'status: {p[\"status\"]}'" || { cat "$tmpe"; echo "FAILED: synthesis status not ok"; exit 1; }
     echo "  ok"
     rm -f "$tmpf" "$tmpe"
 }
@@ -82,35 +85,26 @@ verify_fixtures() {
         exit 1
     fi
     echo "=== json output ==="
-    $EV verify --target "$MIXED" --json 2>&1 | head -8 || true
-    echo "=== cva6 xif reference fixture ==="
-    EC=0; $EV verify --target "tests/fixtures/cva6_xif_ref.xif.yaml" --json 2>&1 | python3 -c "
+    $EV verify --target "$MIXED" --json 2>&1 | python3 << 'EOF'
 import sys, json
 data = json.load(sys.stdin)
-passed = data['passed']
-failed = data['failed']
-total = data['total']
-print(f'  Target: cva6_xif_ref (CVA6 CV-X-IF reference coprocessor)')
-print(f'  Total: {total}')
-print(f'  Passed: {passed} (valid custom-3 encodings)')
-print(f'  Failed: {failed} (illegal or constraint-violating encodings)')
-print(f'  Valid instructions: funct3=0 with funct7 in 2,6,8,32; funct3=1 with funct7=0; funct3=2 with funct7=96')
-print(f'  Register fields: rs1, rs2, rd full 0..31 range')
-" || EC=$?
-    if [ "$EC" -eq 0 ]; then
-        echo "  All encodings valid — no unexpected failures."
-    else
-        echo "  Constraint-violating encodings detected (expected — coprocessor rejects illegal funct3/funct7)."
-    fi
+p = json.loads(bytes(data["payload"]).decode())
+print(f"  Total: {p['total']}, Passed: {p['passed']}, Failed: {p['failed']}")
+EOF
+    || true
+    echo "=== cva6 xif reference fixture (33M combos) ==="
+    echo "  Skipped in default mode. Run 'bash run.sh --verify' to include."
     echo "=== simulate help ==="
     $EV simulate --help 2>&1 | head -3
     echo "=== spike simulation (mock) ==="
-    $EV simulate --target "$ALL_PASS" --json 2>&1 | python3 -c "
+    $EV simulate --target "$ALL_PASS" --json 2>&1 | python3 << 'EOF'
 import sys, json
 data = json.load(sys.stdin)
-print(f'  tool: {data[\"origin\"]}')
-print(f'  total: {data[\"payload\"][\"total\"]}, passed: {data[\"payload\"][\"passed\"]}')
-" || echo "  spike backend not available — check EV_SIM_BACKEND"
+print(f"  backend: {data['origin']}")
+p = json.loads(bytes(data["payload"]).decode())
+print(f"  total: {p['total']}, passed: {p['passed']}")
+EOF
+    || echo "  spike backend not available — check EV_SIM_BACKEND"
 }
 
 # ── Modes ─────────────────────────────────────────────────────────────
@@ -149,6 +143,20 @@ case ${1:-} in
         echo "══════════════════════════════════════"
         verify_synth
         verify_fixtures
+        echo "=== cva6 xif reference fixture (33M combos) ==="
+        EC=0; $EV verify --target "tests/fixtures/cva6_xif_ref.xif.yaml" --json 2>&1 | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+p = json.loads(bytes(data['payload']).decode())
+print(f'  Total: {p[\"total\"]}')
+print(f'  Passed: {p[\"passed\"]} (valid custom-3 encodings)')
+print(f'  Failed: {p[\"failed\"]} (illegal or constraint-violating encodings)')
+" || EC=$?
+        if [ "$EC" -eq 0 ]; then
+            echo "  All encodings valid — no unexpected failures."
+        else
+            echo "  Constraint-violating encodings detected (expected — coprocessor rejects illegal funct3/funct7)."
+        fi
         echo ""
         echo "  Verification passed."
         echo "══════════════════════════════════════"
