@@ -123,7 +123,7 @@ impl ReporterCapable for JsonReporter {
         let spec_hash = spec_hash.to_string();
 
         let report = VerificationReport {
-            origin,
+            origin: origin.clone(),
             target: target.to_string(),
             timestamp,
             spec_hash: spec_hash.clone(),
@@ -155,7 +155,13 @@ impl ReporterCapable for JsonReporter {
                 .collect(),
         };
 
-        let json = serde_json::to_string_pretty(&report).unwrap_or_else(|_| "{}".to_string());
+        let fact = crate::fih::Fact::new(
+            "verification_result",
+            &origin,
+            target,
+            serde_json::to_value(&report).unwrap_or_default(),
+        );
+        let json = serde_json::to_string_pretty(&fact).unwrap_or_else(|_| "{}".to_string());
         println!("{}", json);
 
         failed_count == 0
@@ -187,6 +193,7 @@ pub fn hash_spec(spec: &crate::spec::VerificationSpec) -> String {
 }
 
 /// Hash all evaluations into a single content ID for simulation results.
+#[allow(dead_code)]
 pub fn hash_evaluations(evaluations: &[Evaluation]) -> String {
     let mut h = Sha256::new();
     for e in evaluations {
