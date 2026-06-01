@@ -94,8 +94,8 @@ print(f'  Target: cva6_xif_ref (CVA6 CV-X-IF reference coprocessor)')
 print(f'  Total: {total}')
 print(f'  Passed: {passed} (valid custom-3 encodings)')
 print(f'  Failed: {failed} (illegal or constraint-violating encodings)')
-print(f'  Valid instructions: funct3=0 (NOP) with funct7=0; funct3=1 (ALU) with funct7 in 0,1,2,3,32')
-print(f'  Register fields: rs1, rs2, rd each 0..7 (reduced for exhaustive coverage)')
+print(f'  Valid instructions: funct3=0 with funct7 in 2,6,8,32; funct3=1 with funct7=0; funct3=2 with funct7=96')
+print(f'  Register fields: rs1, rs2, rd full 0..31 range')
 " || EC=$?
     if [ "$EC" -eq 0 ]; then
         echo "  All encodings valid — no unexpected failures."
@@ -104,6 +104,13 @@ print(f'  Register fields: rs1, rs2, rd each 0..7 (reduced for exhaustive covera
     fi
     echo "=== simulate help ==="
     $EV simulate --help 2>&1 | head -3
+    echo "=== spike simulation (mock) ==="
+    $EV simulate --target "$ALL_PASS" --json 2>&1 | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+print(f'  tool: {data[\"origin\"]}')
+print(f'  total: {data[\"payload\"][\"total\"]}, passed: {data[\"payload\"][\"passed\"]}')
+" || echo "  spike backend not available — check EV_SIM_BACKEND"
 }
 
 # ── Modes ─────────────────────────────────────────────────────────────
