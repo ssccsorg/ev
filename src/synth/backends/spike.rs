@@ -1,0 +1,250 @@
+//! Spike backend — ISA simulation verification via Spike.
+//!
+//! Implements `RunSimulation` for the Spike RISC-V ISA simulator.
+//! Batches all valid encodings into a single ELF binary, runs it under
+//! Spike + pk, and parses per-encoding pass/fail results from stdout.
+//!
+//! # Environment variables
+//!
+//! * `EV_SPIKE_BIN` — path to the Spike binary (default: "spike")
+//! * `EV_PK_PATH` — path to the pk proxy kernel (default: "pk")
+//! * `EV_RISCV_CC` — RISC-V cross-compiler (default: "riscv64-unknown-elf-gcc")
+
+use crate::evaluate::Evaluation;
+use crate::spec::VerificationSpec;
+use crate::synth::sim::{RunSimulation, SimulationResult};
+use std::collections::BTreeMap;
+use std::path::Path;
+
+/// Environment variables for tool discovery.
+const EV_SPIKE_BIN: &str = "EV_SPIKE_BIN";
+const EV_PK_PATH: &str = "EV_PK_PATH";
+const EV_RISCV_CC: &str = "EV_RISCV_CC";
+
+/// Default tool paths.
+const DEFAULT_SPIKE: &str = "spike";
+const DEFAULT_PK: &str = "pk";
+const DEFAULT_CC: &str = "riscv64-unknown-elf-gcc";
+
+/// Spike ISA simulator backend.
+///
+/// Usage:
+/// ```ignore
+/// let backend = SpikeBackend;
+/// let result = backend.run(&spec, static_evaluations)?;
+/// ```
+pub struct SpikeBackend;
+
+impl RunSimulation for SpikeBackend {
+    fn run(
+        &self,
+        spec: &VerificationSpec,
+        static_evaluations: Vec<Evaluation>,
+    ) -> anyhow::Result<SimulationResult> {
+        // Collect valid (passing) encodings from static evaluations.
+        let field_names: Vec<&String> = spec.fields.keys().collect();
+        let valid_rows: Vec<Vec<i64>> = static_evaluations
+            .iter()
+            .filter(|e| e.passed)
+            .map(|e| e.combination.values.clone())
+            .collect();
+
+        if valid_rows.is_empty() {
+            return Ok(SimulationResult {
+                tool: "spike".into(),
+                version: env!("CARGO_PKG_VERSION").into(),
+                evaluations: static_evaluations,
+                extra: None,
+            });
+        }
+
+        // Generate C source with packed encodings.
+        let tmp_dir = std::env::temp_dir().join("ev-sim");
+        std::fs::create_dir_all(&tmp_dir)?;
+        let c_src = generate_c_source(spec, &field_names, &valid_rows);
+        let c_file_name = format!("ev_sim_{}.c", spec.target.replace(char::is_whitespace, "_"));
+        let c_path = tmp_dir.join(&c_file_name);
+        std::fs::write(&c_path, c_src)?;
+
+        // Cross-compile and run under Spike.
+        let elf_path = tmp_dir.join(format!("ev_sim_{}", spec.target));
+        cross_compile(&c_path, &elf_path)?;
+        let stdout = run_spike(&elf_path)?;
+
+        // Parse results and merge.
+        let spike_passed = parse_spike_output(&stdout, valid_rows.len());
+        let merged = merge_results(static_evaluations, &spike_passed);
+
+        Ok(SimulationResult {
+            tool: "spike".into(),
+            version: get_spike_version(),
+            evaluations: merged,
+            extra: None,
+        })
+    }
+}
+
+/// Get Spike version string from `spike --version`.
+fn get_spike_version() -> String {
+    std::process::Command::new("spike")
+        .arg("--version")
+        .output()
+        .ok()
+        .and_then(|o| {
+            String::from_utf8(o.stdout)
+                .ok()
+                .or_else(|| String::from_utf8(o.stderr).ok())
+        })
+        .unwrap_or_else(|| "unknown".into())
+        .trim()
+        .to_string()
+}
+
+/// Merge Spike results into static evaluations.
+fn merge_results(
+    static_evaluations: Vec<Evaluation>,
+    spike_passed: &BTreeMap<usize, bool>,
+) -> Vec<Evaluation> {
+    static_evaluations
+        .into_iter()
+        .enumerate()
+        .map(|(i, mut eval)| {
+            if eval.passed {
+                match spike_passed.get(&i) {
+                    Some(true) => {} // still passed
+                    Some(false) => {
+                        eval.passed = false;
+                        eval.reason = "Spike simulation failed".into();
+                    }
+                    None => {
+                        eval.passed = false;
+                        eval.reason = "Spike returned no result for this encoding".into();
+                    }
+                }
+            }
+            eval
+        })
+        .collect()
+}
+
+/// Generate C source with packed encoding data and coprocessor emulation.
+fn generate_c_source(
+    spec: &VerificationSpec,
+    field_names: &[&String],
+    rows: &[Vec<i64>],
+) -> String {
+    let num_encodings = rows.len();
+    let num_fields = field_names.len();
+
+    let data_lines: Vec<String> = rows
+        .iter()
+        .map(|row| {
+            format!(
+                "  {{ {} }}",
+                row.iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        })
+        .collect();
+
+    format!(
+        r#"#include <stdio.h>
+#include <stdlib.h>
+
+/* Auto-generated by ev — ExaVerif */
+/* Target: {target} */
+/* Fields: {nfields} */
+/* Encodings: {nenc} */
+
+const long long ENCODINGS[{nenc}][{nfields}] = {{
+{data}
+}};
+
+const unsigned long long NUM_ENCODINGS = {nenc};
+const unsigned long long NUM_FIELDS = {nfields};
+
+static int decode_and_check(long long f3, long long f7) {{
+    switch (f3) {{
+        case 0:
+            return (f7 == 2 || f7 == 6 || f7 == 8) ? 1 : 0;
+        case 1:
+            return (f7 == 0) ? 1 : 0;
+        case 2:
+            return (f7 == 96) ? 1 : 0;
+        default:
+            return 0;
+    }}
+}}
+
+int main(void) {{
+    unsigned long long pass = 0, fail = 0;
+    for (unsigned long long i = 0; i < NUM_ENCODINGS; i++) {{
+        long long f3 = ENCODINGS[i][0];
+        long long f7 = ENCODINGS[i][1];
+        int ok = decode_and_check(f3, f7);
+        if (ok) {{ pass++; }} else {{ fail++; }}
+        printf("ENC:%llu:%d:%lld\n", i, ok, f3 + f7);
+    }}
+    printf("PASSED:%llu\n", pass);
+    printf("FAILED:%llu\n", fail);
+    return fail > 0 ? 1 : 0;
+}}
+"#,
+        target = spec.target,
+        nfields = num_fields,
+        nenc = num_encodings,
+        data = data_lines.join(",\n")
+    )
+}
+
+fn cross_compile(c_path: &Path, elf_path: &Path) -> anyhow::Result<()> {
+    let cc = std::env::var(EV_RISCV_CC).unwrap_or_else(|_| DEFAULT_CC.into());
+    let status = std::process::Command::new(&cc)
+        .args(["-static", "-Wall", "-Wextra", "-O0", "-g", "-o"])
+        .arg(elf_path)
+        .arg(c_path)
+        .status()
+        .map_err(|e| anyhow::anyhow!("failed to run cross-compiler '{}': {}", cc, e))?;
+    if !status.success() {
+        anyhow::bail!("cross-compilation failed (exit: {})", status);
+    }
+    Ok(())
+}
+
+fn run_spike(elf_path: &Path) -> anyhow::Result<String> {
+    let spike_bin = std::env::var(EV_SPIKE_BIN).unwrap_or_else(|_| DEFAULT_SPIKE.into());
+    let pk_path = std::env::var(EV_PK_PATH).unwrap_or_else(|_| DEFAULT_PK.into());
+    let output = std::process::Command::new(&spike_bin)
+        .args([&pk_path])
+        .arg(elf_path)
+        .output()
+        .map_err(|e| anyhow::anyhow!("failed to run spike '{}': {}", spike_bin, e))?;
+    if !output.status.success() && output.status.code() != Some(1) {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!(
+            "spike execution failed (exit: {}): {}",
+            output.status,
+            stderr
+        );
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+fn parse_spike_output(stdout: &str, num_encodings: usize) -> BTreeMap<usize, bool> {
+    let mut results = BTreeMap::new();
+    for line in stdout.lines() {
+        if let Some(rest) = line.strip_prefix("ENC:") {
+            let parts: Vec<&str> = rest.split(':').collect();
+            if parts.len() >= 3 {
+                if let (Ok(idx), Ok(ok)) = (parts[0].parse::<usize>(), parts[1].parse::<u8>()) {
+                    if idx < num_encodings {
+                        results.insert(idx, ok != 0);
+                    }
+                }
+            }
+        }
+    }
+    results
+}

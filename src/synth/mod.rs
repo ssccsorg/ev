@@ -9,12 +9,16 @@
 //! synth::SynthesisMetrics   ← data shared by all backends
 //! synth::GenerateRtl        ← spec → RTL file (tool-agnostic)
 //! synth::RunSynthesis       ← RTL file → metrics (tool-agnostic trait)
+//! synth::RunSimulation      ← spec + encodings → evaluations (tool-agnostic trait)
 //! synth::SvGenerator        ← default GenerateRtl impl
-//! synth::MockSynthesisBackend ← test/CI backend (no external tool)
-//! synth::backends::yosys    ← YosysBackend (only backend with external dependency)
+//! synth::MockSynthesisBackend ← test/CI synthesis backend
+//! synth::MockSimBackend     ← test/CI simulation backend
+//! synth::backends::spike    ← SpikeBackend (implements RunSimulation)
+//! synth::backends::yosys    ← YosysBackend (implements RunSynthesis)
 //! ```
 
 pub mod backends;
+pub mod sim;
 
 use crate::spec::VerificationSpec;
 use serde::{Deserialize, Serialize};

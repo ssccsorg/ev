@@ -14,6 +14,7 @@ use registry::ProjectorRegistry;
 use reporter::{JsonReporter, ReporterCapable, TextReporter};
 use std::path::PathBuf;
 use synth::backends::yosys::YosysBackend;
+use synth::sim::{MockSimBackend, RunSimulation, SimulationResult};
 use synth::{GenerateRtl, MockSynthesisBackend, RunSynthesis, SvGenerator};
 
 #[derive(Parser)]
@@ -50,6 +51,24 @@ enum Commands {
         #[arg(long)]
         json: bool,
     },
+
+    /// ISA simulation verification via Spike
+    Simulate {
+        /// Path to the YAML constraint file
+        #[arg(short, long)]
+        target: PathBuf,
+
+        /// Output results as JSON instead of text
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+fn resolve_sim_backend() -> Box<dyn RunSimulation> {
+    match std::env::var("EV_SIM_BACKEND").unwrap_or_default().as_str() {
+        "spike" => Box::new(synth::backends::spike::SpikeBackend),
+        _ => Box::new(MockSimBackend),
+    }
 }
 
 fn resolve_synth_backend() -> Box<dyn RunSynthesis> {
@@ -83,6 +102,24 @@ fn print_synthesis_report(report: &synth::SynthesisMetrics, json: bool) {
             }
         }
     }
+}
+
+fn run_sim(target: &std::path::Path) -> anyhow::Result<SimulationResult> {
+    use compose::expand_all;
+    use evaluate::evaluate_all;
+    let spec = spec::VerificationSpec::from_yaml(target)?;
+    let constraint_registry = ConstraintRegistry::default();
+    let projector_registry = ProjectorRegistry::default();
+    let combinations =
+        expand_all(&spec).map_err(|e| anyhow::anyhow!("domain expansion failed: {}", e))?;
+    let evaluations = evaluate_all(
+        &spec,
+        combinations,
+        &constraint_registry,
+        &projector_registry,
+    );
+    let backend = resolve_sim_backend();
+    backend.run(&spec, evaluations)
 }
 
 fn run_synth(target: &std::path::Path) -> anyhow::Result<synth::SynthesisMetrics> {
@@ -130,6 +167,31 @@ fn main() -> anyhow::Result<()> {
             print_synthesis_report(&report, json);
             if !report.status.eq_ignore_ascii_case("ok") {
                 anyhow::bail!("synthesis failed: {}", report.message.unwrap_or_default());
+            }
+        }
+        Commands::Simulate { target, json } => {
+            let result = run_sim(&target)?;
+            let reporter: Box<dyn ReporterCapable> = if json {
+                Box::new(JsonReporter)
+            } else {
+                Box::new(TextReporter)
+            };
+            // Use first evaluation's field values to determine count
+            let n = result.evaluations.len();
+            let passed = result.evaluations.iter().filter(|e| e.passed).count();
+            let failed = n - passed;
+            if json {
+                let field_order: Vec<String> = vec![];
+                let spec_hash = reporter::hash_evaluations(&result.evaluations);
+                reporter.report("simulation", &spec_hash, &field_order, &result.evaluations);
+            } else {
+                println!("target: simulation ({} backend)", result.tool);
+                println!("total:  {}", n);
+                println!("passed: {}", passed);
+                println!("failed: {}", failed);
+            }
+            if failed > 0 {
+                std::process::exit(1);
             }
         }
     }

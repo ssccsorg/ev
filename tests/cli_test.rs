@@ -274,6 +274,18 @@ fn verify_cva6_xif_ref_fixture() {
 }
 
 #[test]
+fn simulate_help_succeeds() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("simulate")
+        .arg("--help")
+        .output()
+        .expect("failed to run ev simulate --help");
+    assert!(output.status.success(), "ev simulate --help should exit 0");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("--target"), "help should mention --target");
+}
+
+#[test]
 fn synth_help_succeeds() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("synth")

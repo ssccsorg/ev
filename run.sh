@@ -102,6 +102,8 @@ print(f'  Register fields: rs1, rs2, rd each 0..7 (reduced for exhaustive covera
     else
         echo "  Constraint-violating encodings detected (expected — coprocessor rejects illegal funct3/funct7)."
     fi
+    echo "=== simulate help ==="
+    $EV simulate --help 2>&1 | head -3
 }
 
 # ── Modes ─────────────────────────────────────────────────────────────
