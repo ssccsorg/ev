@@ -159,8 +159,9 @@ impl ReporterCapable for JsonReporter {
             "verification_result",
             &origin,
             target,
-            serde_json::to_value(&report).unwrap_or_default(),
+            serde_json::to_vec(&report).unwrap_or_default(),
         );
+        // CLI output: emit the full Fact envelope for machine consumption.
         let json = serde_json::to_string_pretty(&fact).unwrap_or_else(|_| "{}".to_string());
         println!("{}", json);
 

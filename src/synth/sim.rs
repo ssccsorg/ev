@@ -123,7 +123,12 @@ impl From<&SimulationResult> for crate::fih::Fact {
             "passed": r.evaluations.iter().filter(|e| e.passed).count(),
             "failed": r.evaluations.iter().filter(|e| !e.passed).count(),
         });
-        crate::fih::Fact::new("simulation_result", &origin, "simulation", payload)
+        crate::fih::Fact::new(
+            "simulation_result",
+            &origin,
+            "simulation",
+            serde_json::to_vec(&payload).unwrap_or_default(),
+        )
     }
 }
 
