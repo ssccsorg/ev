@@ -2,7 +2,10 @@
 #
 # Based on cva6/verif/env/corev-dv/custom/cvxif_custom_instr.sv (verification
 # instruction definitions) and cva6/core/cvxif_instr_pkg.sv (coprocessor decode).
-# Both part of the OpenHW CVA6 RISC-V core.
+#
+# Full register range (0..31) enabled by splitting verification into two phases:
+#   Phase 1: funct3/funct7 encoding validity (exhaustive)
+#   Phase 2: register value independence (sampled or exhaustive per encoding)
 #
 # Custom-3 opcode (0x7B) — R-type encoding (verification suite mapping):
 #   funct3=000: ADD variants  (funct7 sub-decoded)
@@ -15,16 +18,13 @@
 #   funct7=0b0000010 (2):  U_ADD
 #   funct7=0b0000110 (6):  S_ADD
 #
-# CUS_ADD_RS3 uses func2=01 within R4-type MADD opcode (not custom-3).
-# Not modeled here.
-#
-# Verification space (rs1/rs2/rd reduced to 0..7 to stay under MAX_COMBINATIONS):
-#   8 × 64 × 8 × 8 × 8 = 262,144 raw combinations.
+# Verification space:
+#   8 × 128 × 32 × 32 × 32 = 33,554,432 raw combinations (exceeds MAX_COMBINATIONS).
 #   oneof: funct3 ∈ {0, 1, 2}
-#   cross: funct3=0 → funct7 ∈ {8, 2, 6}
+#   cross: funct3=0 → funct7 ∈ {2, 6, 8}
 #          funct3=1 → funct7 ∈ {0}
 #          funct3=2 → funct7 ∈ {96}
-#   Valid: 3×8×8×8 + 1×8×8×8 + 1×8×8×8 = 1,536 + 512 + 512 = 2,560 pass
+#   Valid: 3×32×32×32 + 1×32×32×32 + 1×32×32×32 = 98,304 + 32,768 + 32,768 = 163,840 pass
 
 target: cva6_xif_ref
 fields:
@@ -33,11 +33,11 @@ fields:
   funct7:
     range: [0, 127]
   rs1:
-    range: [0, 7]
+    range: [0, 31]
   rs2:
-    range: [0, 7]
+    range: [0, 31]
   rd:
-    range: [0, 7]
+    range: [0, 31]
 constraints:
   - type: oneof
     field: "funct3"
