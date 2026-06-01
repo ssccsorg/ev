@@ -17,6 +17,7 @@
 #   funct7=0b0001000 (8):  ADD_MULTI
 #   funct7=0b0000010 (2):  U_ADD
 #   funct7=0b0000110 (6):  S_ADD
+#   funct7=0b0100000 (32): ADD_RS3 (uses func2=01)
 #
 # Verification space:
 #   8 × 128 × 32 × 32 × 32 = 33,554,432 raw combinations (exceeds MAX_COMBINATIONS).
