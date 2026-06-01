@@ -205,37 +205,37 @@ fn sv_constraint_assertion(
     match constraint {
         crate::spec::ConstraintSpec::Range { field, min, max } => {
             format!(
-                "assert property ({} >= {} && {} <= {}); // range\n",
+                "// synthesis translate_off\n  if (!({} >= {} && {} <= {})) $error(\"range\");\n  // synthesis translate_on\n",
                 field, min, field, max
             )
         }
         crate::spec::ConstraintSpec::Even { field } => {
-            format!("assert property ({}[0] == 1'b0); // even\n", field)
+            format!("// synthesis translate_off\n  if ({}[0]) $error(\"even\");\n  // synthesis translate_on\n", field)
         }
         crate::spec::ConstraintSpec::Eq { field_a, field_b } => {
-            format!("assert property ({} == {}); // eq\n", field_a, field_b)
+            format!("// synthesis translate_off\n  if ({} != {}) $error(\"eq\");\n  // synthesis translate_on\n", field_a, field_b)
         }
         crate::spec::ConstraintSpec::Neq { field_a, field_b } => {
-            format!("assert property ({} != {}); // neq\n", field_a, field_b)
+            format!("// synthesis translate_off\n  if ({} == {}) $error(\"neq\");\n  // synthesis translate_on\n", field_a, field_b)
         }
         crate::spec::ConstraintSpec::Lt { field, value } => {
-            format!("assert property ({} < {}); // lt\n", field, value)
+            format!("// synthesis translate_off\n  if ({} >= {}) $error(\"lt\");\n  // synthesis translate_on\n", field, value)
         }
         crate::spec::ConstraintSpec::Gt { field, value } => {
-            format!("assert property ({} > {}); // gt\n", field, value)
+            format!("// synthesis translate_off\n  if ({} <= {}) $error(\"gt\");\n  // synthesis translate_on\n", field, value)
         }
         crate::spec::ConstraintSpec::Le { field, value } => {
-            format!("assert property ({} <= {}); // le\n", field, value)
+            format!("// synthesis translate_off\n  if ({} > {}) $error(\"le\");\n  // synthesis translate_on\n", field, value)
         }
         crate::spec::ConstraintSpec::Ge { field, value } => {
-            format!("assert property ({} >= {}); // ge\n", field, value)
+            format!("// synthesis translate_off\n  if ({} < {}) $error(\"ge\");\n  // synthesis translate_on\n", field, value)
         }
         crate::spec::ConstraintSpec::Oneof { field, values } => {
             let or_exprs: Vec<String> = values
                 .iter()
                 .map(|v| format!("{} == {}", field, v))
                 .collect();
-            format!("assert property ({}); // oneof\n", or_exprs.join(" || "))
+            format!("// synthesis translate_off\n  if (!({})) $error(\"oneof\");\n  // synthesis translate_on\n", or_exprs.join(" || "))
         }
         crate::spec::ConstraintSpec::Cross {
             field_a,
@@ -247,18 +247,18 @@ fn sv_constraint_assertion(
             let assertions: Vec<String> = mapping
                 .iter()
                 .map(|(va, vbs)| {
-                    let set = vbs
+                    let or_checks: String = vbs
                         .iter()
-                        .map(|v| v.to_string())
+                        .map(|vb| format!("{} == {}", name_b, vb))
                         .collect::<Vec<_>>()
-                        .join(", ");
+                        .join(" || ");
                     format!(
-                        "assert property (({} == {}) -> ({} inside {{{}}})); // cross\n",
-                        name_a, va, name_b, set
+                        "// synthesis translate_off\n  if (!(({} == {}) -> ({}))) $error(\"cross\");\n  // synthesis translate_on\n",
+                        name_a, va, or_checks
                     )
                 })
                 .collect();
-            assertions.join("\n  ")
+            assertions.join("\n")
         }
     }
 }
@@ -487,7 +487,7 @@ mod tests {
             },
             &refs,
         );
-        assert!(s.contains("assert property"));
+        assert!(s.contains("$error"));
         assert!(s.contains("a >= 0"));
         assert!(s.contains("a <= 15"));
     }
@@ -497,8 +497,9 @@ mod tests {
         let n = names(&["x"]);
         let refs = name_refs(&n);
         let s = sv_constraint_assertion(&ConstraintSpec::Even { field: "x".into() }, &refs);
-        assert!(s.contains("assert property"));
-        assert!(s.contains("x[0] == 1'b0"));
+        assert!(s.contains("$error"));
+        assert!(s.contains("x[0]"));
+        assert!(s.contains("$error(\"even\")"));
     }
 
     #[test]
@@ -512,8 +513,8 @@ mod tests {
             },
             &refs,
         );
-        assert!(s.contains("assert property"));
-        assert!(s.contains("a == b"));
+        assert!(s.contains("$error"));
+        assert!(s.contains("a != b"));
     }
 
     // ── New constraint SV assertions ──────────────────────────────
@@ -529,8 +530,8 @@ mod tests {
             },
             &refs,
         );
-        assert!(s.contains("assert property"));
-        assert!(s.contains("a != b"));
+        assert!(s.contains("$error"));
+        assert!(s.contains("a == b"));
     }
 
     #[test]
@@ -544,8 +545,8 @@ mod tests {
             },
             &refs,
         );
-        assert!(s.contains("assert property"));
-        assert!(s.contains("x > 100"));
+        assert!(s.contains("$error"));
+        assert!(s.contains("x <= 100"));
     }
 
     #[test]
@@ -559,7 +560,7 @@ mod tests {
             },
             &refs,
         );
-        assert!(s.contains("assert property"));
+        assert!(s.contains("$error"));
         assert!(s.contains("op == 0"));
         assert!(s.contains("op == 2"));
         assert!(s.contains("op == 4"));
@@ -620,7 +621,8 @@ mod tests {
         let content = std::fs::read_to_string(&sv_path).unwrap();
 
         assert!(content.contains("assign result = a + b;"));
-        assert!(content.contains("assert property (a == b);"));
+        assert!(content.contains("$error(\"eq\")"));
+        assert!(content.contains("a != b"));
     }
 
     #[test]

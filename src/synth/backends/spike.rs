@@ -68,8 +68,7 @@ impl RunSimulation for SpikeBackend {
         let tmp_dir = std::env::temp_dir().join("ev-sim");
         std::fs::create_dir_all(&tmp_dir)?;
         let c_src = generate_c_source(&field_names, &spec.constraints, &valid_rows);
-        let c_file_name =
-            format!("ev_sim_{}.c", spec.target.replace(char::is_whitespace, "_"));
+        let c_file_name = format!("ev_sim_{}.c", spec.target.replace(char::is_whitespace, "_"));
         let c_path = tmp_dir.join(&c_file_name);
         std::fs::write(&c_path, c_src)?;
 
@@ -244,15 +243,14 @@ fn generate_c_constraints(constraints: &[ConstraintSpec], field_names: &[&String
 }
 
 /// Generate C expression for a single constraint type.
-fn generate_c_constraint_expr(
-    constraint: &ConstraintSpec,
-    _field_names: &[&String],
-) -> String {
+fn generate_c_constraint_expr(constraint: &ConstraintSpec, _field_names: &[&String]) -> String {
     match constraint {
         ConstraintSpec::Range { field, min, max } => {
             format!(
                 "    if (enc[IDX_{0}] < {min} || enc[IDX_{0}] > {max}) return 0;",
-                field, min = min, max = max
+                field,
+                min = min,
+                max = max
             )
         }
         ConstraintSpec::Even { field } => {
@@ -287,10 +285,7 @@ fn generate_c_constraint_expr(
                 .iter()
                 .map(|v| format!("enc[IDX_{0}] == {v}", field, v = v))
                 .collect();
-            format!(
-                "    if (!({})) return 0;",
-                or_exprs.join(" || ")
-            )
+            format!("    if (!({})) return 0;", or_exprs.join(" || "))
         }
         ConstraintSpec::Cross {
             field_a,
