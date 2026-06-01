@@ -1,55 +1,54 @@
-# CVA6 CV-X-IF reference coprocessor — actual encoding space.
+# CVA6 CV-X-IF encoding space — verification suite specification.
 #
-# Based on cva6/core/cvxif_instr_pkg.sv (instruction definitions) and
-# cva6/core/cvxif_fu.sv (coprocessor interface), both part of the
-# OpenHW CVA6 RISC-V core.
+# Based on cva6/verif/env/corev-dv/custom/cvxif_custom_instr.sv (verification
+# instruction definitions) and cva6/core/cvxif_instr_pkg.sv (coprocessor decode).
 #
-# The reference coprocessor defines 10 instructions within the custom-3
-# opcode space (0x7B) and R4-type FP opcodes (MADD/MSUB/NMSUB/NMADD).
-# The coprocessor uses masked comparison for instruction decode.
+# Full register range (0..31) enabled by splitting verification into two phases:
+#   Phase 1: funct3/funct7 encoding validity (exhaustive)
+#   Phase 2: register value independence (sampled or exhaustive per encoding)
 #
-# Custom-3 opcode (0x7B) — R-type encoding:
-#   funct3=000: NOP     (funct7=0 only)
-#   funct3=001: ALU ops (funct7 sub-decoded)
-#   funct3=010..111:    illegal (rejected by coprocessor)
+# Custom-3 opcode (0x7B) — R-type encoding (verification suite mapping):
+#   funct3=000: ADD variants  (funct7 sub-decoded)
+#   funct3=001: ADD           (funct7=0 only)
+#   funct3=010: EXC           (funct7=96 = 0b1100000)
+#   funct3=011..111: illegal  (rejected by coprocessor)
 #
-# ALU ops (funct3=001), funct7 sub-decoding:
-#   funct7[31:25]=0000000:  ADD
-#   funct7[31:25]=0000001:  DOUBLE_RS1
-#   funct7[31:25]=0000010:  DOUBLE_RS2
-#   funct7[31:25]=0000011:  ADD_MULTI
-#   funct7[31:27]=00001, funct7[26:25]=00:  ADD_RS3_R
+# funct7 sub-decoding (funct3=000):
+#   funct7=0b0001000 (8):  ADD_MULTI
+#   funct7=0b0000010 (2):  U_ADD
+#   funct7=0b0000110 (6):  S_ADD
+#   funct7=0b0100000 (32): ADD_RS3 (uses func2=01)
 #
-# Note: funct7 is modeled as lower 6 bits (0..63).
-# funct7[4] (bit 27 in full 32-bit encoding) maps to value 32.
-#
-# Verification space (rs1/rs2/rd reduced to 0..7 to stay under MAX_COMBINATIONS):
-#   8 × 64 × 8 × 8 × 8 = 262,144 raw combinations.
-#   oneof: funct3 ∈ {0,1}
-#   cross: funct3=0 → funct7=0, funct3=1 → funct7∈{0,1,2,3,32}
-#   Valid: 1×8×8×8 + 5×8×8×8 = 512 + 2560 = 3,072 pass
+# Verification space:
+#   8 × 128 × 32 × 32 × 32 = 33,554,432 raw combinations (exceeds MAX_COMBINATIONS).
+#   oneof: funct3 ∈ {0, 1, 2}
+#   cross: funct3=0 → funct7 ∈ {2, 6, 8}
+#          funct3=1 → funct7 ∈ {0}
+#          funct3=2 → funct7 ∈ {96}
+#   Valid: 3×32×32×32 + 1×32×32×32 + 1×32×32×32 = 98,304 + 32,768 + 32,768 = 163,840 pass
 
 target: cva6_xif_ref
 fields:
   funct3:
     range: [0, 7]
   funct7:
-    range: [0, 63]
+    range: [0, 127]
   rs1:
-    range: [0, 7]
+    range: [0, 31]
   rs2:
-    range: [0, 7]
+    range: [0, 31]
   rd:
-    range: [0, 7]
+    range: [0, 31]
 constraints:
   - type: oneof
     field: "funct3"
-    values: [0, 1]
+    values: [0, 1, 2]
   - type: cross
     field_a: "funct3"
     field_b: "funct7"
     mapping:
-      0: [0]
-      1: [0, 1, 2, 3, 32]
+      0: [2, 6, 8, 32]
+      1: [0]
+      2: [96]
 projector:
   type: sum
