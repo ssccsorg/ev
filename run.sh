@@ -73,6 +73,26 @@ verify_synth() {
     rm -f "$tmpf" "$tmpe"
 }
 
+check_spike() {
+    if command -v spike &>/dev/null && command -v riscv64-unknown-elf-gcc &>/dev/null; then
+        return 0
+    fi
+    return 1
+}
+
+verify_sim() {
+    if ! check_spike; then
+        echo "  Spike or RISC-V toolchain not found — skipping simulation tests."
+        return 0
+    fi
+    echo "=== spike simulation (all_pass fixture) ==="
+    EV_SIM_BACKEND=spike EV_PK_PATH="${EV_PK_PATH:-pk}" \
+        "$EV" simulate --target "$ALL_PASS" 2>&1
+    echo "=== spike simulation (sample fixture) ==="
+    EV_SIM_BACKEND=spike EV_PK_PATH="${EV_PK_PATH:-pk}" \
+        "$EV" simulate --target "$MIXED" 2>&1 || true
+}
+
 verify_fixtures() {
     echo "=== all-pass fixture ==="
     $EV verify --target "$ALL_PASS"
@@ -88,10 +108,8 @@ verify_fixtures() {
     echo "  $($EV verify --target "$MIXED" --json 2>/dev/null | python3 -c 'import sys,json;d=json.load(sys.stdin);p=json.loads(bytes(d["payload"]).decode());print(f"Total: {p["total"]}, Passed: {p["passed"]}, Failed: {p["failed"]}")' 2>/dev/null || echo 'parse error')"
     echo "=== cva6 xif reference fixture (33M combos) ==="
     echo "  Skipped in default mode. Run 'bash run.sh --verify' to include."
-    echo "=== simulate help ==="
-    $EV simulate --help 2>&1 | head -3
-    echo "=== spike simulation (mock) ==="
-    echo "  $($EV simulate --target "$ALL_PASS" --json 2>/dev/null | python3 -c 'import sys,json;d=json.load(sys.stdin);print(f"mock simulation: {d["origin"]}")' 2>/dev/null || echo 'simulation backend ready')"
+    echo "=== simulate subcommand ready ==="
+    "$EV" simulate --help 2>&1 | head -1
 }
 
 # ── Modes ─────────────────────────────────────────────────────────────
@@ -130,6 +148,7 @@ case ${1:-} in
         echo "══════════════════════════════════════"
         verify_synth
         verify_fixtures
+        verify_sim
         echo "=== cva6 xif reference fixture (33M combos) ==="
         EC=0; $EV verify --target "tests/fixtures/cva6_xif_ref.xif.yaml" --json 2>&1 | python3 -c "
 import sys, json
@@ -174,6 +193,7 @@ print(f'  Failed: {p[\"failed\"]} (illegal or constraint-violating encodings)')
         echo "=== integration ==="
         verify_synth
         verify_fixtures
+        verify_sim
         echo ""
         echo "══════════════════════════════════════"
         echo "  All done."

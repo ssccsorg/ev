@@ -54,8 +54,20 @@ jobs:
           fi
         shell: bash
 
-      - name: Full pipeline (host build, container Yosys)
+      - name: Full pipeline (host build, container Yosys and Spike)
         run: bash run.sh
         env:
           EV_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          EV_SIM_BACKEND: spike
+          EV_PK_PATH: /usr/local/riscv64-unknown-elf/bin/pk
+        shell: bash
+
+      - name: Spike simulation smoke test
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspace \
+            -e EV_SIM_BACKEND=spike \
+            -e EV_PK_PATH=/usr/local/riscv64-unknown-elf/bin/pk \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            bash -c "cd /workspace && ./target/release/ev simulate --target tests/fixtures/sample.xif.yaml"
         shell: bash
