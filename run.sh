@@ -105,7 +105,9 @@ verify_fixtures() {
         exit 1
     fi
     echo "=== json output ==="
-    echo "  $($EV verify --target "$MIXED" --json 2>/dev/null | python3 -c 'import sys,json;d=json.load(sys.stdin);p=json.loads(bytes(d["payload"]).decode());print(f"Total: {p["total"]}, Passed: {p["passed"]}, Failed: {p["failed"]}")' 2>/dev/null || echo 'parse error')"
+    local json_out
+    json_out=$($EV verify --target "$MIXED" --json 2>/dev/null || true)
+    echo "  $(echo "$json_out" | python3 -c 'import sys,json;d=json.load(sys.stdin);p=json.loads(bytes(d["payload"]).decode());print(f"Total: {p["total"]}, Passed: {p["passed"]}, Failed: {p["failed"]}")' 2>/dev/null || echo 'parse error')"
 }
 
 # ── Modes ─────────────────────────────────────────────────────────────
