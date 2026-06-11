@@ -147,20 +147,8 @@ case ${1:-} in
         verify_synth
         verify_fixtures
         verify_sim
-        echo "=== cva6 xif ref fixture (sampled registers) ==="
-        EC=0; $EV verify --target "tests/fixtures/cva6_xif_ref.xif.yaml" --json 2>&1 | python3 -c "
-import sys, json
-data = json.load(sys.stdin)
-p = json.loads(bytes(data['payload']).decode())
-print(f'  Total: {p[\"total\"]}')
-print(f'  Passed: {p[\"passed\"]} (valid custom-3 encodings)')
-print(f'  Failed: {p[\"failed\"]} (illegal or constraint-violating encodings)')
-" || EC=$?
-        if [ "$EC" -eq 0 ]; then
-            echo "  All encodings valid — no unexpected failures."
-        else
-            echo "  Constraint-violating encodings detected (expected — coprocessor rejects illegal funct3/funct7)."
-        fi
+        echo "=== cva6 xif ref fixture (33M combos, text output) ==="
+        EC=0; $EV verify --target "tests/fixtures/cva6_xif_ref.xif.yaml" 2>&1 | tail -4
         echo "=== cva6 xif encoding-only spike sim ==="
         EV_SIM_BACKEND=spike EV_PK_PATH="${EV_PK_PATH:-pk}" \
             "$EV" simulate --target "tests/fixtures/cva6_xif_encoding.xif.yaml" 2>&1 | tail -3
