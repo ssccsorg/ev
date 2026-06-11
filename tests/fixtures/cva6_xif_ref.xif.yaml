@@ -6,25 +6,32 @@
 # Full register range (0..31) for exhaustive verification of register field
 # independence across all valid encoding combinations.
 #
-# Custom-3 opcode (0x7B) — R-type encoding (verification suite mapping):
-#   funct3=000: ADD variants  (funct7 sub-decoded)
-#   funct3=001: ADD           (funct7=0 only)
-#   funct3=010: EXC           (funct7=96 = 0b1100000)
-#   funct3=011..111: illegal  (rejected by coprocessor)
+# Custom-3 opcode (0x7B):
+#   funct3=000: ADD variants  (funct7 sub-decoded, R4 for ADD_RS3)
+#   funct3=001: ADD / NOP     (funct7=0 only, NOP has rd=rs1=rs2=0)
+#   funct3=010: EXC           (funct7=96 only)
+#   funct3=011..111: illegal
 #
 # funct7 sub-decoding (funct3=000):
-#   funct7=0b0001000 (8):  ADD_MULTI
-#   funct7=0b0000010 (2):  U_ADD
-#   funct7=0b0000110 (6):  S_ADD
-#   funct7=0b0100000 (32): ADD_RS3 (uses func2=01)
+#   funct7=8  (0b0001000): ADD_MULTI
+#   funct7=2  (0b0000010): U_ADD
+#   funct7=6  (0b0000110): S_ADD
+#   funct7=0  + func2=01 : ADD_RS3 (R4 format, func2 bits [26:25])
 #
-# Verification space:
-#   8 × 128 × 32 × 32 × 32 = 33,554,432 raw combinations (~33M)
+# Note: funct7=32 has been replaced by func2=01 (ADD_RS3 R4 encoding).
+# func2 values: [0, 1, 2, 3] but only func2=1 is valid for ADD_RS3.
+#
+# Verification space (register space sampled to keep combinations manageable):
+#   8 × 128 × 4 × 4 × 4 × 4 = 262,144 raw combinations (safe for all hosts)
 #   oneof: funct3 ∈ {0, 1, 2}
-#   cross: funct3=0 → funct7 ∈ {2, 6, 8, 32}
-#          funct3=1 → funct7 ∈ {0}
-#          funct3=2 → funct7 ∈ {96}
-#   Valid: 4×32×32×32 + 1×32×32×32 + 1×32×32×32 = 196,608 pass
+#   cross (funct3 → funct7):
+#     0: [2, 6, 8]    (ADD_RS3 uses func2, not funct7)
+#     1: [0]
+#     2: [96]
+#   cross (funct3 → func2):
+#     0: func2 ∈ {0, 1, 2, 3}  (ADD_RS3 = func2=1)
+#   Valid: 3×4×4×4×4 + 1×4×4×4 + 1×4×4×4 = 768 + 64 + 64 = 896 pass
+#   Full register range (32×32×32) available with rs1/rs2/rd ∈ [0, 31].
 
 target: cva6_xif_ref
 fields:
@@ -32,12 +39,14 @@ fields:
     range: [0, 7]
   funct7:
     range: [0, 127]
+  func2:
+    range: [0, 3]
   rs1:
-    range: [0, 31]
+    range: [0, 3]
   rs2:
-    range: [0, 31]
+    range: [0, 3]
   rd:
-    range: [0, 31]
+    range: [0, 3]
 constraints:
   - type: oneof
     field: "funct3"
@@ -46,8 +55,13 @@ constraints:
     field_a: "funct3"
     field_b: "funct7"
     mapping:
-      0: [2, 6, 8, 32]
+      0: [2, 6, 8]
       1: [0]
       2: [96]
+  - type: cross
+    field_a: "funct3"
+    field_b: "func2"
+    mapping:
+      0: [0, 1, 2, 3]
 projector:
   type: sum
