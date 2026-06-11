@@ -254,6 +254,7 @@ mod tests {
         VerificationSpec {
             target: "test".into(),
             fields,
+            encoding: None,
             constraints: vec![ConstraintSpec::Eq {
                 field_a: "op".into(),
                 field_b: "rs1".into(),
