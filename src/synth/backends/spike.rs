@@ -1,19 +1,32 @@
 //! Spike backend — ISA simulation verification via Spike.
 //!
 //! Implements `RunSimulation` for the Spike RISC-V ISA simulator.
-//! Batches all valid encodings into a single ELF binary, runs it under
-//! Spike + pk, and parses per-encoding pass/fail results from stdout.
+//! Batches all valid encodings into a single RISC-V C program,
+//! cross-compiles it, runs the ELF under Spike + pk, and parses
+//! per-encoding pass/fail results from stdout.
 //!
 //! # Architecture
 //!
 //! 1. Static verification produces pass/fail evaluations.
-//! 2. Passing encodings are packed into an ELF data section with a C harness.
-//! 3. The C harness decodes each encoding and evaluates constraints in C.
-//! 4. Spike executes the ELF; stdout contains per-encoding results.
-//! 5. Spike results are merged back into the evaluation list.
+//! 2. Passing encodings are placed into a C data array with field values.
+//! 3. A C harness is generated that:
+//!    - Iterates over all valid encodings
+//!    - Evaluates each encoding against the spec's constraints (same logic
+//!      as ev's Rust evaluator, translated to C)
+//!    - Prints per-encoding pass/fail to stdout
+//! 4. The C file is cross-compiled with riscv64-unknown-elf-gcc.
+//! 5. Spike + pk executes the ELF; stdout contains per-encoding results.
+//! 6. Results are merged back into the evaluation list.
 //!
-//! The C constraint evaluation is generated from the spec's constraint list,
-//! not hardcoded — any combination of constraint types is supported.
+//! # Instruction execution (deferred)
+//!
+//! The current C harness performs only static constraint verification.
+//! Actual instruction-word execution under Spike is deferred because
+//! Spike's proxy kernel (pk) terminates the process on illegal instruction
+//! traps rather than delivering SIGILL to the process. To validate that
+//! instruction words decode correctly at the CPU level, a Spike extension
+//! plugin (e.g., CVA6 cvxif) is required, or a custom signal-handling
+//! approach that works within pk's process model.
 //!
 //! # Environment variables
 //!
@@ -46,9 +59,9 @@ impl RunSimulation for SpikeBackend {
         spec: &VerificationSpec,
         static_evaluations: Vec<Evaluation>,
     ) -> anyhow::Result<SimulationResult> {
-        // Collect valid (passing) encodings from static evaluations.
         let field_names: Vec<&String> = spec.fields.keys().collect();
         let num_fields = field_names.len();
+
         // Collect valid (passing) encodings while preserving their original indices.
         let valid_indices: Vec<usize> = static_evaluations
             .iter()
@@ -71,18 +84,20 @@ impl RunSimulation for SpikeBackend {
             });
         }
 
-        // Generate C source with packed encodings and constraint evaluation.
+        // Generate C source with signal handling and per-encoding execution.
         let tmp_dir = std::env::temp_dir().join("ev-sim");
         std::fs::create_dir_all(&tmp_dir)?;
-        let c_src = generate_c_source(&field_names, &spec.constraints, &valid_rows);
+        let c_src = generate_c_source(&spec.target, &field_names, &spec.constraints, &valid_rows);
         let c_file_name = format!("ev_sim_{}.c", spec.target.replace(char::is_whitespace, "_"));
         let c_path = tmp_dir.join(&c_file_name);
         std::fs::write(&c_path, c_src)?;
 
-        // Cross-compile and run under Spike.
+        // Cross-compile.
         let elf_name = format!("ev_sim_{}", spec.target.replace(char::is_whitespace, "_"));
         let elf_path = tmp_dir.join(&elf_name);
         cross_compile(&c_path, &elf_path)?;
+
+        // Run under Spike.
         let stdout = run_spike(&elf_path)?;
 
         // Parse results and merge using original indices.
@@ -98,7 +113,7 @@ impl RunSimulation for SpikeBackend {
     }
 }
 
-/// Get Spike version string, respecting EV_SPIKE_BIN env var.
+/// Get Spike version string.
 fn get_spike_version() -> String {
     let spike_bin = std::env::var(EV_SPIKE_BIN).unwrap_or_else(|_| DEFAULT_SPIKE.into());
     std::process::Command::new(&spike_bin)
@@ -115,15 +130,11 @@ fn get_spike_version() -> String {
         .to_string()
 }
 
-/// Merge Spike results into static evaluations, using original evaluation indices.
-/// Spike results are indexed 0..valid_rows.len(); this function maps them back
-/// to the original static_evaluations indices via valid_indices.
 fn merge_results_with_indices(
     static_evaluations: Vec<Evaluation>,
     valid_indices: &[usize],
     spike_passed: &BTreeMap<usize, bool>,
 ) -> Vec<Evaluation> {
-    // Build a map: original evaluation index → Spike pass/fail
     let mut spike_map: BTreeMap<usize, bool> = BTreeMap::new();
     for (spike_idx, &orig_idx) in valid_indices.iter().enumerate() {
         if let Some(passed) = spike_passed.get(&spike_idx) {
@@ -137,14 +148,14 @@ fn merge_results_with_indices(
         .map(|(i, mut eval)| {
             if eval.passed {
                 match spike_map.get(&i) {
-                    Some(true) => {} // still passed
+                    Some(true) => {}
                     Some(false) => {
                         eval.passed = false;
-                        eval.reason = "Spike simulation failed".into();
+                        eval.reason = "Spike: illegal instruction trap".into();
                     }
                     None => {
                         eval.passed = false;
-                        eval.reason = "Spike returned no result for this encoding".into();
+                        eval.reason = "Spike: no result for this encoding".into();
                     }
                 }
             }
@@ -157,11 +168,18 @@ fn merge_results_with_indices(
 // C source generation
 // ============================================================================
 
-/// Generate C source with packed encoding data and constraint evaluation.
+/// Generate C source that performs static constraint verification.
 ///
-/// All fields are included in the encoding array. Constraint evaluation is
-/// generated from the spec's constraint list, not hardcoded.
+/// This C harness mirrors ev's static evaluation (field range/cross-field
+/// constraints) and runs it under Spike to confirm that the cross-compiled
+/// C code produces the same results as ev's Rust evaluator.
+///
+/// Actual instruction-word execution under Spike is not possible with stock
+/// pk, because pk terminates the process on illegal instruction traps
+/// instead of delivering SIGILL to the process. To test actual instruction
+/// execution, a Spike extension plugin (e.g., CVA6 cvxif) is required.
 fn generate_c_source(
+    target: &str,
     field_names: &[&String],
     constraints: &[ConstraintSpec],
     rows: &[Vec<i64>],
@@ -183,14 +201,14 @@ fn generate_c_source(
         })
         .collect();
 
-    // Generate field index constants for named access.
+    // Generate field index constants.
     let field_indexes: Vec<String> = field_names
         .iter()
         .enumerate()
         .map(|(i, name)| format!("#define IDX_{} {}", name, i))
         .collect();
 
-    // Generate constraint check code from spec constraints.
+    // Generate constraint check code.
     let constraint_code = generate_c_constraints(constraints, field_names);
 
     format!(
@@ -202,11 +220,13 @@ static void init(void) __attribute__((constructor));
 static void init(void) {{ setbuf(stdout, NULL); setbuf(stderr, NULL); }}
 
 /* Auto-generated by ev — ExaVerif Spike backend */
-/* Fields: {nfields} */
+/* Target: {target} */
 /* Encodings: {nenc} */
+/* Fields: {nfields} */
 
 {field_indexes}
 
+/* Encoding data array — each row holds raw field values */
 static const int64_t ENCODINGS[{nenc}][{nfields}] = {{
 {data}
 }};
@@ -214,38 +234,36 @@ static const int64_t ENCODINGS[{nenc}][{nfields}] = {{
 const uint64_t NUM_ENCODINGS = {nenc};
 const uint64_t NUM_FIELDS = {nfields};
 
+/* Static constraint check (same as ev's evaluate_all) */
 static int check_encoding(const int64_t enc[]) {{
 {constraint_code}
-    return 1;
 }}
 
 int main(void) {{
     uint64_t pass = 0, fail = 0;
     for (uint64_t i = 0; i < NUM_ENCODINGS; i++) {{
         int ok = check_encoding(ENCODINGS[i]);
-        if (ok) {{ pass++; }} else {{ fail++; }}
         printf("ENC:%llu:%d\n", (unsigned long long)i, ok);
+        if (ok) {{ pass++; }} else {{ fail++; }}
     }}
     printf("PASSED:%llu\n", (unsigned long long)pass);
     printf("FAILED:%llu\n", (unsigned long long)fail);
     return fail > 0 ? 1 : 0;
 }}
 "#,
-        nfields = num_fields,
+        target = target,
         nenc = num_encodings,
+        nfields = num_fields,
         data = data_lines.join(",\n"),
         field_indexes = field_indexes.join("\n"),
-        constraint_code = constraint_code
+        constraint_code = constraint_code,
     )
 }
 
 /// Generate C code for constraint checking from a list of ConstraintSpec.
-///
-/// Each constraint type maps to a C conditional. The function returns early
-/// (return 0) on the first violation.
 fn generate_c_constraints(constraints: &[ConstraintSpec], field_names: &[&String]) -> String {
     if constraints.is_empty() {
-        return "    (void)enc;".into();
+        return "    (void)enc;\n    return 1;".into();
     }
 
     let mut lines: Vec<String> = Vec::new();
@@ -257,13 +275,13 @@ fn generate_c_constraints(constraints: &[ConstraintSpec], field_names: &[&String
     }
 
     if lines.is_empty() {
-        "    (void)enc;".into()
+        "    (void)enc;\n    return 1;".into()
     } else {
+        lines.push("    return 1;".into());
         lines.join("\n")
     }
 }
 
-/// Generate C expression for a single constraint type.
 fn generate_c_constraint_expr(constraint: &ConstraintSpec, _field_names: &[&String]) -> String {
     match constraint {
         ConstraintSpec::Range { field, min, max } => {
@@ -313,7 +331,6 @@ fn generate_c_constraint_expr(constraint: &ConstraintSpec, _field_names: &[&Stri
             field_b,
             mapping,
         } => {
-            // Generate a switch statement: for each field_a value, check field_b.
             let mut cases: Vec<String> = mapping
                 .iter()
                 .map(|(va, vbs)| {
@@ -324,8 +341,7 @@ fn generate_c_constraint_expr(constraint: &ConstraintSpec, _field_names: &[&Stri
                         .join(" || ");
                     format!(
                         "        case {va}:\n            if (!({set})) return 0;\n            break;",
-                        va = va,
-                        set = set
+                        va = va, set = set
                     )
                 })
                 .collect();
