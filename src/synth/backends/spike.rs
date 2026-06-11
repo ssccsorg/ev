@@ -168,26 +168,11 @@ fn merge_results_with_indices(
 // C source generation
 // ============================================================================
 
-<<<<<<< HEAD
-/// Generate C source that performs static constraint verification.
-///
-/// This C harness mirrors ev's static evaluation (field range/cross-field
-/// constraints) and runs it under Spike to confirm that the cross-compiled
-/// C code produces the same results as ev's Rust evaluator.
-///
-/// Actual instruction-word execution under Spike is not possible with stock
-/// pk, because pk terminates the process on illegal instruction traps
-/// instead of delivering SIGILL to the process. To test actual instruction
-/// execution, a Spike extension plugin (e.g., CVA6 cvxif) is required.
-fn generate_c_source(
-    target: &str,
-=======
 /// Generate C source with packed encoding data, constraint evaluation,
 /// and instruction word assembly from encoding layout.
 fn generate_c_source(
     target: &str,
     encoding_opt: &Option<EncodingLayout>,
->>>>>>> 92df39e (feat: integrate EncodingLayout into Spike C harness with instruction word assembly #17)
     field_names: &[&String],
     constraints: &[ConstraintSpec],
     rows: &[Vec<i64>],
@@ -321,14 +306,9 @@ int main(void) {{
     uint64_t pass = 0, fail = 0;
     for (uint64_t i = 0; i < NUM_ENCODINGS; i++) {{
         int ok = check_encoding(ENCODINGS[i]);
-<<<<<<< HEAD
-        printf("ENC:%llu:%d\n", (unsigned long long)i, ok);
-        if (ok) {{ pass++; }} else {{ fail++; }}
-=======
         uint64_t instr = assemble_instr(ENCODINGS[i]);
         if (ok) {{ pass++; }} else {{ fail++; }}
         printf("ENC:%llu:%d:0x%016llX\n", (unsigned long long)i, ok, (unsigned long long)instr);
->>>>>>> 92df39e (feat: integrate EncodingLayout into Spike C harness with instruction word assembly #17)
     }}
     printf("PASSED:%llu\n", (unsigned long long)pass);
     printf("FAILED:%llu\n", (unsigned long long)fail);
@@ -341,11 +321,8 @@ int main(void) {{
         data = data_lines.join(",\n"),
         field_indexes = field_indexes.join("\n"),
         constraint_code = constraint_code,
-<<<<<<< HEAD
-=======
         instr_word_array = instr_word_array,
         assemble_code = assemble_code,
->>>>>>> 92df39e (feat: integrate EncodingLayout into Spike C harness with instruction word assembly #17)
     )
 }
 
