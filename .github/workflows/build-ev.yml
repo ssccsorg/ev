@@ -64,10 +64,10 @@ jobs:
 
       - name: Spike simulation smoke test
         run: |
-          docker run --rm \
+          docker run --rm --entrypoint bash \
             -v ${{ github.workspace }}:/workspace \
             -e EV_SIM_BACKEND=spike \
             -e EV_PK_PATH=/usr/local/riscv64-unknown-elf/bin/pk \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
-            bash -c "cd /workspace && ./target/release/ev simulate --target tests/fixtures/sample.xif.yaml"
+            -c "cd /workspace && ./target/release/ev simulate --target tests/fixtures/sample.xif.yaml"
         shell: bash
