@@ -4,6 +4,35 @@
 use serde::Deserialize;
 use std::collections::BTreeMap;
 
+/// Describes how instruction fields map to bits in the encoded instruction word.
+///
+/// Each entry maps a field name to its bit position (0 = LSB) and width.
+/// This is format-agnostic: R-type, R4, I-type, S-type, etc. are all
+/// just different field-to-bit mappings.
+#[derive(Debug, Clone, Deserialize)]
+pub struct EncodingLayout {
+    /// Total width in bits (typically 32 for RISC-V).
+    #[serde(default = "default_insn_width")]
+    pub insn_width: u32,
+    /// Field-to-bit mapping: field_name -> (bit_position, bit_width).
+    #[serde(default)]
+    pub field_map: BTreeMap<String, FieldBitMapping>,
+}
+
+fn default_insn_width() -> u32 {
+    32
+}
+
+/// Bit position and width for a single field in the instruction word.
+#[derive(Debug, Clone, Copy, Deserialize)]
+pub struct FieldBitMapping {
+    /// Bit position (0 = LSB).
+    #[serde(default)]
+    pub pos: u32,
+    /// Bit width.
+    pub width: u32,
+}
+
 /// Unified internal representation of a verification target.
 ///
 /// All input formats (YAML, JSON, .ss) parse into this struct. The pipeline
@@ -14,6 +43,8 @@ pub struct VerificationSpec {
     pub target: String,
     /// Ordered field definitions (deterministic: BTreeMap iteration order).
     pub fields: BTreeMap<String, FieldSpec>,
+    /// Instruction word encoding layout (field -> bit position/width).
+    pub encoding: Option<EncodingLayout>,
     /// Named constraint specifications to resolve via ConstraintRegistry.
     pub constraints: Vec<ConstraintSpec>,
     /// Named projector specification to resolve via ProjectorRegistry.
