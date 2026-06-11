@@ -3,9 +3,8 @@
 # Based on cva6/verif/env/corev-dv/custom/cvxif_custom_instr.sv (verification
 # instruction definitions) and cva6/core/cvxif_instr_pkg.sv (coprocessor decode).
 #
-# Full register range (0..31) enabled by splitting verification into two phases:
-#   Phase 1: funct3/funct7 encoding validity (exhaustive)
-#   Phase 2: register value independence (sampled or exhaustive per encoding)
+# Full register range (0..31) for exhaustive verification of register field
+# independence across all valid encoding combinations.
 #
 # Custom-3 opcode (0x7B) — R-type encoding (verification suite mapping):
 #   funct3=000: ADD variants  (funct7 sub-decoded)
@@ -20,12 +19,12 @@
 #   funct7=0b0100000 (32): ADD_RS3 (uses func2=01)
 #
 # Verification space:
-#   8 × 128 × 32 × 32 × 32 = 33,554,432 raw combinations (exceeds MAX_COMBINATIONS).
+#   8 × 128 × 32 × 32 × 32 = 33,554,432 raw combinations (~33M)
 #   oneof: funct3 ∈ {0, 1, 2}
-#   cross: funct3=0 → funct7 ∈ {2, 6, 8}
+#   cross: funct3=0 → funct7 ∈ {2, 6, 8, 32}
 #          funct3=1 → funct7 ∈ {0}
 #          funct3=2 → funct7 ∈ {96}
-#   Valid: 3×32×32×32 + 1×32×32×32 + 1×32×32×32 = 98,304 + 32,768 + 32,768 = 163,840 pass
+#   Valid: 4×32×32×32 + 1×32×32×32 + 1×32×32×32 = 196,608 pass
 
 target: cva6_xif_ref
 fields:

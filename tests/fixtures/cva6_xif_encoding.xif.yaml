@@ -1,0 +1,52 @@
+# CVA6 CV-X-IF encoding space — encoding-only verification (register-reduced).
+#
+# Purpose: Validate funct3/funct7 encoding validity via Spike simulation.
+# Register fields (rs1, rs2, rd) are reduced to {0, 1} to minimize combinations
+# while preserving cross-field constraint verification.
+#
+# Phase 1 of two-phase verification strategy:
+#   Phase 1 (this fixture): encoding validity — funct3/funct7 only
+#   Phase 2 (separate):     register value independence
+#
+# Based on cva6/verif/env/corev-dv/custom/cvxif_custom_instr.sv:
+#   funct3=000: ADD variants  (funct7 sub-decoded)
+#   funct3=001: ADD           (funct7=0 only)
+#   funct3=010: EXC           (funct7=96 only)
+#   funct3=011..111: illegal
+#
+# funct7 sub-decoding (funct3=000):
+#   funct7=2  (0b0000010): U_ADD
+#   funct7=6  (0b0000110): S_ADD
+#   funct7=8  (0b0001000): ADD_MULTI
+#
+# Reduced space: 8×128×2×2×2 = 8,192 raw combinations
+# Valid (after constraints): 4×2×2×2 + 1×2×2×2 + 1×2×2×2 = 56 pass
+#
+# Note: ADD_RS3 (func2=01, funct7 via funct3=000) requires R4 format support
+# and is not included in this encoding-only fixture.
+
+target: cva6_xif_encoding
+fields:
+  funct3:
+    range: [0, 7]
+  funct7:
+    range: [0, 127]
+  rs1:
+    range: [0, 1]
+  rs2:
+    range: [0, 1]
+  rd:
+    range: [0, 1]
+constraints:
+  - type: oneof
+    field: "funct3"
+    values: [0, 1, 2]
+  - type: cross
+    field_a: "funct3"
+    field_b: "funct7"
+    mapping:
+      0: [2, 6, 8]
+      1: [0]
+      2: [96]
+projector:
+  type: sum
