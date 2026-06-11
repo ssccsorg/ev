@@ -4,7 +4,9 @@
 //! existing RISC-V verification workflows (RISCV-CTG, RISCV-DV, RISCV-Config).
 
 use crate::format::FormatCapable;
-use crate::spec::{ConstraintSpec, EncodingLayout, FieldBitMapping, FieldSpec, ProjectorSpec, VerificationSpec};
+use crate::spec::{
+    ConstraintSpec, EncodingLayout, FieldBitMapping, FieldSpec, ProjectorSpec, VerificationSpec,
+};
 use anyhow::Context;
 use serde::Deserialize;
 use std::collections::BTreeMap;
@@ -30,7 +32,10 @@ fn default_rtype_encoding() -> EncodingLayout {
     field_map.insert("rs1".into(), FieldBitMapping { pos: 15, width: 5 });
     field_map.insert("rs2".into(), FieldBitMapping { pos: 20, width: 5 });
     field_map.insert("funct7".into(), FieldBitMapping { pos: 25, width: 7 });
-    EncodingLayout { insn_width: 32, field_map }
+    EncodingLayout {
+        insn_width: 32,
+        field_map,
+    }
 }
 
 /// R4 encoding layout (R-type with func2 replacing funct7 bits).
@@ -43,7 +48,10 @@ fn default_r4_encoding() -> EncodingLayout {
     field_map.insert("rs2".into(), FieldBitMapping { pos: 20, width: 5 });
     field_map.insert("func2".into(), FieldBitMapping { pos: 25, width: 2 });
     field_map.insert("rs3".into(), FieldBitMapping { pos: 27, width: 5 });
-    EncodingLayout { insn_width: 32, field_map }
+    EncodingLayout {
+        insn_width: 32,
+        field_map,
+    }
 }
 
 // ── Raw deserialization structs ──
@@ -116,12 +124,12 @@ impl RawXif {
             .collect();
 
         // Resolve encoding layout: explicit layout > named format > default R-type.
-        let encoding = self.encoding_layout.or_else(|| {
-            match self.encoding.as_deref() {
+        let encoding = self
+            .encoding_layout
+            .or_else(|| match self.encoding.as_deref() {
                 Some("r4") => Some(default_r4_encoding()),
                 _ => Some(default_rtype_encoding()),
-            }
-        });
+            });
 
         VerificationSpec {
             target: self.target,

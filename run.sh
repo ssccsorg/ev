@@ -146,6 +146,8 @@ case ${1:-} in
         verify_fixtures
         echo "=== cva6 xif ref fixture (33M combos, text output) ==="
         EC=0; $EV verify --target "tests/fixtures/cva6_xif_ref.xif.yaml" 2>&1 | tail -4
+        echo "=== cva6 xif ref r4 fixture (262k combos, func2) ==="
+        EC=0; $EV verify --target "tests/fixtures/cva6_xif_ref_r4.xif.yaml" 2>&1 | tail -4
         verify_sim
         echo "=== cva6 xif encoding-only spike sim ==="
         EV_SIM_BACKEND=spike EV_PK_PATH="${EV_PK_PATH:-pk}" \

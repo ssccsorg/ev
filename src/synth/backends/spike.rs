@@ -87,7 +87,13 @@ impl RunSimulation for SpikeBackend {
         // Generate C source with signal handling and per-encoding execution.
         let tmp_dir = std::env::temp_dir().join("ev-sim");
         std::fs::create_dir_all(&tmp_dir)?;
-        let c_src = generate_c_source(&spec.target, &spec.encoding, &field_names, &spec.constraints, &valid_rows);
+        let c_src = generate_c_source(
+            &spec.target,
+            &spec.encoding,
+            &field_names,
+            &spec.constraints,
+            &valid_rows,
+        );
         let c_file_name = format!("ev_sim_{}.c", spec.target.replace(char::is_whitespace, "_"));
         let c_path = tmp_dir.join(&c_file_name);
         std::fs::write(&c_path, c_src)?;
@@ -205,19 +211,30 @@ fn generate_c_source(
     let constraint_code = generate_c_constraints(constraints, field_names);
 
     // Generate instruction word assembly code from encoding layout.
-    // Produces C code like:  word |= (enc[IDX_rs1] & 0x1F) << 15;
+    // Fields in the layout that are absent from the spec's field list
+    // (e.g. a fixed `opcode` field) use constant 0, since they are not
+    // part of the combinatorial expansion.
     let assemble_lines: Vec<String> = match encoding_opt {
         Some(layout) => layout
             .field_map
             .iter()
             .map(|(name, mapping)| {
                 let mask = (1u64 << mapping.width) - 1;
-                format!(
-                    "    word |= (uint64_t)(enc[IDX_{name}] & 0x{mask:X}ULL) << {pos};",
-                    name = name,
-                    mask = mask,
-                    pos = mapping.pos
-                )
+                let has_idx = field_names.contains(&name);
+                if has_idx {
+                    format!(
+                        "    word |= (uint64_t)(enc[IDX_{name}] & 0x{mask:X}ULL) << {pos};",
+                        name = name,
+                        mask = mask,
+                        pos = mapping.pos
+                    )
+                } else {
+                    format!(
+                        "    word |= (uint64_t)(0 & 0x{mask:X}ULL) << {pos};",
+                        mask = mask,
+                        pos = mapping.pos
+                    )
+                }
             })
             .collect(),
         None => vec![],
