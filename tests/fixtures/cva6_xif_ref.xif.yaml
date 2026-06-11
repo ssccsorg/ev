@@ -34,6 +34,7 @@
 #   Full register range (32×32×32) available with rs1/rs2/rd ∈ [0, 31].
 
 target: cva6_xif_ref
+encoding: r4
 fields:
   funct3:
     range: [0, 7]
