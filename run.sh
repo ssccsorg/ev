@@ -108,8 +108,6 @@ verify_fixtures() {
     echo "  $($EV verify --target "$MIXED" --json 2>/dev/null | python3 -c 'import sys,json;d=json.load(sys.stdin);p=json.loads(bytes(d["payload"]).decode());print(f"Total: {p["total"]}, Passed: {p["passed"]}, Failed: {p["failed"]}")' 2>/dev/null || echo 'parse error')"
     echo "=== cva6 xif reference fixture (33M combos) ==="
     echo "  Skipped in default mode. Run 'bash run.sh --verify' to include."
-    echo "=== simulate subcommand ready ==="
-    "$EV" simulate --help 2>&1 | head -1
 }
 
 # ── Modes ─────────────────────────────────────────────────────────────

@@ -10,12 +10,12 @@
 //! 1. Static verification produces pass/fail evaluations.
 //! 2. Passing encodings are assembled into instruction words.
 //! 3. A C harness is generated that:
-//!    a. Registers a SIGILL handler via sigaction + sigsetjmp.
-//!    b. For each encoding, copies the instruction word into an
-//!       executable buffer and calls it as a function pointer.
-//!    c. If the instruction traps (SIGILL), siglongjmp recovers
-//!       and the encoding is marked as failed.
-//!    d. If it returns normally, the encoding is marked as passed.
+//!    - Registers a SIGILL handler via sigaction + sigsetjmp.
+//!    - For each encoding, copies the instruction word into an
+//!      executable buffer and calls it as a function pointer.
+//!    - If the instruction traps (SIGILL), siglongjmp recovers
+//!      and the encoding is marked as failed.
+//!    - If it returns normally, the encoding is marked as passed.
 //! 4. The C file is cross-compiled with riscv64-unknown-elf-gcc.
 //! 5. Spike + pk executes the ELF; stdout contains per-encoding results.
 //! 6. Results are merged back into the evaluation list.
@@ -91,10 +91,7 @@ impl RunSimulation for SpikeBackend {
         let tmp_dir = std::env::temp_dir().join("ev-sim");
         std::fs::create_dir_all(&tmp_dir)?;
         let c_src = generate_c_source(&field_names, &spec.constraints, &valid_rows);
-        let c_file_name = format!(
-            "ev_sim_{}.c",
-            spec.target.replace(char::is_whitespace, "_")
-        );
+        let c_file_name = format!("ev_sim_{}.c", spec.target.replace(char::is_whitespace, "_"));
         let c_path = tmp_dir.join(&c_file_name);
         std::fs::write(&c_path, c_src)?;
 
@@ -291,7 +288,9 @@ fn generate_c_constraint_expr(constraint: &ConstraintSpec, _field_names: &[&Stri
         ConstraintSpec::Range { field, min, max } => {
             format!(
                 "    if (enc[IDX_{0}] < {min} || enc[IDX_{0}] > {max}) return 0;",
-                field, min = min, max = max
+                field,
+                min = min,
+                max = max
             )
         }
         ConstraintSpec::Even { field } => {
@@ -350,7 +349,8 @@ fn generate_c_constraint_expr(constraint: &ConstraintSpec, _field_names: &[&Stri
             cases.push("        default:\n            break;".to_string());
             format!(
                 "    switch (enc[IDX_{0}]) {{\n{cases}\n    }}",
-                field_a, cases = cases.join("\n")
+                field_a,
+                cases = cases.join("\n")
             )
         }
     }
