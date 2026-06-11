@@ -69,5 +69,5 @@ jobs:
             -e EV_SIM_BACKEND=spike \
             -e EV_PK_PATH=/usr/local/riscv64-unknown-elf/bin/pk \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
-            -c "cd /workspace && ./target/release/ev simulate --target tests/fixtures/sample.xif.yaml"
+            -c "cd /workspace && ./target/release/ev simulate --target tests/fixtures/all_pass.xif.yaml"
         shell: bash
