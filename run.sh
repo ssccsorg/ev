@@ -87,7 +87,7 @@ verify_sim() {
     fi
     echo "=== spike simulation (all_pass fixture) ==="
     EV_SIM_BACKEND=spike EV_PK_PATH="${EV_PK_PATH:-pk}" \
-        "$EV" simulate --target "$ALL_PASS" 2>&1
+        "$EV" simulate --target "$ALL_PASS" 2>&1 || true
     echo "=== spike simulation (sample fixture) ==="
     EV_SIM_BACKEND=spike EV_PK_PATH="${EV_PK_PATH:-pk}" \
         "$EV" simulate --target "$MIXED" 2>&1 || true

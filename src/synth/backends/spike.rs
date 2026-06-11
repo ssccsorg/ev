@@ -8,28 +8,25 @@
 //! # Architecture
 //!
 //! 1. Static verification produces pass/fail evaluations.
-//! 2. Passing encodings are assembled into instruction words.
+//! 2. Passing encodings are placed into a C data array with field values.
 //! 3. A C harness is generated that:
-//!    - Registers a SIGILL handler via sigaction + sigsetjmp.
-//!    - For each encoding, copies the instruction word into an
-//!      executable buffer and calls it as a function pointer.
-//!    - If the instruction traps (SIGILL), siglongjmp recovers
-//!      and the encoding is marked as failed.
-//!    - If it returns normally, the encoding is marked as passed.
+//!    - Iterates over all valid encodings
+//!    - Evaluates each encoding against the spec's constraints (same logic
+//!      as ev's Rust evaluator, translated to C)
+//!    - Prints per-encoding pass/fail to stdout
 //! 4. The C file is cross-compiled with riscv64-unknown-elf-gcc.
 //! 5. Spike + pk executes the ELF; stdout contains per-encoding results.
 //! 6. Results are merged back into the evaluation list.
 //!
-//! # Why this works under Spike
+//! # Instruction execution (deferred)
 //!
-//! The C harness is cross-compiled to a RISC-V ELF. When Spike executes
-//! it, *all* code (including the function-pointer trampoline and the
-//! instruction word written to the buffer) is RISC-V code. The
-//! instruction word *is* a valid RISC-V instruction (custom-3 opcode)
-//! that Spike attempts to decode. If Spike doesn't recognize the
-//! opcode, it raises SIGILL, which the signal handler catches.
-//!
-//! This approach works with stock Spike — no custom extensions needed.
+//! The current C harness performs only static constraint verification.
+//! Actual instruction-word execution under Spike is deferred because
+//! Spike's proxy kernel (pk) terminates the process on illegal instruction
+//! traps rather than delivering SIGILL to the process. To validate that
+//! instruction words decode correctly at the CPU level, a Spike extension
+//! plugin (e.g., CVA6 cvxif) is required, or a custom signal-handling
+//! approach that works within pk's process model.
 //!
 //! # Environment variables
 //!
@@ -90,7 +87,7 @@ impl RunSimulation for SpikeBackend {
         // Generate C source with signal handling and per-encoding execution.
         let tmp_dir = std::env::temp_dir().join("ev-sim");
         std::fs::create_dir_all(&tmp_dir)?;
-        let c_src = generate_c_source(&field_names, &spec.constraints, &valid_rows);
+        let c_src = generate_c_source(&spec.target, &field_names, &spec.constraints, &valid_rows);
         let c_file_name = format!("ev_sim_{}.c", spec.target.replace(char::is_whitespace, "_"));
         let c_path = tmp_dir.join(&c_file_name);
         std::fs::write(&c_path, c_src)?;
@@ -182,6 +179,7 @@ fn merge_results_with_indices(
 /// instead of delivering SIGILL to the process. To test actual instruction
 /// execution, a Spike extension plugin (e.g., CVA6 cvxif) is required.
 fn generate_c_source(
+    target: &str,
     field_names: &[&String],
     constraints: &[ConstraintSpec],
     rows: &[Vec<i64>],
@@ -234,6 +232,7 @@ static const int64_t ENCODINGS[{nenc}][{nfields}] = {{
 }};
 
 const uint64_t NUM_ENCODINGS = {nenc};
+const uint64_t NUM_FIELDS = {nfields};
 
 /* Static constraint check (same as ev's evaluate_all) */
 static int check_encoding(const int64_t enc[]) {{
@@ -252,7 +251,7 @@ int main(void) {{
     return fail > 0 ? 1 : 0;
 }}
 "#,
-        target = "cva6_xif",
+        target = target,
         nenc = num_encodings,
         nfields = num_fields,
         data = data_lines.join(",\n"),
