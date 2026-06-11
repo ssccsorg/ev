@@ -106,8 +106,6 @@ verify_fixtures() {
     fi
     echo "=== json output ==="
     echo "  $($EV verify --target "$MIXED" --json 2>/dev/null | python3 -c 'import sys,json;d=json.load(sys.stdin);p=json.loads(bytes(d["payload"]).decode());print(f"Total: {p["total"]}, Passed: {p["passed"]}, Failed: {p["failed"]}")' 2>/dev/null || echo 'parse error')"
-    echo "=== cva6 xif reference fixture (33M combos) ==="
-    echo "  Skipped in default mode. Run 'bash run.sh --verify' to include."
 }
 
 # ── Modes ─────────────────────────────────────────────────────────────
@@ -146,9 +144,9 @@ case ${1:-} in
         echo "══════════════════════════════════════"
         verify_synth
         verify_fixtures
-        verify_sim
         echo "=== cva6 xif ref fixture (33M combos, text output) ==="
         EC=0; $EV verify --target "tests/fixtures/cva6_xif_ref.xif.yaml" 2>&1 | tail -4
+        verify_sim
         echo "=== cva6 xif encoding-only spike sim ==="
         EV_SIM_BACKEND=spike EV_PK_PATH="${EV_PK_PATH:-pk}" \
             "$EV" simulate --target "tests/fixtures/cva6_xif_encoding.xif.yaml" 2>&1 | tail -3
