@@ -91,6 +91,9 @@ verify_sim() {
     echo "=== spike simulation (sample fixture) ==="
     EV_SIM_BACKEND=spike EV_PK_PATH="${EV_PK_PATH:-pk}" \
         "$EV" simulate --target "$MIXED" 2>&1 || true
+    echo "=== spike simulation (cva6 xif ref r4) ==="
+    EV_SIM_BACKEND=spike EV_PK_PATH="${EV_PK_PATH:-pk}" \
+        "$EV" simulate --target "tests/fixtures/cva6_xif_ref_r4.xif.yaml" 2>&1 || true
 }
 
 verify_fixtures() {

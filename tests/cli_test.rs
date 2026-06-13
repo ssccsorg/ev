@@ -153,6 +153,26 @@ fn verify_cva6_xif_mac_fixture() {
 }
 
 #[test]
+fn verify_cva6_xif_ref_r4_fixture() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("verify")
+        .arg("--target")
+        .arg("tests/fixtures/cva6_xif_ref_r4.xif.yaml")
+        .arg("--json")
+        .output()
+        .expect("failed to run ev verify on cva6_xif_ref_r4 fixture");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("fact_type"),
+        "cva6_xif_ref_r4 should produce fact output"
+    );
+    assert!(
+        stdout.contains("\"payload\""),
+        "cva6_xif_ref_r4 should contain payload"
+    );
+}
+
+#[test]
 fn synth_text_with_mock_backend() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("synth")
