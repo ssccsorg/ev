@@ -135,6 +135,7 @@ mod tests {
         VerificationSpec {
             target: "test".into(),
             fields,
+            encoding: None,
             constraints: vec![],
             projector: crate::spec::ProjectorSpec::Sum,
         }

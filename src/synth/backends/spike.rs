@@ -35,7 +35,7 @@
 //! * `EV_RISCV_CC` — RISC-V cross-compiler (default: "riscv64-unknown-elf-gcc")
 
 use crate::evaluate::Evaluation;
-use crate::spec::{ConstraintSpec, VerificationSpec};
+use crate::spec::{ConstraintSpec, EncodingLayout, VerificationSpec};
 use crate::synth::sim::{RunSimulation, SimulationResult};
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -87,7 +87,13 @@ impl RunSimulation for SpikeBackend {
         // Generate C source with signal handling and per-encoding execution.
         let tmp_dir = std::env::temp_dir().join("ev-sim");
         std::fs::create_dir_all(&tmp_dir)?;
-        let c_src = generate_c_source(&spec.target, &field_names, &spec.constraints, &valid_rows);
+        let c_src = generate_c_source(
+            &spec.target,
+            &spec.encoding,
+            &field_names,
+            &spec.constraints,
+            &valid_rows,
+        );
         let c_file_name = format!("ev_sim_{}.c", spec.target.replace(char::is_whitespace, "_"));
         let c_path = tmp_dir.join(&c_file_name);
         std::fs::write(&c_path, c_src)?;
@@ -168,18 +174,11 @@ fn merge_results_with_indices(
 // C source generation
 // ============================================================================
 
-/// Generate C source that performs static constraint verification.
-///
-/// This C harness mirrors ev's static evaluation (field range/cross-field
-/// constraints) and runs it under Spike to confirm that the cross-compiled
-/// C code produces the same results as ev's Rust evaluator.
-///
-/// Actual instruction-word execution under Spike is not possible with stock
-/// pk, because pk terminates the process on illegal instruction traps
-/// instead of delivering SIGILL to the process. To test actual instruction
-/// execution, a Spike extension plugin (e.g., CVA6 cvxif) is required.
+/// Generate C source with packed encoding data, constraint evaluation,
+/// and instruction word assembly from encoding layout.
 fn generate_c_source(
     target: &str,
+    encoding_opt: &Option<EncodingLayout>,
     field_names: &[&String],
     constraints: &[ConstraintSpec],
     rows: &[Vec<i64>],
@@ -211,6 +210,80 @@ fn generate_c_source(
     // Generate constraint check code.
     let constraint_code = generate_c_constraints(constraints, field_names);
 
+    // Generate instruction word assembly code from encoding layout.
+    // Fields in the layout that are absent from the spec's field list
+    // (e.g. a fixed `opcode` field) use constant 0, since they are not
+    // part of the combinatorial expansion.
+    let assemble_lines: Vec<String> = match encoding_opt {
+        Some(layout) => layout
+            .field_map
+            .iter()
+            .map(|(name, mapping)| {
+                let mask = (1u64 << mapping.width) - 1;
+                let has_idx = field_names.contains(&name);
+                if has_idx {
+                    format!(
+                        "    word |= (uint64_t)(enc[IDX_{name}] & 0x{mask:X}ULL) << {pos};",
+                        name = name,
+                        mask = mask,
+                        pos = mapping.pos
+                    )
+                } else {
+                    format!(
+                        "    word |= (uint64_t)(0 & 0x{mask:X}ULL) << {pos};",
+                        mask = mask,
+                        pos = mapping.pos
+                    )
+                }
+            })
+            .collect(),
+        None => vec![],
+    };
+    let assemble_code = if assemble_lines.is_empty() {
+        "    (void)word;".into()
+    } else {
+        assemble_lines.join("\n")
+    };
+
+    // Generate pre-computed instruction words for each encoding.
+    let instr_word_lines: Vec<String> = match encoding_opt {
+        Some(layout) => rows
+            .iter()
+            .map(|row| {
+                let mut word: u64 = 0;
+                for (name, mapping) in &layout.field_map {
+                    if let Some(idx) = field_names.iter().position(|n| *n == name) {
+                        let val = row[idx] as u64;
+                        let mask = (1u64 << mapping.width) - 1;
+                        word |= (val & mask) << mapping.pos;
+                    }
+                }
+                // Truncate to insn_width bits
+                let mask = if layout.insn_width < 64 {
+                    (1u64 << layout.insn_width) - 1
+                } else {
+                    !0u64
+                };
+                format!("    0x{:016X}ULL", word & mask)
+            })
+            .collect(),
+        None => vec![],
+    };
+    let instr_word_data = if instr_word_lines.is_empty() {
+        String::new()
+    } else {
+        instr_word_lines.join(",\n")
+    };
+    let instr_word_array = if !instr_word_lines.is_empty() {
+        format!(
+            "\n/* Pre-assembled instruction words from encoding layout */\nstatic const uint64_t INSTR_WORDS[{nenc}] = {{\n{data}\n}};\n",
+            nenc = num_encodings,
+            data = instr_word_data
+        )
+    } else {
+        String::new()
+    };
+
     format!(
         r#"#include <stdio.h>
 #include <stdlib.h>
@@ -230,6 +303,7 @@ static void init(void) {{ setbuf(stdout, NULL); setbuf(stderr, NULL); }}
 static const int64_t ENCODINGS[{nenc}][{nfields}] = {{
 {data}
 }};
+{instr_word_array}
 
 const uint64_t NUM_ENCODINGS = {nenc};
 const uint64_t NUM_FIELDS = {nfields};
@@ -239,12 +313,19 @@ static int check_encoding(const int64_t enc[]) {{
 {constraint_code}
 }}
 
+static uint64_t assemble_instr(const int64_t enc[]) {{
+    uint64_t word = 0;
+{assemble_code}
+    return word;
+}}
+
 int main(void) {{
     uint64_t pass = 0, fail = 0;
     for (uint64_t i = 0; i < NUM_ENCODINGS; i++) {{
         int ok = check_encoding(ENCODINGS[i]);
-        printf("ENC:%llu:%d\n", (unsigned long long)i, ok);
+        uint64_t instr = assemble_instr(ENCODINGS[i]);
         if (ok) {{ pass++; }} else {{ fail++; }}
+        printf("ENC:%llu:%d:0x%016llX\n", (unsigned long long)i, ok, (unsigned long long)instr);
     }}
     printf("PASSED:%llu\n", (unsigned long long)pass);
     printf("FAILED:%llu\n", (unsigned long long)fail);
@@ -257,6 +338,8 @@ int main(void) {{
         data = data_lines.join(",\n"),
         field_indexes = field_indexes.join("\n"),
         constraint_code = constraint_code,
+        instr_word_array = instr_word_array,
+        assemble_code = assemble_code,
     )
 }
 

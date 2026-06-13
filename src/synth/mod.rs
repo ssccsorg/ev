@@ -343,6 +343,7 @@ mod tests {
         VerificationSpec {
             target: "test_module".into(),
             fields,
+            encoding: None,
             constraints: vec![],
             projector,
         }
