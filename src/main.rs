@@ -173,6 +173,9 @@ fn main() -> anyhow::Result<()> {
                 &projector_registry,
             );
 
+            if json {
+                eprintln!("warning: --json is deprecated, use --format json instead");
+            }
             let fmt = format.unwrap_or(if json { OutputFormat::Json } else { OutputFormat::Text });
             let reporter: Box<dyn ReporterCapable> = match fmt {
                 OutputFormat::Json => Box::new(JsonReporter),
@@ -201,6 +204,12 @@ fn main() -> anyhow::Result<()> {
             let n = result.evaluations.len();
             let passed = result.evaluations.iter().filter(|e| e.passed).count();
             let failed = n - passed;
+            if json {
+                eprintln!("warning: --json is deprecated, use --format json instead");
+            }
+            // Reconstruct field_order from the spec for CSV/Trace output
+            let spec = spec::VerificationSpec::from_yaml(&target)?;
+            let field_order: Vec<String> = spec.fields.keys().cloned().collect();
             let fmt = format.unwrap_or(if json { OutputFormat::Json } else { OutputFormat::Text });
             match fmt {
                 OutputFormat::Json => {
@@ -209,11 +218,11 @@ fn main() -> anyhow::Result<()> {
                 }
                 OutputFormat::Csv => {
                     let reporter = CsvReporter;
-                    reporter.report(&result.tool, "", &[], &result.evaluations);
+                    reporter.report(&result.tool, "", &field_order, &result.evaluations);
                 }
                 OutputFormat::Trace => {
                     let reporter = TraceReporter;
-                    reporter.report(&result.tool, "", &[], &result.evaluations);
+                    reporter.report(&result.tool, "", &field_order, &result.evaluations);
                 }
                 OutputFormat::Text => {
                     println!("target: simulation ({} backend)", result.tool);
@@ -229,9 +238,13 @@ fn main() -> anyhow::Result<()> {
         Commands::Fact { command } => match command {
             FactCommands::Decode => {
                 let mut input = String::new();
-                std::io::Read::read_to_string(&mut std::io::stdin(), &mut input)
+                let bytes_read = std::io::Read::read_to_string(&mut std::io::stdin(), &mut input)
                     .map_err(|e| anyhow::anyhow!("failed to read stdin: {}", e))?;
-                let fact: fih::Fact = serde_json::from_str(&input)
+                let trimmed = input.trim();
+                if bytes_read == 0 || trimmed.is_empty() {
+                    anyhow::bail!("usage: ev fact decode < fact.json\n       pipe a Fact JSON into stdin");
+                }
+                let fact: fih::Fact = serde_json::from_str(trimmed)
                     .map_err(|e| anyhow::anyhow!("failed to parse Fact JSON: {}", e))?;
                 // Try UTF-8 decode first, then fall back to hex
                 match String::from_utf8(fact.payload.clone()) {
