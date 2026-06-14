@@ -131,6 +131,19 @@ pub enum ConstraintSpec {
         field_b: String,
         mapping: std::collections::HashMap<i64, Vec<i64>>,
     },
+    /// Conditional field activation: when `field` equals `value`,
+    /// force the listed `disable` fields to zero.
+    ///
+    /// Used for instructions like CUS_NOP where rd/rs1/rs2 are inactive.
+    #[serde(rename = "enable_mask")]
+    EnableMask {
+        /// Trigger field name.
+        field: String,
+        /// Trigger value — when field equals this value, disable applies.
+        value: i64,
+        /// Fields to force to zero when trigger matches.
+        disable: Vec<String>,
+    },
 }
 
 /// A projector to resolve from the ProjectorRegistry.

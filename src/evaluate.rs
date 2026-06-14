@@ -4,7 +4,8 @@
 
 use crate::compose::Combination;
 use crate::registry::{Check, ConstraintRegistry, ProjectorRegistry};
-use crate::spec::VerificationSpec;
+use crate::spec::{ConstraintSpec, VerificationSpec};
+use crate::compose::Coordinates;
 
 /// Result of evaluating a single constraint combination.
 #[derive(Debug, Clone)]
@@ -15,11 +16,18 @@ pub struct Evaluation {
     pub reason: String,
 }
 
-/// Build a list of checks from the spec.
+/// Build a list of checks from the spec, excluding enable_mask constraints.
 fn build_checks(spec: &VerificationSpec, registry: &ConstraintRegistry) -> Vec<Box<dyn Check>> {
     let mut checks: Vec<Box<dyn Check>> = Vec::new();
 
-    for c in registry.build_all(&spec.constraints, &spec.fields) {
+    let regular_constraints: Vec<ConstraintSpec> = spec
+        .constraints
+        .iter()
+        .filter(|c| !matches!(c, ConstraintSpec::EnableMask { .. }))
+        .cloned()
+        .collect();
+
+    for c in registry.build_all(&regular_constraints, &spec.fields) {
         checks.push(c.into_check());
     }
 
@@ -38,9 +46,38 @@ pub fn evaluate_all(
         .resolve(&spec.projector, &spec.fields)
         .expect("projector type must be registered");
 
+    // Extract enable_mask constraints for pre-processing.
+    let enable_masks: Vec<&ConstraintSpec> = spec
+        .constraints
+        .iter()
+        .filter(|c| matches!(c, ConstraintSpec::EnableMask { .. }))
+        .collect();
+    let field_names: Vec<&String> = spec.fields.keys().collect();
+
     combinations
         .into_iter()
-        .map(|combination| {
+        .map(|mut combination| {
+            // Apply enable_mask pre-processing: force disabled fields to 0
+            // when the trigger field matches the specified value.
+            for mask in &enable_masks {
+                if let ConstraintSpec::EnableMask { field, value, disable } = mask {
+                    if let Some(trigger_idx) = field_names.iter().position(|n| *n == field) {
+                        if combination.values.get(trigger_idx) == Some(value) {
+                            for disabled_field in disable {
+                                if let Some(idx) = field_names.iter().position(|n| *n == disabled_field) {
+                                    if let Some(v) = combination.values.get_mut(idx) {
+                                        *v = 0;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // Rebuild coordinates after mutation
+            combination.coordinates = Coordinates::new(combination.values.clone());
+            // Rebuild point after mutation
+            combination.point = crate::compose::Point::new(combination.coordinates.clone());
             // Check field domain validity
             for (axis, (name, field_spec)) in spec.fields.iter().enumerate() {
                 if let Some(value) = combination.coordinates.get_axis(axis) {
@@ -633,6 +670,85 @@ mod tests {
     }
 
     // ── Edge cases ────────────────────────────────────────────────
+
+    // ── EnableMask ────────────────────────────────────────────────
+
+    #[test]
+    fn enable_mask_forces_zero_when_trigger_matches() {
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "op".into(),
+            FieldSpec {
+                range: None,
+                alignment: None,
+                values: Some(vec![0, 1]),
+            },
+        );
+        fields.insert(
+            "rs1".into(),
+            FieldSpec {
+                range: None,
+                alignment: None,
+                values: Some(vec![0, 1, 2, 3]),
+            },
+        );
+        fields.insert(
+            "rd".into(),
+            FieldSpec {
+                range: None,
+                alignment: None,
+                values: Some(vec![0, 1, 2, 3]),
+            },
+        );
+        // When op=1 (NOP), force rs1=0 and rd=0.
+        let spec = make_spec(
+            fields,
+            vec![ConstraintSpec::EnableMask {
+                field: "op".into(),
+                value: 1,
+                disable: vec!["rs1".into(), "rd".into()],
+            }],
+            ProjectorSpec::Sum,
+        );
+        let combos = crate::compose::expand_all(&spec).unwrap();
+        // 2 × 4 × 4 = 32 raw combinations
+        assert_eq!(combos.len(), 32);
+        let results = evaluate_all(
+            &spec,
+            combos,
+            &ConstraintRegistry::default(),
+            &ProjectorRegistry::default(),
+        );
+        assert_eq!(results.len(), 32);
+        for r in &results {
+            let op = r.combination.values[0];
+            let rs1 = r.combination.values[1];
+            let rd = r.combination.values[2];
+            match op {
+                0 => {
+                    // op=0: no mask applied, any value allowed
+                    assert!(r.passed, "op=0, rs1={}, rd={} should pass", rs1, rd);
+                }
+                1 => {
+                    // op=1: enable_mask forces rs1=0, rd=0
+                    assert!(
+                        r.passed,
+                        "op=1, rs1={}, rd={} should pass (all zero after mask)",
+                        rs1, rd
+                    );
+                    assert_eq!(
+                        rs1, 0,
+                        "rs1 should be forced to 0 when op=1, got {}", rs1
+                    );
+                    assert_eq!(
+                        rd, 0,
+                        "rd should be forced to 0 when op=1, got {}", rd
+                    );
+                }
+                _ => unreachable!(),
+            }
+        }
+    }
 
     #[test]
     fn empty_combinations_returns_empty() {

@@ -242,6 +242,16 @@ fn sv_constraint_assertion(
                 .collect();
             format!("// synthesis translate_off\n  if (!({})) $error(\"oneof\");\n  // synthesis translate_on\n", or_exprs.join(" || "))
         }
+        crate::spec::ConstraintSpec::EnableMask {
+            field,
+            value,
+            disable: _,
+        } => {
+            format!(
+                "// synthesis translate_off\n  if ({} == {}) $error(\"enable_mask\");\n  // synthesis translate_on\n",
+                field, value
+            )
+        }
         crate::spec::ConstraintSpec::Cross {
             field_a,
             field_b,
