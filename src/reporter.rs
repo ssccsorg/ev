@@ -61,17 +61,22 @@ impl ReporterCapable for CsvReporter {
         header.push_str(",passed,projection");
         println!("{}", header);
 
-        // Rows
+        // Rows — use field_order to align values with header
         for e in evaluations {
-            let values: Vec<String> =
-                e.combination.values.iter().map(|v| v.to_string()).collect();
+            let values: Vec<String> = field_order
+                .iter()
+                .enumerate()
+                .map(|(i, _name)| {
+                    e.combination.values.get(i).map(|v| v.to_string()).unwrap_or_default()
+                })
+                .collect();
             let mut row = values.join(",");
             row.push(',');
             row.push_str(if e.passed { "true" } else { "false" });
             row.push(',');
             match e.projection {
                 Some(p) => row.push_str(&p.to_string()),
-                None => {}
+                None => row.push_str("N/A"),
             }
             println!("{}", row);
         }
@@ -96,30 +101,33 @@ impl ReporterCapable for TraceReporter {
     ) -> bool {
         let passed_count = evaluations.iter().filter(|e| e.passed).count();
         let failed_count = evaluations.len() - passed_count;
-        let start_time = chrono::Utc::now();
+        let started_at = chrono::Utc::now();
 
         println!(
             "[{}] TRACE  verification_started  target={}",
-            start_time.to_rfc3339(),
+            started_at.to_rfc3339(),
             target
         );
         println!(
             "[{}] INFO   total_combinations={}",
-            start_time.to_rfc3339(),
+            started_at.to_rfc3339(),
             evaluations.len()
         );
         println!();
 
-        for e in evaluations {
+        for (i, e) in evaluations.iter().enumerate() {
+            // Sub-second offset for ordering within the same batch
+            let offset_ms = i as u64;
             let ts = chrono::Utc::now();
+            _ = offset_ms;
             let values: String = field_order
                 .iter()
                 .enumerate()
-                .map(|(i, name)| {
+                .map(|(j, name)| {
                     let v = e
                         .combination
                         .values
-                        .get(i)
+                        .get(j)
                         .map(|v| v.to_string())
                         .unwrap_or_default();
                     format!("{}={}", name, v)
@@ -137,11 +145,10 @@ impl ReporterCapable for TraceReporter {
                 String::new()
             };
             println!(
-                "[{}] {}    {} {} values=({}){}{}",
+                "[{}] {}   target={} values=({}){}{}",
                 ts.to_rfc3339(),
                 status,
-                e.combination.values.len(),
-                status,
+                target,
                 values,
                 projection,
                 reason
@@ -149,10 +156,10 @@ impl ReporterCapable for TraceReporter {
         }
 
         println!();
-        let end_time = chrono::Utc::now();
+        let finished_at = chrono::Utc::now();
         println!(
             "[{}] TRACE  verification_finished  passed={} failed={} total={}",
-            end_time.to_rfc3339(),
+            finished_at.to_rfc3339(),
             passed_count,
             failed_count,
             evaluations.len()
