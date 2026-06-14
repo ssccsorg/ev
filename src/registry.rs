@@ -86,6 +86,7 @@ impl ConstraintRegistry {
             .filter_map(|s| self.build(s, &axis_of))
             .collect()
     }
+
 }
 
 impl Default for ConstraintRegistry {
@@ -237,6 +238,7 @@ fn spec_type_name(spec: &ConstraintSpec) -> &str {
         ConstraintSpec::Ge { .. } => "ge",
         ConstraintSpec::Oneof { .. } => "oneof",
         ConstraintSpec::Cross { .. } => "cross",
+        ConstraintSpec::EnableMask { .. } => "enable_mask",
     }
 }
 

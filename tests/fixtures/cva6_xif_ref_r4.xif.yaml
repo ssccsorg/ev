@@ -67,5 +67,9 @@ constraints:
     field_b: "func2"
     mapping:
       0: [0, 1, 2, 3]
+  - type: enable_mask
+    field: "funct3"
+    value: 1
+    disable: ["rs1", "rs2", "rd"]
 projector:
   type: sum

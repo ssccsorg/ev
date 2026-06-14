@@ -439,6 +439,32 @@ fn generate_c_constraint_expr(constraint: &ConstraintSpec, _field_names: &[&Stri
                 cases = cases.join("\n")
             )
         }
+        ConstraintSpec::EnableMask {
+            field,
+            value,
+            disable,
+        } => {
+            // enable_mask: when trigger field matches, force disabled fields to 0.
+            let forced_zeros: Vec<String> = disable
+                .iter()
+                .map(|f| {
+                    format!(
+                        "    if (enc[IDX_{f}] != 0) {{ enc[IDX_{f}] = 0; }}",
+                        f = f
+                    )
+                })
+                .collect();
+            if forced_zeros.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "    if (enc[IDX_{field}] == {value}) {{\n{body}\n    }}",
+                    field = field,
+                    value = value,
+                    body = forced_zeros.join("\n")
+                )
+            }
+        }
     }
 }
 
