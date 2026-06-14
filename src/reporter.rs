@@ -1,7 +1,7 @@
 //! Reporter capability — formats verification results for output.
 //!
-//! Following the Nexus capability-trait pattern: each output format (text, JSON)
-//! implements this trait. The pipeline only depends on the trait.
+//! Following the Nexus capability-trait pattern: each output format (text, JSON,
+//! CSV, trace) implements this trait. The pipeline only depends on the trait.
 //!
 //! Note: the trait is deliberately minimal (`target`, `spec_hash`, `field_order`,
 //! `evaluations`). It does NOT depend on `VerificationSpec` so that any colony
@@ -30,6 +30,136 @@ pub trait ReporterCapable: Send + Sync {
         field_order: &[String],
         evaluations: &[Evaluation],
     ) -> bool;
+}
+
+// ============================================================================
+// CSV Reporter
+// ============================================================================
+
+pub struct CsvReporter;
+
+impl ReporterCapable for CsvReporter {
+    fn report(
+        &self,
+        target: &str,
+        _spec_hash: &str,
+        field_order: &[String],
+        evaluations: &[Evaluation],
+    ) -> bool {
+        let passed_count = evaluations.iter().filter(|e| e.passed).count();
+        let failed_count = evaluations.len() - passed_count;
+
+        // Print metadata as comments
+        println!("# target: {}", target);
+        println!("# total:  {}", evaluations.len());
+        println!("# passed: {}", passed_count);
+        println!("# failed: {}", failed_count);
+        println!();
+
+        // Header
+        let mut header = field_order.join(",");
+        header.push_str(",passed,projection");
+        println!("{}", header);
+
+        // Rows
+        for e in evaluations {
+            let values: Vec<String> =
+                e.combination.values.iter().map(|v| v.to_string()).collect();
+            let mut row = values.join(",");
+            row.push(',');
+            row.push_str(if e.passed { "true" } else { "false" });
+            row.push(',');
+            match e.projection {
+                Some(p) => row.push_str(&p.to_string()),
+                None => {}
+            }
+            println!("{}", row);
+        }
+
+        failed_count == 0
+    }
+}
+
+// ============================================================================
+// Trace Reporter
+// ============================================================================
+
+pub struct TraceReporter;
+
+impl ReporterCapable for TraceReporter {
+    fn report(
+        &self,
+        target: &str,
+        _spec_hash: &str,
+        field_order: &[String],
+        evaluations: &[Evaluation],
+    ) -> bool {
+        let passed_count = evaluations.iter().filter(|e| e.passed).count();
+        let failed_count = evaluations.len() - passed_count;
+        let start_time = chrono::Utc::now();
+
+        println!(
+            "[{}] TRACE  verification_started  target={}",
+            start_time.to_rfc3339(),
+            target
+        );
+        println!(
+            "[{}] INFO   total_combinations={}",
+            start_time.to_rfc3339(),
+            evaluations.len()
+        );
+        println!();
+
+        for e in evaluations {
+            let ts = chrono::Utc::now();
+            let values: String = field_order
+                .iter()
+                .enumerate()
+                .map(|(i, name)| {
+                    let v = e
+                        .combination
+                        .values
+                        .get(i)
+                        .map(|v| v.to_string())
+                        .unwrap_or_default();
+                    format!("{}={}", name, v)
+                })
+                .collect::<Vec<_>>()
+                .join(" ");
+            let status = if e.passed { "PASS" } else { "FAIL" };
+            let projection = match e.projection {
+                Some(p) => format!(" projection={}", p),
+                None => String::new(),
+            };
+            let reason = if !e.reason.is_empty() {
+                format!(" reason={}", e.reason)
+            } else {
+                String::new()
+            };
+            println!(
+                "[{}] {}    {} {} values=({}){}{}",
+                ts.to_rfc3339(),
+                status,
+                e.combination.values.len(),
+                status,
+                values,
+                projection,
+                reason
+            );
+        }
+
+        println!();
+        let end_time = chrono::Utc::now();
+        println!(
+            "[{}] TRACE  verification_finished  passed={} failed={} total={}",
+            end_time.to_rfc3339(),
+            passed_count,
+            failed_count,
+            evaluations.len()
+        );
+
+        failed_count == 0
+    }
 }
 
 // ============================================================================
