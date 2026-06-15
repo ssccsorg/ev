@@ -75,10 +75,13 @@ impl RunSimulation for SpikeBackend {
             .map(|e| e.combination.values.clone())
             .collect();
 
+        let field_order: Vec<String> = spec.fields.keys().cloned().collect();
+
         if valid_rows.is_empty() || num_fields == 0 {
             return Ok(SimulationResult {
                 tool: "spike".into(),
                 version: env!("CARGO_PKG_VERSION").into(),
+                field_order,
                 evaluations: static_evaluations,
                 extra: None,
             });
@@ -113,6 +116,7 @@ impl RunSimulation for SpikeBackend {
         Ok(SimulationResult {
             tool: "spike".into(),
             version: get_spike_version(),
+            field_order,
             evaluations: merged,
             extra: None,
         })

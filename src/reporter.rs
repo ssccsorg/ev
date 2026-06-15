@@ -67,7 +67,11 @@ impl ReporterCapable for CsvReporter {
                 .iter()
                 .enumerate()
                 .map(|(i, _name)| {
-                    e.combination.values.get(i).map(|v| v.to_string()).unwrap_or_default()
+                    e.combination
+                        .values
+                        .get(i)
+                        .map(|v| v.to_string())
+                        .unwrap_or_default()
                 })
                 .collect();
             let mut row = values.join(",");
@@ -115,11 +119,8 @@ impl ReporterCapable for TraceReporter {
         );
         println!();
 
-        for (i, e) in evaluations.iter().enumerate() {
-            // Sub-second offset for ordering within the same batch
-            let offset_ms = i as u64;
+        for (_i, e) in evaluations.iter().enumerate() {
             let ts = chrono::Utc::now();
-            _ = offset_ms;
             let values: String = field_order
                 .iter()
                 .enumerate()
