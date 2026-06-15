@@ -11,7 +11,7 @@ mod xif;
 use clap::{Parser, Subcommand, ValueEnum};
 use registry::ConstraintRegistry;
 use registry::ProjectorRegistry;
-use reporter::{JsonReporter, ReporterCapable, TextReporter, CsvReporter, TraceReporter};
+use reporter::{CsvReporter, JsonReporter, ReporterCapable, TextReporter, TraceReporter};
 use std::path::PathBuf;
 use synth::backends::yosys::YosysBackend;
 use synth::sim::{MockSimBackend, RunSimulation, SimulationResult};
@@ -158,7 +158,11 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Verify { target, json, format } => {
+        Commands::Verify {
+            target,
+            json,
+            format,
+        } => {
             let spec = spec::VerificationSpec::from_yaml(&target)?;
 
             let constraint_registry = ConstraintRegistry::default();
@@ -176,7 +180,11 @@ fn main() -> anyhow::Result<()> {
             if json {
                 eprintln!("warning: --json is deprecated, use --format json instead");
             }
-            let fmt = format.unwrap_or(if json { OutputFormat::Json } else { OutputFormat::Text });
+            let fmt = format.unwrap_or(if json {
+                OutputFormat::Json
+            } else {
+                OutputFormat::Text
+            });
             let reporter: Box<dyn ReporterCapable> = match fmt {
                 OutputFormat::Json => Box::new(JsonReporter),
                 OutputFormat::Csv => Box::new(CsvReporter),
@@ -199,7 +207,11 @@ fn main() -> anyhow::Result<()> {
                 anyhow::bail!("synthesis failed: {}", report.message.unwrap_or_default());
             }
         }
-        Commands::Simulate { target, json, format } => {
+        Commands::Simulate {
+            target,
+            json,
+            format,
+        } => {
             let result = run_sim(&target)?;
             let n = result.evaluations.len();
             let passed = result.evaluations.iter().filter(|e| e.passed).count();
@@ -207,10 +219,12 @@ fn main() -> anyhow::Result<()> {
             if json {
                 eprintln!("warning: --json is deprecated, use --format json instead");
             }
-            // Reconstruct field_order from the spec for CSV/Trace output
-            let spec = spec::VerificationSpec::from_yaml(&target)?;
-            let field_order: Vec<String> = spec.fields.keys().cloned().collect();
-            let fmt = format.unwrap_or(if json { OutputFormat::Json } else { OutputFormat::Text });
+            let field_order = result.field_order.clone();
+            let fmt = format.unwrap_or(if json {
+                OutputFormat::Json
+            } else {
+                OutputFormat::Text
+            });
             match fmt {
                 OutputFormat::Json => {
                     let fact: fih::Fact = (&result).into();
@@ -242,7 +256,9 @@ fn main() -> anyhow::Result<()> {
                     .map_err(|e| anyhow::anyhow!("failed to read stdin: {}", e))?;
                 let trimmed = input.trim();
                 if bytes_read == 0 || trimmed.is_empty() {
-                    anyhow::bail!("usage: ev fact decode < fact.json\n       pipe a Fact JSON into stdin");
+                    anyhow::bail!(
+                        "usage: ev fact decode < fact.json\n       pipe a Fact JSON into stdin"
+                    );
                 }
                 let fact: fih::Fact = serde_json::from_str(trimmed)
                     .map_err(|e| anyhow::anyhow!("failed to parse Fact JSON: {}", e))?;
@@ -250,7 +266,8 @@ fn main() -> anyhow::Result<()> {
                 match String::from_utf8(fact.payload.clone()) {
                     Ok(text) => print!("{}", text),
                     Err(_) => {
-                        println!("payload (hex): {}", hex::encode(&fact.payload));
+                        println!("# payload (hex-encoded, {} bytes):", fact.payload.len());
+                        println!("{}", hex::encode(&fact.payload));
                     }
                 }
             }

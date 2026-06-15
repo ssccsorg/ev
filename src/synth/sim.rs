@@ -46,6 +46,8 @@ pub struct SimulationResult {
     pub tool: String,
     /// Tool version string.
     pub version: String,
+    /// Ordered field names matching evaluation values.
+    pub field_order: Vec<String>,
     /// Evaluations after simulation — each encoding marked pass/fail.
     /// Same structure as `evaluate::evaluate_all` output.
     pub evaluations: Vec<Evaluation>,
@@ -137,12 +139,14 @@ pub struct MockSimBackend;
 impl RunSimulation for MockSimBackend {
     fn run(
         &self,
-        _spec: &VerificationSpec,
+        spec: &VerificationSpec,
         static_evaluations: Vec<Evaluation>,
     ) -> anyhow::Result<SimulationResult> {
+        let field_order: Vec<String> = spec.fields.keys().cloned().collect();
         Ok(SimulationResult {
             tool: "mock".into(),
             version: "0.0.0".into(),
+            field_order,
             evaluations: static_evaluations,
             extra: None,
         })
