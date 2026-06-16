@@ -122,7 +122,14 @@ verify_fixtures() {
     echo "=== json output ==="
     local json_out
     json_out=$($EV verify --target "$MIXED" --json 2>/dev/null || true)
-    echo "  $(echo "$json_out" | python3 -c 'import sys,json;d=json.load(sys.stdin);p=json.loads(bytes(d["payload"]).decode());print(f"Total: {p["total"]}, Passed: {p["passed"]}, Failed: {p["failed"]}")' 2>/dev/null || echo 'parse error')"
+    echo "  $(echo "$json_out" | python3 -c 'import sys,json;d=json.load(sys.stdin);p=json.loads(bytes(d["payload"]).decode());print(f"Total: {p["total"]}, Passed: {p["passed"]}, Failed: {p["failed"]}') 2>/dev/null || echo 'parse error')"
+}
+
+verify_large_fixtures() {
+    echo "=== cva6 xif ref fixture (33M combos, text output) ==="
+    EC=0; $EV verify --target "tests/fixtures/cva6_xif_ref.xif.yaml" 2>&1 | tail -4
+    echo "=== cva6 xif ref r4 fixture (262k combos, func2) ==="
+    EC=0; $EV verify --target "tests/fixtures/cva6_xif_ref_r4.xif.yaml" 2>&1 | tail -4
 }
 
 # ── Modes ─────────────────────────────────────────────────────────────
@@ -161,10 +168,7 @@ case ${1:-} in
         echo "══════════════════════════════════════"
         verify_synth
         verify_fixtures
-        echo "=== cva6 xif ref fixture (33M combos, text output) ==="
-        EC=0; $EV verify --target "tests/fixtures/cva6_xif_ref.xif.yaml" 2>&1 | tail -4
-        echo "=== cva6 xif ref r4 fixture (262k combos, func2) ==="
-        EC=0; $EV verify --target "tests/fixtures/cva6_xif_ref_r4.xif.yaml" 2>&1 | tail -4
+        verify_large_fixtures
         verify_sim
         echo ""
         echo "  Verification passed."
@@ -196,6 +200,7 @@ case ${1:-} in
         echo "=== integration ==="
         verify_synth
         verify_fixtures
+        verify_large_fixtures
         verify_sim
         echo ""
         echo "══════════════════════════════════════"
