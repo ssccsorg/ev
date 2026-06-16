@@ -86,7 +86,6 @@ impl ConstraintRegistry {
             .filter_map(|s| self.build(s, &axis_of))
             .collect()
     }
-
 }
 
 impl Default for ConstraintRegistry {
