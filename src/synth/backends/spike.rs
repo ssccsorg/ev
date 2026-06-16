@@ -449,7 +449,7 @@ fn generate_c_constraint_expr(constraint: &ConstraintSpec, _field_names: &[&Stri
             // enable_mask: when trigger field matches, force disabled fields to 0.
             let forced_zeros: Vec<String> = disable
                 .iter()
-                .map(|f| format!("    if (enc[IDX_{f}] != 0) {{ enc[IDX_{f}] = 0; }}", f = f))
+                .map(|f| format!("    enc[IDX_{f}] = 0;", f = f))
                 .collect();
             if forced_zeros.is_empty() {
                 String::new()
