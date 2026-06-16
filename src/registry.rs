@@ -237,6 +237,7 @@ fn spec_type_name(spec: &ConstraintSpec) -> &str {
         ConstraintSpec::Ge { .. } => "ge",
         ConstraintSpec::Oneof { .. } => "oneof",
         ConstraintSpec::Cross { .. } => "cross",
+        ConstraintSpec::EnableMask { .. } => "enable_mask",
     }
 }
 

@@ -119,7 +119,7 @@ impl ReporterCapable for TraceReporter {
         );
         println!();
 
-        for (_i, e) in evaluations.iter().enumerate() {
+        for e in evaluations.iter() {
             let ts = chrono::Utc::now();
             let values: String = field_order
                 .iter()

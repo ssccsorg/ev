@@ -304,7 +304,8 @@ static void init(void) {{ setbuf(stdout, NULL); setbuf(stderr, NULL); }}
 {field_indexes}
 
 /* Encoding data array — each row holds raw field values */
-static const int64_t ENCODINGS[{nenc}][{nfields}] = {{
+/* Non-const so enable_mask constraints can force fields to zero at runtime */
+static int64_t ENCODINGS[{nenc}][{nfields}] = {{
 {data}
 }};
 {instr_word_array}
@@ -313,7 +314,8 @@ const uint64_t NUM_ENCODINGS = {nenc};
 const uint64_t NUM_FIELDS = {nfields};
 
 /* Static constraint check (same as ev's evaluate_all) */
-static int check_encoding(const int64_t enc[]) {{
+/* Non-const to allow enable_mask to force fields to zero */
+static int check_encoding(int64_t enc[]) {{
 {constraint_code}
 }}
 
@@ -438,6 +440,27 @@ fn generate_c_constraint_expr(constraint: &ConstraintSpec, _field_names: &[&Stri
                 field_a,
                 cases = cases.join("\n")
             )
+        }
+        ConstraintSpec::EnableMask {
+            field,
+            value,
+            disable,
+        } => {
+            // enable_mask: when trigger field matches, force disabled fields to 0.
+            let forced_zeros: Vec<String> = disable
+                .iter()
+                .map(|f| format!("    enc[IDX_{f}] = 0;", f = f))
+                .collect();
+            if forced_zeros.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "    if (enc[IDX_{field}] == {value}) {{\n{body}\n    }}",
+                    field = field,
+                    value = value,
+                    body = forced_zeros.join("\n")
+                )
+            }
         }
     }
 }
