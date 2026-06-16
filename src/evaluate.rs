@@ -3,9 +3,9 @@
 //! Uses pluggable checks resolved from registries.
 
 use crate::compose::Combination;
+use crate::compose::Coordinates;
 use crate::registry::{Check, ConstraintRegistry, ProjectorRegistry};
 use crate::spec::{ConstraintSpec, VerificationSpec};
-use crate::compose::Coordinates;
 
 /// Result of evaluating a single constraint combination.
 #[derive(Debug, Clone)]
@@ -60,11 +60,18 @@ pub fn evaluate_all(
             // Apply enable_mask pre-processing: force disabled fields to 0
             // when the trigger field matches the specified value.
             for mask in &enable_masks {
-                if let ConstraintSpec::EnableMask { field, value, disable } = mask {
+                if let ConstraintSpec::EnableMask {
+                    field,
+                    value,
+                    disable,
+                } = mask
+                {
                     if let Some(trigger_idx) = field_names.iter().position(|n| *n == field) {
                         if combination.values.get(trigger_idx) == Some(value) {
                             for disabled_field in disable {
-                                if let Some(idx) = field_names.iter().position(|n| *n == disabled_field) {
+                                if let Some(idx) =
+                                    field_names.iter().position(|n| *n == disabled_field)
+                                {
                                     if let Some(v) = combination.values.get_mut(idx) {
                                         *v = 0;
                                     }
@@ -736,14 +743,8 @@ mod tests {
                         "op=1, rs1={}, rd={} should pass (all zero after mask)",
                         rs1, rd
                     );
-                    assert_eq!(
-                        rs1, 0,
-                        "rs1 should be forced to 0 when op=1, got {}", rs1
-                    );
-                    assert_eq!(
-                        rd, 0,
-                        "rd should be forced to 0 when op=1, got {}", rd
-                    );
+                    assert_eq!(rs1, 0, "rs1 should be forced to 0 when op=1, got {}", rs1);
+                    assert_eq!(rd, 0, "rd should be forced to 0 when op=1, got {}", rd);
                 }
                 _ => unreachable!(),
             }

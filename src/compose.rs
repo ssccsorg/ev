@@ -3,7 +3,7 @@
 //! Each combination is a value vector (one value per field) forming the
 //! cartesian product of all field domains.
 
-use crate::spec::VerificationSpec;
+use crate::spec::{ConstraintSpec, VerificationSpec};
 
 /// A coordinate vector — one value per instruction field.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -120,6 +120,41 @@ pub fn expand_all(spec: &VerificationSpec) -> Result<Vec<Combination>, String> {
         if carry {
             break;
         }
+    }
+
+    let field_names: Vec<&String> = spec.fields.keys().collect();
+
+    // Apply enable_mask constraints: force specific fields to zero
+    // when their trigger condition is met.
+    for constraint in &spec.constraints {
+        if let ConstraintSpec::EnableMask {
+            field,
+            value,
+            disable,
+        } = constraint
+        {
+            let trigger_axis = field_names.iter().position(|n| *n == field);
+            let disable_axes: Vec<usize> = disable
+                .iter()
+                .filter_map(|d| field_names.iter().position(|n| *n == d))
+                .collect();
+
+            if let Some(trigger_axis) = trigger_axis {
+                for combo in combinations.iter_mut() {
+                    if combo.values[trigger_axis] == *value {
+                        for &axis in &disable_axes {
+                            combo.values[axis] = 0;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Rebuild coordinates and point after mask application
+    for combo in combinations.iter_mut() {
+        combo.coordinates = Coordinates::new(combo.values.clone());
+        combo.point = Point::new(combo.coordinates.clone());
     }
 
     Ok(combinations)
@@ -283,6 +318,178 @@ mod tests {
             "error should mention limit: {}",
             err
         );
+    }
+
+    #[test]
+    fn expand_enable_mask_forces_zero_on_trigger_match() {
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "op".into(),
+            FieldSpec {
+                range: Some((0, 3)),
+                alignment: None,
+                values: None,
+            },
+        );
+        fields.insert(
+            "rs1".into(),
+            FieldSpec {
+                range: Some((0, 3)),
+                alignment: None,
+                values: None,
+            },
+        );
+        fields.insert(
+            "rd".into(),
+            FieldSpec {
+                range: Some((0, 3)),
+                alignment: None,
+                values: None,
+            },
+        );
+        let spec = VerificationSpec {
+            target: "test".into(),
+            fields,
+            encoding: None,
+            constraints: vec![crate::spec::ConstraintSpec::EnableMask {
+                field: "op".into(),
+                value: 0,
+                disable: vec!["rs1".into(), "rd".into()],
+            }],
+            projector: crate::spec::ProjectorSpec::Sum,
+        };
+        let combos = expand_all(&spec).unwrap();
+        // op ∈ {0,1,2,3}, rs1 ∈ {0,1,2,3}, rd ∈ {0,1,2,3} = 4×4×4 = 64
+        assert_eq!(combos.len(), 64);
+        // When op=0, rs1 and rd must be 0
+        for combo in &combos {
+            if combo.values[0] == 0 {
+                assert_eq!(
+                    combo.values[1], 0,
+                    "when op=0, rs1 must be 0, got {:?}",
+                    combo.values
+                );
+                assert_eq!(
+                    combo.values[2], 0,
+                    "when op=0, rd must be 0, got {:?}",
+                    combo.values
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn expand_enable_mask_no_trigger_leaves_values_unchanged() {
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "op".into(),
+            FieldSpec {
+                range: None,
+                alignment: None,
+                values: Some(vec![1, 2]),
+            },
+        );
+        fields.insert(
+            "rs1".into(),
+            FieldSpec {
+                range: None,
+                alignment: None,
+                values: Some(vec![1, 2]),
+            },
+        );
+        let spec = VerificationSpec {
+            target: "test".into(),
+            fields,
+            encoding: None,
+            constraints: vec![crate::spec::ConstraintSpec::EnableMask {
+                field: "op".into(),
+                value: 0,
+                disable: vec!["rs1".into()],
+            }],
+            projector: crate::spec::ProjectorSpec::Sum,
+        };
+        let combos = expand_all(&spec).unwrap();
+        // 2×2 = 4, and trigger value 0 never appears
+        assert_eq!(combos.len(), 4);
+        // All rs1 values should be unchanged (1 or 2)
+        for combo in &combos {
+            assert!(
+                combo.values[1] == 1 || combo.values[1] == 2,
+                "rs1 must be 1 or 2 when op != 0, got {:?}",
+                combo.values
+            );
+        }
+    }
+
+    #[test]
+    fn expand_enable_mask_multiple_triggers() {
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "op".into(),
+            FieldSpec {
+                range: None,
+                alignment: None,
+                values: Some(vec![0, 1, 2]),
+            },
+        );
+        fields.insert(
+            "rs1".into(),
+            FieldSpec {
+                range: Some((0, 7)),
+                alignment: None,
+                values: None,
+            },
+        );
+        fields.insert(
+            "rd".into(),
+            FieldSpec {
+                range: Some((0, 7)),
+                alignment: None,
+                values: None,
+            },
+        );
+        let spec = VerificationSpec {
+            target: "test".into(),
+            fields,
+            encoding: None,
+            constraints: vec![
+                crate::spec::ConstraintSpec::EnableMask {
+                    field: "op".into(),
+                    value: 0,
+                    disable: vec!["rs1".into(), "rd".into()],
+                },
+                crate::spec::ConstraintSpec::EnableMask {
+                    field: "op".into(),
+                    value: 1,
+                    disable: vec!["rd".into()],
+                },
+            ],
+            projector: crate::spec::ProjectorSpec::Sum,
+        };
+        let combos = expand_all(&spec).unwrap();
+        assert_eq!(combos.len(), 3 * 8 * 8); // 192
+                                             // BTreeMap key order: op, rd, rs1
+        for combo in &combos {
+            match combo.values[0] {
+                0 => {
+                    // enable_mask for op=0 disables both rd (idx 1) and rs1 (idx 2)
+                    assert!(
+                        combo.values[1] == 0 && combo.values[2] == 0,
+                        "op=0: rd and rs1 must be 0, got {:?}",
+                        combo.values
+                    );
+                }
+                1 => {
+                    // enable_mask for op=1 disables only rd (idx 1)
+                    assert!(
+                        combo.values[1] == 0,
+                        "op=1: rd must be 0, got {:?}",
+                        combo.values
+                    );
+                }
+                _ => {} // op=2: no restriction
+            }
+        }
     }
 
     #[test]
