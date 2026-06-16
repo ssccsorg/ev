@@ -41,10 +41,11 @@ code_checks() {
     cargo test --release
 }
 
-# Run a Yosys-dependent command inside the CI container.
-# Falls back to direct execution if Yosys is available locally.
-_yosys() {
-    if command -v yosys &>/dev/null; then
+# Run a tool-dependent command inside the CI container.
+# Falls back to direct execution if the tool is available locally.
+_tool() {
+    local tool="$1"; shift
+    if command -v "$tool" &>/dev/null; then
         "$@"
     else
         docker run --rm --entrypoint bash \
@@ -53,6 +54,9 @@ _yosys() {
             -c "cd /workspace && $*"
     fi
 }
+
+# Alias for backward compatibility
+_yosys() { _tool yosys "$@"; }
 
 verify_synth() {
     _yosys yosys --version
@@ -81,19 +85,27 @@ check_spike() {
 }
 
 verify_sim() {
-    if ! check_spike; then
-        echo "  Spike or RISC-V toolchain not found — skipping simulation tests."
-        return 0
+    if check_spike; then
+        _sim() { EV_SIM_BACKEND=spike EV_PK_PATH="${EV_PK_PATH:-pk}" "$EV" simulate --target "$1" 2>&1 || true; }
+    else
+        echo "  spike not found on host, using Docker container..."
+        _sim() {
+            docker run --rm --entrypoint bash \
+                -v "$(pwd):/workspace" \
+                -e EV_SIM_BACKEND=spike \
+                -e EV_PK_PATH="${EV_PK_PATH:-pk}" \
+                "$EV_IMAGE" \
+                -c "cd /workspace && $EV simulate --target $1" 2>&1 || true
+        }
     fi
     echo "=== spike simulation (all_pass fixture) ==="
-    EV_SIM_BACKEND=spike EV_PK_PATH="${EV_PK_PATH:-pk}" \
-        "$EV" simulate --target "$ALL_PASS" 2>&1 || true
+    _sim "$ALL_PASS"
     echo "=== spike simulation (sample fixture) ==="
-    EV_SIM_BACKEND=spike EV_PK_PATH="${EV_PK_PATH:-pk}" \
-        "$EV" simulate --target "$MIXED" 2>&1 || true
+    _sim "$MIXED"
     echo "=== spike simulation (cva6 xif ref r4) ==="
-    EV_SIM_BACKEND=spike EV_PK_PATH="${EV_PK_PATH:-pk}" \
-        "$EV" simulate --target "tests/fixtures/cva6_xif_ref_r4.xif.yaml" 2>&1 || true
+    _sim "tests/fixtures/cva6_xif_ref_r4.xif.yaml"
+    echo "=== spike simulation (cva6 xif encoding-only) ==="
+    _sim "tests/fixtures/cva6_xif_encoding.xif.yaml"
 }
 
 verify_fixtures() {
@@ -154,9 +166,6 @@ case ${1:-} in
         echo "=== cva6 xif ref r4 fixture (262k combos, func2) ==="
         EC=0; $EV verify --target "tests/fixtures/cva6_xif_ref_r4.xif.yaml" 2>&1 | tail -4
         verify_sim
-        echo "=== cva6 xif encoding-only spike sim ==="
-        EV_SIM_BACKEND=spike EV_PK_PATH="${EV_PK_PATH:-pk}" \
-            "$EV" simulate --target "tests/fixtures/cva6_xif_encoding.xif.yaml" 2>&1 | tail -3
         echo ""
         echo "  Verification passed."
         echo "══════════════════════════════════════"
