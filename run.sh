@@ -122,7 +122,7 @@ verify_fixtures() {
     echo "=== json output ==="
     local json_out
     json_out=$($EV verify --target "$MIXED" --json 2>/dev/null || true)
-    echo "  $(echo "$json_out" | python3 -c 'import sys,json;d=json.load(sys.stdin);p=json.loads(bytes(d["payload"]).decode());print(f"Total: {p["total"]}, Passed: {p["passed"]}, Failed: {p["failed"]}') 2>/dev/null || echo 'parse error')"
+    echo "  $(echo "$json_out" | python3 -c "import sys,json; d=json.load(sys.stdin); p=json.loads(bytes(d['payload']).decode()); print('Total: %d, Passed: %d, Failed: %d' % (p['total'], p['passed'], p['failed']))" 2>/dev/null || echo 'parse error')"
 }
 
 verify_large_fixtures() {
