@@ -45,7 +45,8 @@
 #   matches HW_NOP. We allow funct7 ∈ {0, 2, 6, 8} to cover the
 #   DV class instructions too, but any funct7 is valid for HW_NOP.
 #
-# Register fields sampled (0..3) to keep combinations manageable.
+# rs2 uses full register range (0..31) to support ADD_RS3_R at rs2[4:2]=001 (rs2=8).
+# rs1, rd sampled (0..3) to keep combinations manageable.
 # Full register range (32×32×32) available in cva6_xif_ref.xif.yaml.
 
 target: cva6_xif_ref_r4
@@ -60,7 +61,7 @@ fields:
   rs1:
     range: [0, 3]
   rs2:
-    range: [0, 3]
+    range: [0, 31]
   rd:
     range: [0, 3]
 constraints:
@@ -92,12 +93,12 @@ constraints:
       1: [0, 1, 2, 3]
 
   # funct3=001 + func2=00 + rs2[4:2]=001: ADD_RS3_R.
-  # When func2=00 and rs2[4:2] != 001, the encoding matches ADD.
-  # This constraint restricts rs2 range for funct3=1 + func2=00 + rs2[4:2]=001.
-  # Note: ev cannot express rs2[4:2] bit-slice; we approximate with rs2 values 8-15
-  # (register x8..x15 have bits [4:2] covering 010, 011, 100, 101).
-  # For sampled range [0,3], rs2[4:2] is always 000, so ADD_RS3_R is not reachable.
-  # This is a known limitation — full rs2 range needed for ADD_RS3_R matching.
+  # rs2[4:2]=001 corresponds to rs2 values 8-15 (registers x8..x15).
+  # This encoding is distinguished from ADD (same funct3=001, func2=00)
+  # by the hardware decoder via rs2[4:2] mask. ev cannot express
+  # bit-slice constraints, so ADD_RS3_R encodings are not verified
+  # separately — they pass through as ADD encodings.
+  # rs2 full range [0,31] is maintained for completeness.
 
   # CUS_NOP (funct3=1): force rs1=rs2=rd=0 (DV class set_rand_mode).
   - type: enable_mask
