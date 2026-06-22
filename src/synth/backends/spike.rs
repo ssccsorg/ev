@@ -293,6 +293,10 @@ fn generate_c_source(
 #include <stdlib.h>
 #include <stdint.h>
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#pragma GCC diagnostic ignored "-Wunused-const-variable"
+
 static void init(void) __attribute__((constructor));
 static void init(void) {{ setbuf(stdout, NULL); setbuf(stderr, NULL); }}
 
@@ -319,11 +323,13 @@ static int check_encoding(int64_t enc[]) {{
 {constraint_code}
 }}
 
-static uint64_t assemble_instr(const int64_t enc[]) {{
+__attribute__((unused)) static uint64_t assemble_instr(const int64_t enc[]) {{
     uint64_t word = 0;
 {assemble_code}
     return word;
 }}
+
+#pragma GCC diagnostic pop
 
 int main(void) {{
     uint64_t pass = 0, fail = 0;
