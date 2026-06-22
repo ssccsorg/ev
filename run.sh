@@ -120,10 +120,10 @@ verify_fixtures() {
 }
 
 verify_large_fixtures() {
-    echo "=== cva6 xif ref fixture (33M combos, text output) ==="
-    $EV verify --target "tests/fixtures/cva6_xif_ref.xif.yaml" 2>&1 | tail -4 || true
+    echo "=== cva6 xif ref fixture (33M combos) ==="
+    $EV verify --target "tests/fixtures/cva6_xif_ref.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
     echo "=== cva6 xif ref r4 fixture (262k combos, func2) ==="
-    $EV verify --target "tests/fixtures/cva6_xif_ref_r4.xif.yaml" 2>&1 | tail -4 || true
+    $EV verify --target "tests/fixtures/cva6_xif_ref_r4.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
 }
 
 # ── Modes ─────────────────────────────────────────────────────────────
