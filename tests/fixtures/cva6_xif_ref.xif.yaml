@@ -1,30 +1,41 @@
-# CVA6 CV-X-IF encoding space — verification suite specification.
+# CVA6 CV-X-IF encoding space — full register range (33M).
 #
-# Based on cva6/verif/env/corev-dv/custom/cvxif_custom_instr.sv (verification
-# instruction definitions) and cva6/core/cvxif_instr_pkg.sv (coprocessor decode).
+# Cross-checked against actual CVA6 RTL:
+#   - cva6/core/cvxif_example/include/cvxif_instr_pkg.sv (hardware decoder)
+#   - cva6/verif/env/corev-dv/custom/cvxif_custom_instr.sv (DV class)
+#
+# This fixture uses flat R-type encoding (no func2 field).
+# For the R4 variant with func2, see cva6_xif_ref_r4.xif.yaml.
 #
 # Full register range (0..31) for exhaustive verification of register field
 # independence across all valid encoding combinations.
 #
-# Custom-3 opcode (0x7B) — R-type encoding (verification suite mapping):
-#   funct3=000: ADD variants  (funct7 sub-decoded)
-#   funct3=001: ADD           (funct7=0 only)
-#   funct3=010: EXC           (funct7=96 = 0b1100000)
-#   funct3=011..111: illegal  (rejected by coprocessor)
+# funct3=000: CUS_ADD_MULTI, CUS_U_ADD, CUS_S_ADD, CUS_ADD_RS3 (via funct7)
+#             NOP (hardware decoder funct3=000 with writeback=0)
+# funct3=001: ADD / DOUBLE_RS1 / DOUBLE_RS2 / ADD_MULTI (via bits[26:25])
+# funct3=010: CUS_EXC (via DV class)
+# funct3=011..111: illegal
 #
 # funct7 sub-decoding (funct3=000):
-#   funct7=0b0001000 (8):  ADD_MULTI
-#   funct7=0b0000010 (2):  U_ADD
-#   funct7=0b0000110 (6):  S_ADD
-#   funct7=0b0100000 (32): ADD_RS3 (uses func2=01)
+#   funct7=0  (0b0000000): CUS_NOP / CUS_ADD_RS3 (func2 via funct7=32 in flat mode)
+#   funct7=2  (0b0000010): CUS_U_ADD
+#   funct7=6  (0b0000110): CUS_S_ADD
+#   funct7=8  (0b0001000): CUS_ADD_MULTI
+#   funct7=32 (0b0100000): CUS_ADD_RS3 (flat R-type, no func2)
 #
-# Verification space:
-#   8 × 128 × 32 × 32 × 32 = 33,554,432 raw combinations (~33M)
-#   oneof: funct3 ∈ {0, 1, 2}
-#   cross: funct3=0 → funct7 ∈ {2, 6, 8, 32}
-#          funct3=1 → funct7 ∈ {0}
-#          funct3=2 → funct7 ∈ {96}
-#   Valid: 4×32×32×32 + 1×32×32×32 + 1×32×32×32 = 196,608 pass
+# funct3=001 bits[26:25] sub-decoding (via funct7[5] in flat model):
+#   funct7[5]=0 (funct7 bit 25): ADD / DOUBLE_RS1 / ADD_RS3_R
+#   funct7[5]=1: DOUBLE_RS2 / ADD_MULTI
+#   For simplicity, this fixture keeps funct7=0 for funct3=001
+#   matching the DV class constraint.
+#
+# Hardware decoder mask entries for custom3 opcode 0x7B:
+#   NOP:        funct3=000, bits[26:25]=00, writeback=0
+#   ADD:        funct3=001, bits[26:25]=00
+#   DOUBLE_RS1: funct3=001, bits[26:25]=01
+#   DOUBLE_RS2: funct3=001, bits[26:25]=10
+#   ADD_MULTI:  funct3=001, bits[26:25]=11
+#   ADD_RS3_R:  funct3=001, bits[26:25]=00, rs2[4:2]=001
 
 target: cva6_xif_ref
 fields:
@@ -46,8 +57,16 @@ constraints:
     field_a: "funct3"
     field_b: "funct7"
     mapping:
-      0: [2, 6, 8, 32]
+      0: [0, 2, 6, 8, 32]
       1: [0]
       2: [96]
+  - type: enable_mask
+    field: "funct3"
+    value: 1
+    disable: ["rs1", "rs2", "rd"]
+  - type: enable_mask
+    field: "funct3"
+    value: 2
+    disable: ["rd"]
 projector:
   type: sum

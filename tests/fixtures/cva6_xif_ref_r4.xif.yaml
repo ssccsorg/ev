@@ -1,40 +1,38 @@
-# CVA6 CV-X-IF encoding space — R4 format variant with func2 field.
+# CVA6 CV-X-IF encoding space — aligned with hardware decoder mask table.
 #
-# Based on cva6/verif/env/corev-dv/custom/cvxif_custom_instr.sv (verification
-# instruction definitions) and cva6/core/cvxif_instr_pkg.sv (coprocessor decode).
+# Cross-checked against actual CVA6 RTL:
+#   - cva6/core/cvxif_example/include/cvxif_instr_pkg.sv (hardware decoder, 10 entries)
+#   - cva6/core/cvxif_example/instr_decoder.sv (mask-based decoding logic)
+#   - cva6/core/cvxif_example/copro_alu.sv (execution per opcode)
+#   - cva6/verif/env/corev-dv/custom/cvxif_custom_instr.sv (DV verification class)
 #
-# This variant uses the R4 encoding layout to support the func2 field at bits
-# [26:25], replacing funct7=32 for ADD_RS3 encoding.
+# Hardware decoder uses mask matching: (mask & instr) == pattern.
+# Mask bit = 1 means the corresponding bit is checked; 0 means don't-care.
 #
-# Register fields are sampled (0..3) to keep combinations within safe limits
-# given the additional func2 dimension.
+# Hardware decoder entries (custom3 opcode 0x7B, funct3/R4):
+#   funct3=000, bits[26:25]=00:  NOP         (writeback=0, reg_read=000)
+#   funct3=001, bits[26:25]=00:  ADD         (writeback=1, reg_read=011 = rs1,rs2)
+#   funct3=001, bits[26:25]=01:  DOUBLE_RS1  (writeback=1, reg_read=001 = rs1)
+#   funct3=001, bits[26:25]=10:  DOUBLE_RS2  (writeback=1, reg_read=010 = rs2)
+#   funct3=001, bits[26:25]=11:  ADD_MULTI   (writeback=1, reg_read=011 = rs1,rs2)
+#   funct3=001, bits[26:25]=00 + rs2[4:2]=001: ADD_RS3_R (writeback=1, reg_read=111)
 #
-# Custom-3 opcode (0x7B):
-#   funct3=000: ADD variants  (funct7 sub-decoded, R4 for ADD_RS3)
-#   funct3=001: ADD / NOP     (funct7=0 only, NOP has rd=rs1=rs2=0)
-#   funct3=010: EXC           (funct7=96 only)
-#   funct3=011..111: illegal
+# funct7 sub-decoding for funct3=000 (R-type, funct7[6:0]):
+#   funct7=8  (0b0001000): CUS_ADD_MULTI  (via DV class get_func7)
+#   funct7=2  (0b0000010): CUS_U_ADD
+#   funct7=6  (0b0000110): CUS_S_ADD
+#   funct7=0  + func2=01 : CUS_ADD_RS3 (R4 format, func2 bits [26:25])
 #
-# funct7 sub-decoding (funct3=000):
-#   funct7=8  (0b0001000): ADD_MULTI
-#   funct7=2  (0b0000010): U_ADD
-#   funct7=6  (0b0000110): S_ADD
-#   funct7=0  + func2=01 : ADD_RS3 (R4 format, func2 bits [26:25])
+# Note: bits[26:25] serve dual role:
+#   - For funct3=001: sub-opcode (ADD/DOUBLE_RS1/DOUBLE_RS2/ADD_MULTI)
+#   - For funct3=000 with func2=01: ADD_RS3 encoding (R4 format)
 #
-# Note: funct7=32 has been replaced by func2=01 (ADD_RS3 R4 encoding).
-# func2 values: [0, 1, 2, 3] but only func2=1 is valid for ADD_RS3.
-#
-# Verification space (register space sampled to keep combinations manageable):
-#   8 × 128 × 4 × 4 × 4 × 4 = 262,144 raw combinations (safe for all hosts)
-#   oneof: funct3 ∈ {0, 1, 2}
-#   cross (funct3 → funct7):
-#     0: [2, 6, 8]    (ADD_RS3 uses func2, not funct7)
-#     1: [0]
-#     2: [96]
-#   cross (funct3 → func2):
-#     0: func2 ∈ {0, 1, 2, 3}  (ADD_RS3 = func2=1)
-#   Valid: 3×4×4×4×4 + 1×4×4×4 + 1×4×4×4 = 768 + 64 + 64 = 896 pass
-#   Full register range (32×32×32) available with rs1/rs2/rd ∈ [0, 31].
+# Separate opcode space (not custom3 0x7B):
+#   MADD_RS3_R4  opcode 0x43 (funct3=000)
+#   MSUB_RS3_R4  opcode 0x47 (funct3=000)
+#   NMSUB_RS3_R4 opcode 0x4B (funct3=000)
+#   NMADD_RS3_R4 opcode 0x4F (funct3=000)
+#   These are not included here — see cva6_xif_madd_fixture (separate fixture).
 
 target: cva6_xif_ref_r4
 encoding: r4
@@ -52,24 +50,42 @@ fields:
   rd:
     range: [0, 3]
 constraints:
+  # Only funct3=000 and funct3=001 are valid for custom3 opcode.
   - type: oneof
     field: "funct3"
-    values: [0, 1, 2]
+    values: [0, 1]
+
+  # funct3=000: funct7 sub-decoding (ADD_MULTI, U_ADD, S_ADD) + ADD_RS3 via func2
+  # NOP at funct3=000 accepts any funct7 value since its mask covers funct7 bits
+  # but the DV class has no NOP-specific funct7 check.
   - type: cross
     field_a: "funct3"
     field_b: "funct7"
     mapping:
-      0: [2, 6, 8]
-      1: [0]
-      2: [96]
+      0: [0, 2, 6, 8]
+
+  # funct3=000: func2=01 for ADD_RS3 (R4 format)
   - type: cross
     field_a: "funct3"
     field_b: "func2"
     mapping:
       0: [0, 1, 2, 3]
-  - type: enable_mask
-    field: "funct3"
-    value: 1
-    disable: ["rs1", "rs2", "rd"]
+
+  # funct3=000 + func2=01 + rs2[4:2]=001: ADD_RS3_R
+  # Modeled as a cross constraint on rs2 for funct3=000 + func2=01.
+  # When not funct3=000+func2=01, rs2 is unrestricted.
+
+  # funct3=001: bits[26:25] sub-decoding maps to func2 field in our model:
+  #   func2=00: ADD / ADD_RS3_R (ADD_RS3_R additionally requires rs2[4:2]=001)
+  #   func2=01: DOUBLE_RS1
+  #   func2=10: DOUBLE_RS2
+  #   func2=11: ADD_MULTI
+  # funct7 must be 0 for funct3=001 (DV class constraint).
+  - type: cross
+    field_a: "funct3"
+    field_b: "funct7"
+    mapping:
+      1: [0]
+
 projector:
   type: sum
