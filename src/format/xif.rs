@@ -4,9 +4,7 @@
 //! existing RISC-V verification workflows (RISCV-CTG, RISCV-DV, RISCV-Config).
 
 use crate::format::FormatCapable;
-use crate::spec::{
-    ConstraintSpec, EncodingLayout, FieldBitMapping, FieldSpec, ProjectorSpec, VerificationSpec,
-};
+use crate::spec::{ConstraintSpec, FieldSpec, ProjectorSpec, VerificationSpec};
 use anyhow::Context;
 use serde::Deserialize;
 use std::collections::BTreeMap;
@@ -23,37 +21,6 @@ impl FormatCapable for YamlFormat {
     }
 }
 
-/// Default R-type encoding layout for RISC-V.
-fn default_rtype_encoding() -> EncodingLayout {
-    let mut field_map = BTreeMap::new();
-    field_map.insert("opcode".into(), FieldBitMapping { pos: 0, width: 7 });
-    field_map.insert("rd".into(), FieldBitMapping { pos: 7, width: 5 });
-    field_map.insert("funct3".into(), FieldBitMapping { pos: 12, width: 3 });
-    field_map.insert("rs1".into(), FieldBitMapping { pos: 15, width: 5 });
-    field_map.insert("rs2".into(), FieldBitMapping { pos: 20, width: 5 });
-    field_map.insert("funct7".into(), FieldBitMapping { pos: 25, width: 7 });
-    EncodingLayout {
-        insn_width: 32,
-        field_map,
-    }
-}
-
-/// R4 encoding layout (R-type with func2 replacing funct7 bits).
-fn default_r4_encoding() -> EncodingLayout {
-    let mut field_map = BTreeMap::new();
-    field_map.insert("opcode".into(), FieldBitMapping { pos: 0, width: 7 });
-    field_map.insert("rd".into(), FieldBitMapping { pos: 7, width: 5 });
-    field_map.insert("funct3".into(), FieldBitMapping { pos: 12, width: 3 });
-    field_map.insert("rs1".into(), FieldBitMapping { pos: 15, width: 5 });
-    field_map.insert("rs2".into(), FieldBitMapping { pos: 20, width: 5 });
-    field_map.insert("func2".into(), FieldBitMapping { pos: 25, width: 2 });
-    field_map.insert("rs3".into(), FieldBitMapping { pos: 27, width: 5 });
-    EncodingLayout {
-        insn_width: 32,
-        field_map,
-    }
-}
-
 // ── Raw deserialization structs ──
 
 #[derive(Debug, Deserialize)]
@@ -62,12 +29,6 @@ struct RawXif {
     target: String,
     #[serde(default)]
     fields: BTreeMap<String, RawField>,
-    /// Encoding format: "r" (default, R-type), "r4" (R4 with func2), "i" (I-type), etc.
-    #[serde(default)]
-    encoding: Option<String>,
-    /// Optional explicit encoding layout. If absent, derived from `encoding` field.
-    #[serde(default)]
-    encoding_layout: Option<EncodingLayout>,
     #[serde(default)]
     constraints: Vec<ConstraintSpec>,
     #[serde(default = "default_projector")]
@@ -123,18 +84,10 @@ impl RawXif {
             })
             .collect();
 
-        // Resolve encoding layout: explicit layout > named format > default R-type.
-        let encoding = self
-            .encoding_layout
-            .or_else(|| match self.encoding.as_deref() {
-                Some("r4") => Some(default_r4_encoding()),
-                _ => Some(default_rtype_encoding()),
-            });
-
         VerificationSpec {
             target: self.target,
             fields,
-            encoding,
+            encoding: None,
             constraints: self.constraints,
             projector: self.projector,
         }

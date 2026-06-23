@@ -1,21 +1,12 @@
-mod compose;
-mod evaluate;
-mod fih;
-mod format;
-mod registry;
-mod reporter;
-mod spec;
-mod synth;
-mod xif;
-
 use clap::{Parser, Subcommand, ValueEnum};
-use registry::ConstraintRegistry;
-use registry::ProjectorRegistry;
-use reporter::{CsvReporter, JsonReporter, ReporterCapable, TextReporter, TraceReporter};
+use ev::verify::{ConstraintRegistry, ProjectorRegistry};
+use ev::report::{CsvReporter, JsonReporter, ReporterCapable, TextReporter, TraceReporter, hash_spec, Fact};
+use ev::synth::backends::yosys::YosysBackend;
+use ev::synth::sim::{MockSimBackend, RunSimulation, SimulationResult};
+use ev::synth::{GenerateRtl, MockSynthesisBackend, RunSynthesis, SvGenerator, SynthesisMetrics};
+use ev::spec::VerificationSpec;
+use ev::verify::{expand_all, evaluate_all};
 use std::path::PathBuf;
-use synth::backends::yosys::YosysBackend;
-use synth::sim::{MockSimBackend, RunSimulation, SimulationResult};
-use synth::{GenerateRtl, MockSynthesisBackend, RunSynthesis, SvGenerator};
 
 #[derive(Parser)]
 #[command(
@@ -40,41 +31,28 @@ enum OutputFormat {
 enum Commands {
     /// Static constraint verification against field specification
     Verify {
-        /// Path to the YAML constraint file (XIF format)
         #[arg(short, long)]
         target: PathBuf,
-
-        /// Output results as JSON instead of text (deprecated, use --format instead)
         #[arg(long)]
         json: bool,
-
-        /// Output format: text, json, csv, or trace (default: text)
         #[arg(long, value_enum)]
         format: Option<OutputFormat>,
     },
 
     /// SystemVerilog RTL generation and synthesis
     Synth {
-        /// Path to the YAML constraint file
         #[arg(short, long)]
         target: PathBuf,
-
-        /// Output results as JSON instead of text
         #[arg(long)]
         json: bool,
     },
 
     /// ISA simulation verification via Spike
     Simulate {
-        /// Path to the YAML constraint file
         #[arg(short, long)]
         target: PathBuf,
-
-        /// Output results as JSON instead of text (deprecated, use --format instead)
         #[arg(long)]
         json: bool,
-
-        /// Output format: text, json, csv, or trace (default: text)
         #[arg(long, value_enum)]
         format: Option<OutputFormat>,
     },
@@ -94,7 +72,7 @@ enum FactCommands {
 
 fn resolve_sim_backend() -> Box<dyn RunSimulation> {
     match std::env::var("EV_SIM_BACKEND").unwrap_or_default().as_str() {
-        "spike" => Box::new(synth::backends::spike::SpikeBackend),
+        "spike" => Box::new(ev::synth::backends::spike::SpikeBackend),
         _ => Box::new(MockSimBackend),
     }
 }
@@ -106,16 +84,12 @@ fn resolve_synth_backend() -> Box<dyn RunSynthesis> {
     Box::new(YosysBackend)
 }
 
-fn print_synthesis_report(report: &synth::SynthesisMetrics, json: bool) {
+fn print_synthesis_report(report: &SynthesisMetrics, json: bool) {
     if json {
-        let fact: fih::Fact = report.clone().into();
+        let fact: Fact = report.clone().into();
         println!("{}", serde_json::to_string_pretty(&fact).unwrap());
     } else {
-        let status_label = if report.status == "ok" {
-            "ok"
-        } else {
-            "FAILED"
-        };
+        let status_label = if report.status == "ok" { "ok" } else { "FAILED" };
         println!("Synthesis: {} [{}]", report.module_name, status_label);
         println!("  backend:  {}", report.tool);
         println!("  version:  {}", report.version);
@@ -130,9 +104,7 @@ fn print_synthesis_report(report: &synth::SynthesisMetrics, json: bool) {
 }
 
 fn run_sim(target: &std::path::Path) -> anyhow::Result<SimulationResult> {
-    use compose::expand_all;
-    use evaluate::evaluate_all;
-    let spec = spec::VerificationSpec::from_yaml(target)?;
+    let spec = VerificationSpec::from_yaml(target)?;
     let constraint_registry = ConstraintRegistry::default();
     let projector_registry = ProjectorRegistry::default();
     let combinations =
@@ -147,8 +119,8 @@ fn run_sim(target: &std::path::Path) -> anyhow::Result<SimulationResult> {
     backend.run(&spec, evaluations)
 }
 
-fn run_synth(target: &std::path::Path) -> anyhow::Result<synth::SynthesisMetrics> {
-    let spec = spec::VerificationSpec::from_yaml(target)?;
+fn run_synth(target: &std::path::Path) -> anyhow::Result<SynthesisMetrics> {
+    let spec = VerificationSpec::from_yaml(target)?;
     let rtl_path = SvGenerator.generate(&spec)?;
     let backend = resolve_synth_backend();
     backend.run(&rtl_path, &spec.target)
@@ -163,14 +135,14 @@ fn main() -> anyhow::Result<()> {
             json,
             format,
         } => {
-            let spec = spec::VerificationSpec::from_yaml(&target)?;
+            let spec = VerificationSpec::from_yaml(&target)?;
 
             let constraint_registry = ConstraintRegistry::default();
             let projector_registry = ProjectorRegistry::default();
 
-            let combinations = compose::expand_all(&spec)
+            let combinations = expand_all(&spec)
                 .map_err(|e| anyhow::anyhow!("domain expansion failed: {}", e))?;
-            let evaluations = evaluate::evaluate_all(
+            let evaluations = evaluate_all(
                 &spec,
                 combinations,
                 &constraint_registry,
@@ -193,7 +165,7 @@ fn main() -> anyhow::Result<()> {
             };
 
             let field_order: Vec<String> = spec.fields.keys().cloned().collect();
-            let spec_hash = reporter::hash_spec(&spec);
+            let spec_hash = hash_spec(&spec);
             let all_passed = reporter.report(&spec.target, &spec_hash, &field_order, &evaluations);
 
             if !all_passed {
@@ -227,7 +199,7 @@ fn main() -> anyhow::Result<()> {
             });
             match fmt {
                 OutputFormat::Json => {
-                    let fact: fih::Fact = (&result).into();
+                    let fact: Fact = (&result).into();
                     println!("{}", serde_json::to_string_pretty(&fact).unwrap());
                 }
                 OutputFormat::Csv => {
@@ -260,14 +232,12 @@ fn main() -> anyhow::Result<()> {
                         "usage: ev fact decode < fact.json\n       pipe a Fact JSON into stdin"
                     );
                 }
-                let fact: fih::Fact = serde_json::from_str(trimmed)
+                let fact: Fact = serde_json::from_str(trimmed)
                     .map_err(|e| anyhow::anyhow!("failed to parse Fact JSON: {}", e))?;
-                // Try UTF-8 decode first, then fall back to hex
                 match String::from_utf8(fact.payload.clone()) {
                     Ok(text) => print!("{}", text),
                     Err(_) => {
-                        println!("# payload (hex-encoded, {} bytes):", fact.payload.len());
-                        println!("{}", hex::encode(&fact.payload));
+                        println!("payload (hex): {}", hex::encode(&fact.payload));
                     }
                 }
             }

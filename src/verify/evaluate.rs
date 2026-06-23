@@ -2,9 +2,8 @@
 //!
 //! Uses pluggable checks resolved from registries.
 
-use crate::compose::Combination;
-use crate::compose::Coordinates;
-use crate::registry::{Check, ConstraintRegistry, ProjectorRegistry};
+use crate::verify::compose::{Combination, Coordinates};
+use crate::verify::registry::{Check, ConstraintRegistry, ProjectorRegistry};
 use crate::spec::{ConstraintSpec, VerificationSpec};
 
 /// Result of evaluating a single constraint combination.
@@ -84,7 +83,7 @@ pub fn evaluate_all(
             // Rebuild coordinates after mutation
             combination.coordinates = Coordinates::new(combination.values.clone());
             // Rebuild point after mutation
-            combination.point = crate::compose::Point::new(combination.coordinates.clone());
+            combination.point = crate::verify::compose::Point::new(combination.coordinates.clone());
             // Check field domain validity
             for (axis, (name, field_spec)) in spec.fields.iter().enumerate() {
                 if let Some(value) = combination.coordinates.get_axis(axis) {
@@ -184,7 +183,7 @@ mod tests {
             vec![],
             ProjectorSpec::Identity { field: "x".into() },
         );
-        let combos = crate::compose::expand_all(&spec).expect("expand should succeed");
+        let combos = crate::verify::compose::expand_all(&spec).expect("expand should succeed");
         (spec, combos)
     }
 
@@ -223,9 +222,9 @@ mod tests {
             vec![],
             ProjectorSpec::Identity { field: "x".into() },
         );
-        let coord = crate::compose::Coordinates::new(vec![20]);
-        let point = crate::compose::Point::new(coord.clone());
-        let combo = crate::compose::Combination {
+        let coord = crate::verify::compose::Coordinates::new(vec![20]);
+        let point = crate::verify::compose::Point::new(coord.clone());
+        let combo = crate::verify::compose::Combination {
             values: vec![20],
             coordinates: coord,
             point,
@@ -274,7 +273,7 @@ mod tests {
             }],
             ProjectorSpec::Sum,
         );
-        let combos = crate::compose::expand_all(&spec).unwrap();
+        let combos = crate::verify::compose::expand_all(&spec).unwrap();
         assert_eq!(combos.len(), 1, "only one combo: a=b=5");
         let results = evaluate_all(
             &spec,
@@ -313,7 +312,7 @@ mod tests {
             }],
             ProjectorSpec::Sum,
         );
-        let combos = crate::compose::expand_all(&spec).unwrap();
+        let combos = crate::verify::compose::expand_all(&spec).unwrap();
         assert_eq!(combos.len(), 1, "one combo but values differ");
         let results = evaluate_all(
             &spec,
@@ -354,7 +353,7 @@ mod tests {
                 field: "coord".into(),
             },
         );
-        let combos = crate::compose::expand_all(&spec).unwrap();
+        let combos = crate::verify::compose::expand_all(&spec).unwrap();
         assert_eq!(combos.len(), 3, "3 field values");
         let results = evaluate_all(
             &spec,
@@ -412,7 +411,7 @@ mod tests {
             }],
             ProjectorSpec::Sum,
         );
-        let combos = crate::compose::expand_all(&spec).unwrap();
+        let combos = crate::verify::compose::expand_all(&spec).unwrap();
         assert_eq!(combos.len(), 1);
         let results = evaluate_all(
             &spec,
@@ -450,7 +449,7 @@ mod tests {
             }],
             ProjectorSpec::Sum,
         );
-        let combos = crate::compose::expand_all(&spec).unwrap();
+        let combos = crate::verify::compose::expand_all(&spec).unwrap();
         let results = evaluate_all(
             &spec,
             combos,
@@ -480,7 +479,7 @@ mod tests {
             }],
             ProjectorSpec::Identity { field: "x".into() },
         );
-        let combos = crate::compose::expand_all(&spec).unwrap();
+        let combos = crate::verify::compose::expand_all(&spec).unwrap();
         assert_eq!(combos.len(), 3);
         let results = evaluate_all(
             &spec,
@@ -512,7 +511,7 @@ mod tests {
             }],
             ProjectorSpec::Identity { field: "x".into() },
         );
-        let combos = crate::compose::expand_all(&spec).unwrap();
+        let combos = crate::verify::compose::expand_all(&spec).unwrap();
         let results = evaluate_all(
             &spec,
             combos,
@@ -543,7 +542,7 @@ mod tests {
             }],
             ProjectorSpec::Identity { field: "x".into() },
         );
-        let combos = crate::compose::expand_all(&spec).unwrap();
+        let combos = crate::verify::compose::expand_all(&spec).unwrap();
         let results = evaluate_all(
             &spec,
             combos,
@@ -574,7 +573,7 @@ mod tests {
             }],
             ProjectorSpec::Identity { field: "x".into() },
         );
-        let combos = crate::compose::expand_all(&spec).unwrap();
+        let combos = crate::verify::compose::expand_all(&spec).unwrap();
         let results = evaluate_all(
             &spec,
             combos,
@@ -605,7 +604,7 @@ mod tests {
             }],
             ProjectorSpec::Identity { field: "x".into() },
         );
-        let combos = crate::compose::expand_all(&spec).unwrap();
+        let combos = crate::verify::compose::expand_all(&spec).unwrap();
         assert_eq!(combos.len(), 3);
         let results = evaluate_all(
             &spec,
@@ -648,7 +647,7 @@ mod tests {
             }],
             ProjectorSpec::Identity { field: "op".into() },
         );
-        let combos = crate::compose::expand_all(&spec).unwrap();
+        let combos = crate::verify::compose::expand_all(&spec).unwrap();
         // 3 × 4 = 12 raw combinations
         assert_eq!(combos.len(), 12);
         let results = evaluate_all(
@@ -717,7 +716,7 @@ mod tests {
             }],
             ProjectorSpec::Sum,
         );
-        let combos = crate::compose::expand_all(&spec).unwrap();
+        let combos = crate::verify::compose::expand_all(&spec).unwrap();
         // 2 × 4 × 4 = 32 raw combinations
         assert_eq!(combos.len(), 32);
         let results = evaluate_all(

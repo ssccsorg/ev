@@ -44,7 +44,7 @@ pub struct SynthesisMetrics {
     pub message: Option<String>,
 }
 
-impl From<SynthesisMetrics> for crate::fih::Fact {
+impl From<SynthesisMetrics> for crate::report::fih::Fact {
     fn from(m: SynthesisMetrics) -> Self {
         let origin = format!("ev/synthesis/{}", m.tool);
         let mut payload = serde_json::json!({
@@ -59,7 +59,7 @@ impl From<SynthesisMetrics> for crate::fih::Fact {
         if let Some(ref extra) = m.extra {
             payload["extra"] = extra.clone();
         }
-        crate::fih::Fact::new(
+        crate::report::fih::Fact::new(
             "synthesis_result",
             &origin,
             &m.module_name,
@@ -709,7 +709,7 @@ mod tests {
             status: "ok".into(),
             message: None,
         };
-        let fact: crate::fih::Fact = metrics.into();
+        let fact: crate::report::fih::Fact = metrics.into();
 
         assert_eq!(fact.fact_type, "synthesis_result");
         assert_eq!(fact.origin, "ev/synthesis/yosys");
@@ -735,7 +735,7 @@ mod tests {
             status: "error".into(),
             message: Some("yosys not found".into()),
         };
-        let fact: crate::fih::Fact = metrics.into();
+        let fact: crate::report::fih::Fact = metrics.into();
 
         assert_eq!(fact.fact_type, "synthesis_result");
         let p: serde_json::Value = serde_json::from_slice(&fact.payload).unwrap();
