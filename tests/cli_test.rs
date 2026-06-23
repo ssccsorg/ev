@@ -218,7 +218,7 @@ fn synth_json_with_mock_backend() {
 }
 
 #[test]
-#[ignore = "slow: 33M combinations, run with -- --include-ignored"]
+#[ignore = "slow: 33M combinations, run with -- --include-ignored (CI skips by default)"]
 fn verify_cva6_xif_ref_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("verify")
