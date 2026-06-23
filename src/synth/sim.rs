@@ -27,7 +27,7 @@
 //!  └── CoverageCapable  — return coverage data (which encodings exercised)
 //! ```
 
-use crate::evaluate::Evaluation;
+use crate::verify::evaluate::Evaluation;
 use crate::spec::VerificationSpec;
 
 // ============================================================================
@@ -115,7 +115,7 @@ pub trait CoverageCapable: RunSimulation {
 ///
 /// Behaviour: all encodings that passed static verification are reported
 /// as passed. No tool is invoked.
-impl From<&SimulationResult> for crate::fih::Fact {
+impl From<&SimulationResult> for crate::report::fih::Fact {
     fn from(r: &SimulationResult) -> Self {
         let origin = format!("ev/simulation/{}", r.tool);
         let payload = serde_json::json!({
@@ -125,7 +125,7 @@ impl From<&SimulationResult> for crate::fih::Fact {
             "passed": r.evaluations.iter().filter(|e| e.passed).count(),
             "failed": r.evaluations.iter().filter(|e| !e.passed).count(),
         });
-        crate::fih::Fact::new(
+        crate::report::fih::Fact::new(
             "simulation_result",
             &origin,
             "simulation",
