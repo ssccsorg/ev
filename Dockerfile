@@ -57,11 +57,11 @@ RUN cargo build --release
 
 # Smoke tests
 RUN EV_SYNTH_BACKEND=mock ./target/release/ev verify \
-    --target tests/fixtures/all_pass.xif.yaml
+    --target tests/fixtures/common/all_pass.xif.yaml
 RUN ./target/release/ev synth \
-    --target tests/fixtures/all_pass.xif.yaml
+    --target tests/fixtures/common/all_pass.xif.yaml
 RUN EV_SIM_BACKEND=spike EV_PK_PATH=/usr/local/riscv64-unknown-elf/bin/pk \
     ./target/release/ev simulate \
-    --target tests/fixtures/all_pass.xif.yaml
+    --target tests/fixtures/common/all_pass.xif.yaml
 
 ENTRYPOINT ["./target/release/ev"]
