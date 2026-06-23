@@ -25,8 +25,8 @@ if [[ "${1:-}" != "--help" && "${1:-}" != "-h" && "${1:-}" != "--demo" ]]; then
 fi
 
 EV=./target/release/ev
-ALL_PASS=tests/fixtures/all_pass.xif.yaml
-MIXED=tests/fixtures/sample.xif.yaml
+ALL_PASS=tests/fixtures/common/all_pass.xif.yaml
+MIXED=tests/fixtures/common/sample.xif.yaml
 
 # ── Helpers ───────────────────────────────────────────────────────────
 
@@ -103,9 +103,9 @@ verify_sim() {
     echo "=== spike simulation (sample fixture) ==="
     _sim "$MIXED"
     echo "=== spike simulation (cva6 xif ref r4) ==="
-    _sim "tests/fixtures/cva6_xif_ref_r4.xif.yaml"
+    _sim "tests/fixtures/cva6/xif_ref_r4.xif.yaml"
     echo "=== spike simulation (cva6 xif encoding-only) ==="
-    _sim "tests/fixtures/cva6_xif_encoding.xif.yaml"
+    _sim "tests/fixtures/cva6/xif_encoding.xif.yaml"
 }
 
 verify_fixtures() {
@@ -121,11 +121,11 @@ verify_fixtures() {
 
 verify_large_fixtures() {
     echo "=== cva6 xif ref fixture (33M combos) ==="
-    $EV verify --target "tests/fixtures/cva6_xif_ref.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
+    $EV verify --target "tests/fixtures/cva6/xif_ref.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
     echo "=== cva6 xif ref r4 fixture (2M combos, full rs2 range) ==="
-    $EV verify --target "tests/fixtures/cva6_xif_ref_r4.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
+    $EV verify --target "tests/fixtures/cva6/xif_ref_r4.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
     echo "=== cva6 xif madd fixture (32k combos, MADD opcode space) ==="
-    $EV verify --target "tests/fixtures/cva6_xif_madd.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
+    $EV verify --target "tests/fixtures/cva6/xif_madd.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
 }
 
 # ── Modes ─────────────────────────────────────────────────────────────
