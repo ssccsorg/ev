@@ -2,9 +2,9 @@
 //!
 //! Uses pluggable checks resolved from registries.
 
+use crate::spec::{ConstraintSpec, VerificationSpec};
 use crate::verify::compose::{Combination, Coordinates};
 use crate::verify::registry::{Check, ConstraintRegistry, ProjectorRegistry};
-use crate::spec::{ConstraintSpec, VerificationSpec};
 
 /// Result of evaluating a single constraint combination.
 #[derive(Debug, Clone)]

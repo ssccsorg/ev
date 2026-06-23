@@ -14,7 +14,7 @@ pub mod report {
     pub mod reporter;
     pub use fih::Fact;
     pub use reporter::{
-        CsvReporter, JsonReporter, ReporterCapable, TextReporter, TraceReporter, hash_spec,
+        hash_spec, CsvReporter, JsonReporter, ReporterCapable, TextReporter, TraceReporter,
     };
 }
 pub mod format;
