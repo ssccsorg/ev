@@ -133,7 +133,13 @@ _timed() {
     return ${ec}
 }
 
+# Skip large fixture verification in CI (GitHub Actions runners may OOM/timeout).
+# Set EV_SKIP_LARGE_FIXTURES=1 to skip (default: run).
 verify_large_fixtures() {
+    if [ "${EV_SKIP_LARGE_FIXTURES:-0}" = "1" ]; then
+        echo "  (skipped — EV_SKIP_LARGE_FIXTURES=1)"
+        return 0
+    fi
     local ec=0
     _timed "cva6 xif ref fixture (33M combos)" $EV verify --target "tests/fixtures/cva6/xif_ref.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
     _timed "cva6 xif ref r4 fixture (2M combos, full rs2 range)" $EV verify --target "tests/fixtures/cva6/xif_ref_r4.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
