@@ -1,11 +1,13 @@
 use clap::{Parser, Subcommand, ValueEnum};
-use ev::verify::{ConstraintRegistry, ProjectorRegistry};
-use ev::report::{CsvReporter, JsonReporter, ReporterCapable, TextReporter, TraceReporter, hash_spec, Fact};
+use ev::report::{
+    hash_spec, CsvReporter, Fact, JsonReporter, ReporterCapable, TextReporter, TraceReporter,
+};
+use ev::spec::VerificationSpec;
 use ev::synth::backends::yosys::YosysBackend;
 use ev::synth::sim::{MockSimBackend, RunSimulation, SimulationResult};
 use ev::synth::{GenerateRtl, MockSynthesisBackend, RunSynthesis, SvGenerator, SynthesisMetrics};
-use ev::spec::VerificationSpec;
-use ev::verify::{expand_all, evaluate_all};
+use ev::verify::{evaluate_all, expand_all};
+use ev::verify::{ConstraintRegistry, ProjectorRegistry};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -89,7 +91,11 @@ fn print_synthesis_report(report: &SynthesisMetrics, json: bool) {
         let fact: Fact = report.clone().into();
         println!("{}", serde_json::to_string_pretty(&fact).unwrap());
     } else {
-        let status_label = if report.status == "ok" { "ok" } else { "FAILED" };
+        let status_label = if report.status == "ok" {
+            "ok"
+        } else {
+            "FAILED"
+        };
         println!("Synthesis: {} [{}]", report.module_name, status_label);
         println!("  backend:  {}", report.tool);
         println!("  version:  {}", report.version);
@@ -140,8 +146,8 @@ fn main() -> anyhow::Result<()> {
             let constraint_registry = ConstraintRegistry::default();
             let projector_registry = ProjectorRegistry::default();
 
-            let combinations = expand_all(&spec)
-                .map_err(|e| anyhow::anyhow!("domain expansion failed: {}", e))?;
+            let combinations =
+                expand_all(&spec).map_err(|e| anyhow::anyhow!("domain expansion failed: {}", e))?;
             let evaluations = evaluate_all(
                 &spec,
                 combinations,

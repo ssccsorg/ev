@@ -27,8 +27,8 @@
 //!  └── CoverageCapable  — return coverage data (which encodings exercised)
 //! ```
 
-use crate::verify::evaluate::Evaluation;
 use crate::spec::VerificationSpec;
+use crate::verify::evaluate::Evaluation;
 
 // ============================================================================
 // Simulation traits
