@@ -7,7 +7,7 @@
 //! `evaluations`). It does NOT depend on `VerificationSpec` so that any colony
 //! — not just ev — can implement it.
 
-use crate::evaluate::Evaluation;
+use crate::verify::evaluate::Evaluation;
 use sha2::{Digest, Sha256};
 
 /// Capability: format and output verification results.
@@ -293,7 +293,7 @@ impl ReporterCapable for JsonReporter {
                 .collect(),
         };
 
-        let fact = crate::fih::Fact::new(
+        let fact = crate::report::fih::Fact::new(
             "verification_result",
             &origin,
             target,

@@ -17,7 +17,7 @@ fn verify_text_all_pass() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("verify")
         .arg("--target")
-        .arg("tests/fixtures/all_pass.xif.yaml")
+        .arg("tests/fixtures/common/all_pass.xif.yaml")
         .output()
         .expect("failed to run ev verify on all_pass fixture");
     assert!(output.status.success(), "ev verify should exit 0");
@@ -33,7 +33,7 @@ fn verify_json_contains_fact_envelope() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("verify")
         .arg("--target")
-        .arg("tests/fixtures/sample.xif.yaml")
+        .arg("tests/fixtures/common/sample.xif.yaml")
         .arg("--json")
         .output()
         .expect("failed to run ev verify --json");
@@ -53,7 +53,7 @@ fn verify_text_mixed_fixture_exits_1() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("verify")
         .arg("--target")
-        .arg("tests/fixtures/sample.xif.yaml")
+        .arg("tests/fixtures/common/sample.xif.yaml")
         .output()
         .expect("failed to run ev verify on mixed fixture");
     assert!(
@@ -69,7 +69,7 @@ fn verify_rv32i_csr_access_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("verify")
         .arg("--target")
-        .arg("tests/fixtures/rv32i_csr_access.xif.yaml")
+        .arg("tests/fixtures/ibex/csr_access.xif.yaml")
         .arg("--json")
         .output()
         .expect("failed to run ev verify on rv32i_csr_access fixture");
@@ -89,7 +89,7 @@ fn verify_malformed_no_fields_exits_zero() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("verify")
         .arg("--target")
-        .arg("tests/fixtures/malformed_no_fields.xif.yaml")
+        .arg("tests/fixtures/common/malformed_no_fields.xif.yaml")
         .output()
         .expect("failed to run ev verify on malformed fixture");
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -105,7 +105,7 @@ fn verify_malformed_bad_constraint_type_exits_nonzero() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("verify")
         .arg("--target")
-        .arg("tests/fixtures/malformed_bad_type.xif.yaml")
+        .arg("tests/fixtures/common/malformed_bad_type.xif.yaml")
         .output()
         .expect("failed to run ev verify on malformed constraint fixture");
     assert!(
@@ -125,7 +125,7 @@ fn verify_ibex_alu_ext_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("verify")
         .arg("--target")
-        .arg("tests/fixtures/ibex_alu_ext.xif.yaml")
+        .arg("tests/fixtures/ibex/alu_ext.xif.yaml")
         .arg("--json")
         .output()
         .expect("failed to run ev verify on ibex_alu_ext fixture");
@@ -141,7 +141,7 @@ fn verify_cva6_xif_mac_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("verify")
         .arg("--target")
-        .arg("tests/fixtures/cva6_xif_mac.xif.yaml")
+        .arg("tests/fixtures/cva6/xif_mac.xif.yaml")
         .arg("--json")
         .output()
         .expect("failed to run ev verify on cva6_xif_mac fixture");
@@ -153,11 +153,12 @@ fn verify_cva6_xif_mac_fixture() {
 }
 
 #[test]
+#[ignore = "medium: 2M combinations, ~25s on M1 Max (CI may timeout)"]
 fn verify_cva6_xif_ref_r4_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("verify")
         .arg("--target")
-        .arg("tests/fixtures/cva6_xif_ref_r4.xif.yaml")
+        .arg("tests/fixtures/cva6/xif_ref_r4.xif.yaml")
         .arg("--json")
         .output()
         .expect("failed to run ev verify on cva6_xif_ref_r4 fixture");
@@ -177,7 +178,7 @@ fn synth_text_with_mock_backend() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("synth")
         .arg("--target")
-        .arg("tests/fixtures/all_pass.xif.yaml")
+        .arg("tests/fixtures/common/all_pass.xif.yaml")
         .env("EV_SYNTH_BACKEND", "mock")
         .output()
         .expect("failed to run ev synth with mock backend");
@@ -200,7 +201,7 @@ fn synth_json_with_mock_backend() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("synth")
         .arg("--target")
-        .arg("tests/fixtures/all_pass.xif.yaml")
+        .arg("tests/fixtures/common/all_pass.xif.yaml")
         .arg("--json")
         .env("EV_SYNTH_BACKEND", "mock")
         .output()
@@ -218,12 +219,12 @@ fn synth_json_with_mock_backend() {
 }
 
 #[test]
-#[ignore = "slow: 33M combinations, run with -- --include-ignored"]
+#[ignore = "slow: 33M combinations, run with -- --include-ignored (CI skips by default)"]
 fn verify_cva6_xif_ref_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("verify")
         .arg("--target")
-        .arg("tests/fixtures/cva6_xif_ref.xif.yaml")
+        .arg("tests/fixtures/cva6/xif_ref.xif.yaml")
         .arg("--json")
         .output()
         .expect("failed to run ev verify on cva6_xif_ref fixture");

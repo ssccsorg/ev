@@ -1,7 +1,7 @@
 //! Type registries — map named constraint/projector types to builders.
 
-use crate::compose::{Coordinates, Point};
 use crate::spec::{ConstraintSpec, FieldSpec, ProjectorSpec};
+use crate::verify::compose::{Coordinates, Point};
 use std::collections::{BTreeMap, HashMap};
 
 // ============================================================================

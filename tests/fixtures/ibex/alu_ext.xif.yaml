@@ -1,0 +1,70 @@
+# Ibex-style custom ALU extension — hypothetical spec.
+#
+# Based on Ibex (CV32E40P) ALU architecture:
+#   - RISC-V OPCODE_OP (0x33) register-register operations
+#   - funct7[6:0] + funct3[2:0] select ALU operation
+#   - rs1, rs2 source registers, rd destination register
+#
+# Real Ibex supports RV32IMCB (50+ ALU ops). This spec defines a subset
+# of 8 custom operations as a hypothetical extension, following the same
+# funct7/funct3 decoding pattern.
+#
+# Custom ALU operations:
+#   funct7=0x00, funct3=0: CUSTOM_NOP   (no operation, rd=0, no writeback)
+#   funct7=0x10, funct3=0: CUSTOM_ADD   (rd = rs1 + rs2)
+#   funct7=0x10, funct3=1: CUSTOM_SUB   (rd = rs1 - rs2)
+#   funct7=0x10, funct3=2: CUSTOM_AND   (rd = rs1 & rs2)
+#   funct7=0x10, funct3=3: CUSTOM_OR    (rd = rs1 | rs2)
+#   funct7=0x10, funct3=4: CUSTOM_XOR   (rd = rs1 ^ rs2)
+#   funct7=0x20, funct3=0: CUSTOM_SLT   (rd = (rs1 < rs2) ? 1 : 0)
+#   funct7=0x20, funct3=1: CUSTOM_SLTU  (rd = (rs1 < rs2 unsigned) ? 1 : 0)
+#
+# Register range sampled to keep verification manageable:
+#   rs1, rs2 ∈ [0, 7]  (8 registers, 3 bits)
+#   rd    ∈ [0, 7]
+#
+# Verification space: 128 × 8 × 8 × 8 × 8 = 524,288 raw combinations
+#   cross (funct7 → funct3): funct7=0x00 → funct3=0 only
+#                              funct7=0x10 → funct3 ∈ {0,1,2,3,4}
+#                              funct7=0x20 → funct3 ∈ {0,1}
+# Valid: 1×8×8×8×8 + 5×8×8×8×8 + 2×8×8×8×8 = 4,096 pass
+#
+# Constraints:
+#   CUSTOM_NOP: rd must be 0 (no writeback)
+
+target: ibex_custom_alu
+fields:
+  funct7:
+    range: [0, 127]
+  funct3:
+    range: [0, 7]
+  rs1:
+    range: [0, 7]
+  rs2:
+    range: [0, 7]
+  rd:
+    range: [0, 7]
+constraints:
+  # Only funct7=0x00, 0x10, 0x20 are valid.
+  - type: oneof
+    field: "funct7"
+    values: [0x00, 0x10, 0x20]
+
+  # funct7 → funct3 sub-decoding.
+  - type: cross
+    field_a: "funct7"
+    field_b: "funct3"
+    mapping:
+      0x00: [0]
+      0x10: [0, 1, 2, 3, 4]
+      0x20: [0, 1]
+
+  # CUSTOM_NOP (funct7=0x00): force rd=0, no writeback.
+  - type: enable_mask
+    field: "funct7"
+    value: 0x00
+    disable: ["rd"]
+
+projector:
+  type: identity
+  field: "rd"

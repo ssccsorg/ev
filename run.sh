@@ -25,8 +25,8 @@ if [[ "${1:-}" != "--help" && "${1:-}" != "-h" && "${1:-}" != "--demo" ]]; then
 fi
 
 EV=./target/release/ev
-ALL_PASS=tests/fixtures/all_pass.xif.yaml
-MIXED=tests/fixtures/sample.xif.yaml
+ALL_PASS=tests/fixtures/common/all_pass.xif.yaml
+MIXED=tests/fixtures/common/sample.xif.yaml
 
 # ── Helpers ───────────────────────────────────────────────────────────
 
@@ -103,9 +103,9 @@ verify_sim() {
     echo "=== spike simulation (sample fixture) ==="
     _sim "$MIXED"
     echo "=== spike simulation (cva6 xif ref r4) ==="
-    _sim "tests/fixtures/cva6_xif_ref_r4.xif.yaml"
+    _sim "tests/fixtures/cva6/xif_ref_r4.xif.yaml"
     echo "=== spike simulation (cva6 xif encoding-only) ==="
-    _sim "tests/fixtures/cva6_xif_encoding.xif.yaml"
+    _sim "tests/fixtures/cva6/xif_encoding.xif.yaml"
 }
 
 verify_fixtures() {
@@ -120,22 +120,29 @@ verify_fixtures() {
 }
 
 # Time a command and print elapsed time.
-# Always returns 0 so that set -e is not triggered by expected fixture failures.
 _timed() {
     local label="$1"; shift
     echo "=== ${label} ==="
     local start end elapsed
     start=$(date +%s%N)
-    "$@" 2>&1 | grep -E '(target:|total:|passed:|failed:|elapsed)' || true
+    local ec=0; "$@" || ec=$?
     end=$(date +%s%N)
     elapsed=$(( (end - start) / 1000000 ))
-    echo "  elapsed: ${elapsed}ms"
+    echo "  elapsed: ${elapsed}ms (exit: ${ec})"
+    return ${ec}
 }
 
 verify_large_fixtures() {
-    _timed "cva6 xif ref fixture (33M combos)" $EV verify --target "tests/fixtures/cva6_xif_ref.xif.yaml"
-    _timed "cva6 xif ref r4 fixture (2M combos, full rs2 range)" $EV verify --target "tests/fixtures/cva6_xif_ref_r4.xif.yaml"
-    _timed "cva6 xif madd fixture (32k combos, MADD opcode space)" $EV verify --target "tests/fixtures/cva6_xif_madd.xif.yaml"
+    # 33M fixture skipped in CI to conserve Actions minutes.
+    if [ -n "${CI:-}" ]; then
+        echo "  (skipped 33M fixture in CI — run ./run.sh --verify locally)"
+    else
+        _timed "cva6 xif ref fixture (33M combos)" $EV verify --target "tests/fixtures/cva6/xif_ref.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
+    fi
+    _timed "cva6 xif ref r4 fixture (2M combos)" $EV verify --target "tests/fixtures/cva6/xif_ref_r4.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
+    _timed "cva6 xif madd fixture (32k combos)" $EV verify --target "tests/fixtures/cva6/xif_madd.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
+    _timed "cva6 xif mac fixture (32k combos)" $EV verify --target "tests/fixtures/cva6/xif_mac.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
+    _timed "ibex custom alu fixture (524k combos)" $EV verify --target "tests/fixtures/ibex/alu_ext.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
 }
 
 # ── Modes ─────────────────────────────────────────────────────────────
@@ -177,7 +184,7 @@ case ${1:-} in
         verify_large_fixtures || true
         verify_sim || true
         echo ""
-        echo "  Verification passed."
+        echo "  Verification passed (ignoring expected fixture failures)."
         echo "══════════════════════════════════════"
         ;;
     --demo)

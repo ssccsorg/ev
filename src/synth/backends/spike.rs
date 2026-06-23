@@ -34,9 +34,9 @@
 //! * `EV_PK_PATH` — path to the pk proxy kernel (default: "pk")
 //! * `EV_RISCV_CC` — RISC-V cross-compiler (default: "riscv64-unknown-elf-gcc")
 
-use crate::evaluate::Evaluation;
 use crate::spec::{ConstraintSpec, EncodingLayout, VerificationSpec};
 use crate::synth::sim::{RunSimulation, SimulationResult};
+use crate::verify::evaluate::Evaluation;
 use std::collections::BTreeMap;
 use std::path::Path;
 
