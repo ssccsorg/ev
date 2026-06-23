@@ -62,14 +62,6 @@ jobs:
           EV_PK_PATH: /usr/local/riscv64-unknown-elf/bin/pk
         shell: bash
 
-      # Depends on the previous step (Full pipeline) which does 'bash run.sh'
-      # that builds the release binary via 'cargo build --release'.
-      - name: Spike simulation smoke test
-        run: |
-          docker run --rm --entrypoint bash \
-            -v ${{ github.workspace }}:/workspace \
-            -e EV_SIM_BACKEND=spike \
-            -e EV_PK_PATH=/usr/local/riscv64-unknown-elf/bin/pk \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
-            -c "cd /workspace && ./target/release/ev simulate --target tests/fixtures/all_pass.xif.yaml"
-        shell: bash
+      # The full pipeline (run.sh) already includes verify_sim which runs spike
+      # inside the Docker container when spike is not on the host (CI runner).
+      # No separate spike smoke test needed.
