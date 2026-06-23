@@ -119,15 +119,27 @@ verify_fixtures() {
     echo "  $(echo "$json_out" | python3 -c "import sys,json; d=json.load(sys.stdin); p=json.loads(bytes(d['payload']).decode()); print('Total: %d, Passed: %d, Failed: %d' % (p['total'], p['passed'], p['failed']))" 2>/dev/null || echo 'parse error')"
 }
 
+# Time a command and print elapsed time, exit code.
+# Returns the exit code of the command.
+_timed() {
+    local label="$1"; shift
+    echo "=== ${label} ==="
+    local start end elapsed
+    start=$(date +%s%N)
+    local ec=0; "$@" || ec=$?
+    end=$(date +%s%N)
+    elapsed=$(( (end - start) / 1000000 ))
+    echo "  elapsed: ${elapsed}ms (exit: ${ec})"
+    return ${ec}
+}
+
 verify_large_fixtures() {
-    echo "=== cva6 xif ref fixture (33M combos) ==="
-    $EV verify --target "tests/fixtures/cva6/xif_ref.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
-    echo "=== cva6 xif ref r4 fixture (2M combos, full rs2 range) ==="
-    $EV verify --target "tests/fixtures/cva6/xif_ref_r4.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
-    echo "=== cva6 xif madd fixture (32k combos, MADD opcode space) ==="
-    $EV verify --target "tests/fixtures/cva6/xif_madd.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
-    echo "=== ibex custom alu fixture (524k combos) ==="
-    $EV verify --target "tests/fixtures/ibex/alu_ext.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
+    local ec=0
+    _timed "cva6 xif ref fixture (33M combos)" $EV verify --target "tests/fixtures/cva6/xif_ref.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
+    _timed "cva6 xif ref r4 fixture (2M combos, full rs2 range)" $EV verify --target "tests/fixtures/cva6/xif_ref_r4.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
+    _timed "cva6 xif madd fixture (32k combos, MADD opcode space)" $EV verify --target "tests/fixtures/cva6/xif_madd.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
+    _timed "cva6 xif mac fixture (32k combos, MAC variant)" $EV verify --target "tests/fixtures/cva6/xif_mac.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
+    _timed "ibex custom alu fixture (524k combos)" $EV verify --target "tests/fixtures/ibex/alu_ext.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
 }
 
 # ── Modes ─────────────────────────────────────────────────────────────

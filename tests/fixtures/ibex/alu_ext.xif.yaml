@@ -23,11 +23,11 @@
 #   rs1, rs2 ∈ [0, 7]  (8 registers, 3 bits)
 #   rd    ∈ [0, 7]
 #
-# Verification space: 2 × 8 × 8 × 8 = 1,024 raw combinations
+# Verification space: 128 × 8 × 8 × 8 × 8 = 524,288 raw combinations
 #   cross (funct7 → funct3): funct7=0x00 → funct3=0 only
 #                              funct7=0x10 → funct3 ∈ {0,1,2,3,4}
 #                              funct7=0x20 → funct3 ∈ {0,1}
-# Valid: 1×8×8×8 + 5×8×8×8 + 2×8×8×8 = 512 pass
+# Valid: 1×8×8×8×8 + 5×8×8×8×8 + 2×8×8×8×8 = 4,096 pass
 #
 # Constraints:
 #   CUSTOM_NOP: rd must be 0 (no writeback)

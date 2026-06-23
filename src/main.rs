@@ -33,28 +33,36 @@ enum OutputFormat {
 enum Commands {
     /// Static constraint verification against field specification
     Verify {
+        /// Path to the YAML constraint file (XIF format)
         #[arg(short, long)]
         target: PathBuf,
+        /// Output results as JSON instead of text (deprecated, use --format instead)
         #[arg(long)]
         json: bool,
+        /// Output format: text, json, csv, or trace (default: text)
         #[arg(long, value_enum)]
         format: Option<OutputFormat>,
     },
 
     /// SystemVerilog RTL generation and synthesis
     Synth {
+        /// Path to the YAML constraint file
         #[arg(short, long)]
         target: PathBuf,
+        /// Output results as JSON instead of text
         #[arg(long)]
         json: bool,
     },
 
     /// ISA simulation verification via Spike
     Simulate {
+        /// Path to the YAML constraint file
         #[arg(short, long)]
         target: PathBuf,
+        /// Output results as JSON instead of text (deprecated, use --format instead)
         #[arg(long)]
         json: bool,
+        /// Output format: text, json, csv, or trace (default: text)
         #[arg(long, value_enum)]
         format: Option<OutputFormat>,
     },
