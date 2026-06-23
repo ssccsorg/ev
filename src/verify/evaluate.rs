@@ -3,7 +3,7 @@
 //! Uses pluggable checks resolved from registries.
 
 use crate::spec::{ConstraintSpec, VerificationSpec};
-use crate::verify::compose::{Combination, Coordinates};
+use crate::verify::compose::Combination;
 use crate::verify::registry::{Check, ConstraintRegistry, ProjectorRegistry};
 
 /// Result of evaluating a single constraint combination.
@@ -45,45 +45,11 @@ pub fn evaluate_all(
         .resolve(&spec.projector, &spec.fields)
         .expect("projector type must be registered");
 
-    // Extract enable_mask constraints for pre-processing.
-    let enable_masks: Vec<&ConstraintSpec> = spec
-        .constraints
-        .iter()
-        .filter(|c| matches!(c, ConstraintSpec::EnableMask { .. }))
-        .collect();
-    let field_names: Vec<&String> = spec.fields.keys().collect();
-
     combinations
         .into_iter()
-        .map(|mut combination| {
-            // Apply enable_mask pre-processing: force disabled fields to 0
-            // when the trigger field matches the specified value.
-            for mask in &enable_masks {
-                if let ConstraintSpec::EnableMask {
-                    field,
-                    value,
-                    disable,
-                } = mask
-                {
-                    if let Some(trigger_idx) = field_names.iter().position(|n| *n == field) {
-                        if combination.values.get(trigger_idx) == Some(value) {
-                            for disabled_field in disable {
-                                if let Some(idx) =
-                                    field_names.iter().position(|n| *n == disabled_field)
-                                {
-                                    if let Some(v) = combination.values.get_mut(idx) {
-                                        *v = 0;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            // Rebuild coordinates after mutation
-            combination.coordinates = Coordinates::new(combination.values.clone());
-            // Rebuild point after mutation
-            combination.point = crate::verify::compose::Point::new(combination.coordinates.clone());
+        .map(|combination| {
+            // enable_mask has already been applied by expand_all() in compose.rs.
+            // The combination's values, coordinates, and point reflect masked fields.
             // Check field domain validity
             for (axis, (name, field_spec)) in spec.fields.iter().enumerate() {
                 if let Some(value) = combination.coordinates.get_axis(axis) {
