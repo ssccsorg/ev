@@ -153,6 +153,7 @@ fn verify_cva6_xif_mac_fixture() {
 }
 
 #[test]
+#[ignore = "medium: 2M combinations, ~25s on M1 Max (CI may timeout)"]
 fn verify_cva6_xif_ref_r4_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("verify")
