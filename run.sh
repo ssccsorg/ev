@@ -135,7 +135,13 @@ _timed() {
 
 verify_large_fixtures() {
     local ec=0
-    _timed "cva6 xif ref fixture (33M combos)" $EV verify --target "tests/fixtures/cva6/xif_ref.xif.yaml" --json 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); p=json.loads(bytes(d['payload']).decode()); print('target: %s\ntotal:  %d\npassed: %d\nfailed: %d' % (d['target'], p['total'], p['passed'], p['failed']))" 2>/dev/null || echo '  (parse error)'
+    # 33M fixture is skipped in default/full pipeline to conserve CI minutes.
+    # Run with ./run.sh --verify for full coverage including 33M.
+    if [ -n "${CI:-}" ]; then
+        echo "  (skipped 33M fixture in CI — run ./run.sh --verify locally)"
+    else
+        _timed "cva6 xif ref fixture (33M combos)" $EV verify --target "tests/fixtures/cva6/xif_ref.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
+    fi
     _timed "cva6 xif ref r4 fixture (2M combos, full rs2 range)" $EV verify --target "tests/fixtures/cva6/xif_ref_r4.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
     _timed "cva6 xif madd fixture (32k combos, MADD opcode space)" $EV verify --target "tests/fixtures/cva6/xif_madd.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
     _timed "cva6 xif mac fixture (32k combos, MAC variant)" $EV verify --target "tests/fixtures/cva6/xif_mac.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
