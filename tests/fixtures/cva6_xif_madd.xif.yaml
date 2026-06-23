@@ -1,0 +1,43 @@
+# CVA6 CV-X-IF MADD/MSUB opcode space.
+#
+# Hardware decoder mask table (cvxif_instr_pkg.sv) entries using
+# MADD opcode (0x43), MSUB opcode (0x47), NMSUB opcode (0x4B),
+# and NMADD opcode (0x4F) — NOT custom3 (0x7B).
+#
+# These are R4-format multiply-accumulate instructions with rs3 (3 register reads):
+#   MADD_RS3_R4  opcode 0x43, funct3=000: result = rs1 + rs2 + rs3
+#   MSUB_RS3_R4   opcode 0x47, funct3=000: result = rs1 - rs2 - rs3
+#   NMSUB_RS3_R4  opcode 0x4B, funct3=000: result = ~(rs1 - rs2 - rs3)
+#   NMADD_RS3_R4  opcode 0x4F, funct3=000: result = ~(rs1 + rs2 + rs3)
+#
+# All MADD variants have:
+#   register_read = 111 (rs1, rs2, rs3) per copro_alu.sv
+#   funct3=000 only (mask covers funct3 bits)
+#
+# These use R4 format (rs3 field) to pass the third operand.
+# Only funct3=000 is valid; funct3=001..111 are illegal.
+
+target: cva6_xif_madd
+encoding: r4
+fields:
+  opcode:
+    values: [0x43, 0x47, 0x4B, 0x4F]
+  funct3:
+    range: [0, 7]
+  func2:
+    range: [0, 3]
+  rs1:
+    range: [0, 3]
+  rs2:
+    range: [0, 3]
+  rs3:
+    range: [0, 3]
+  rd:
+    range: [0, 3]
+constraints:
+  # Only funct3=000 is valid.
+  - type: oneof
+    field: "funct3"
+    values: [0]
+projector:
+  type: sum

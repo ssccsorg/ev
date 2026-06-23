@@ -1,26 +1,23 @@
 # CVA6 CV-X-IF encoding space — encoding-only verification (register-reduced).
 #
 # Purpose: Validate funct3/funct7 encoding validity via Spike simulation.
-# Register fields (rs1, rs2, rd) are reduced to {0, 1} to minimize combinations
-# while preserving cross-field constraint verification.
+# Register fields (rs1, rs2, rd) are reduced to {0, 1} to minimize combinations.
 #
-# Phase 1 of two-phase verification strategy:
-#   Phase 1 (this fixture): encoding validity — funct3/funct7 only
-#   Phase 2 (separate):     register value independence
+# Cross-checked against actual CVA6 RTL:
+#   - cva6/core/cvxif_example/include/cvxif_instr_pkg.sv (hardware decoder)
+#   - cva6/verif/env/corev-dv/custom/cvxif_custom_instr.sv (DV class)
 #
-# Based on cva6/verif/env/corev-dv/custom/cvxif_custom_instr.sv:
-#   funct3=000: ADD variants  (funct7 sub-decoded)
-#   funct3=001: ADD           (funct7=0 only)
-#   funct3=010: EXC           (funct7=96 only)
-#   funct3=011..111: illegal
-#
-# funct7 sub-decoding (funct3=000):
-#   funct7=2  (0b0000010): U_ADD
-#   funct7=6  (0b0000110): S_ADD
-#   funct7=8  (0b0001000): ADD_MULTI
+# funct3=000: CUS_ADD_MULTI, CUS_U_ADD, CUS_S_ADD, CUS_NOP
+#   funct7=0  (0b0000000): NOP
+#   funct7=2  (0b0000010): CUS_U_ADD
+#   funct7=6  (0b0000110): CUS_S_ADD
+#   funct7=8  (0b0001000): CUS_ADD_MULTI
+# funct3=001: ADD / DOUBLE_RS1 / DOUBLE_RS2 / ADD_MULTI (via funct7=0, bits[26:25])
+# funct3=010: CUS_EXC           (funct7=96 only)
+# funct3=011..111: illegal
 #
 # Reduced space: 8×128×2×2×2 = 8,192 raw combinations
-# Valid (after constraints): 4×2×2×2 + 1×2×2×2 + 1×2×2×2 = 56 pass
+# Valid (after constraints): 5×2×2×2 + 1×2×2×2 + 1×2×2×2 = 56 pass
 #
 # Note: ADD_RS3 (func2=01, funct7 via funct3=000) requires R4 format support
 # and is not included in this encoding-only fixture.
@@ -45,8 +42,16 @@ constraints:
     field_a: "funct3"
     field_b: "funct7"
     mapping:
-      0: [2, 6, 8]
+      0: [0, 2, 6, 8]
       1: [0]
       2: [96]
+  - type: enable_mask
+    field: "funct3"
+    value: 1
+    disable: ["rs1", "rs2", "rd"]
+  - type: enable_mask
+    field: "funct3"
+    value: 2
+    disable: ["rd"]
 projector:
   type: sum
