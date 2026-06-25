@@ -3,6 +3,7 @@
 
 | Updated | Document |
 |----------|---------|
+| 2026-06-25 | [ExaVerif](/pager.html) <sup style="background:#2c8;color:#fff;font-size:.65em;padding:0 .4em;border-radius:3px;">N</sup> |
 | 2026-06-23 | [ExaVerif](/index.html) |
 | 2026-06-01 | [CVA6 CV-X-IF Exhaustive Verification Report](/cva6.html) |
 

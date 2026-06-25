@@ -1,18 +1,13 @@
 ---
 title: "ExaVerif"
-subtitle: "Exhaustive Verification for RISC‑V Custom Instructions"
+subtitle: "Exhaustive, Deterministic Verification for Custom Silicon"
 version-prefix: 1
 version-mark: true
 format:
   pdf:
     classoption:
       - twocolumn
-    mainfont: texgyreheros-regular.otf
-    fontsize: 10pt
-    mainfontoptions:
-      - BoldFont=texgyreheros-bold.otf
-      - ItalicFont=texgyreheros-italic.otf
-      - BoldItalicFont=texgyreheros-bolditalic.otf
+    fontsize: 11pt
     geometry:
         - margin=14mm
     include-in-header:
@@ -42,35 +37,51 @@ metadata-files:
   - ./_include/format.html.yml
 ---
 
-ExaVerif[^ev] is a verification engine that exhaustively enumerates every valid combination of RISC‑V custom instruction fields, evaluates each deterministically, and records the result as a permanent, queryable Fact for neXus consumption. Think of it as a "hardware wallet for verification": the same cryptographic certainty that protects assets, now applied to custom silicon verification.
+## The new center of silicon verification
 
-Its users range from verification engineers to design teams to autonomous verification agents. What they all share is a single source of truth—a continuous, auditable body of evidence that compounds across runs, tools, and time. This document outlines the product concept, market positioning, and technological foundation of ExaVerif, built on the open‑source neXus runtime[^nexus] for state‑space computation.
+Agent-based, energy-efficient, high-performance silicon design demands a fundamentally different approach to verification. The existing EDA landscape—built for closed, expensive, and incumbent ISAs—cannot deliver the deterministic, auditable, and accumulating knowledge that modern design flows require. RISC‑V changes this. Its open ISA, combined with the explosive growth of semiconductor design in Asia, creates the conditions for a new standard to emerge, but from the region where most of the world's silicon is actually designed and manufactured.
 
-## Agentic verification base that never forgets
+ExaVerif[^ev] is built for this new reality. It's a verification engine that exhaustively enumerates every valid combination of RISC‑V custom instruction fields, evaluates each deterministically, and records the result as a permanent, queryable Fact for neXus consumption. Think of it as a "hardware wallet for verification": the same cryptographic certainty that protects assets, now applied to custom silicon verification.
 
-We are in the middle of 2026. RISC‑V has moved beyond early adoption—the technology market is projected to grow from $1.35B in 2025 to $10.7B by 2031 at a 41.2% CAGR. Custom instruction extensions (XIF) are its defining advantage, enabling domain‑specific acceleration for AI inference, cryptography, and embedded control. Every custom instruction must be verified across its full operational envelope.
+Its users range from verification engineers to design teams to autonomous verification agents. What they all share is a single source of truth—a continuous, auditable body of evidence that compounds across runs, tools, and time. This document outlines the product concept, market positioning, and technological foundation of ExaVerif, built on the [neXus runtime](https://docs.ssccs.org/projects/nexus/)[^nexus]: a state‑space computation and storage engine powered by a single data primitive and a unified exchange protocol, enabling heterogeneous portability across verification tools, simulation environments, and silicon implementation flows.
 
-The problem is not the tools. It is that every verification run starts from zero. Coverage is statistical or scoped to specific properties—no approach enumerates every valid constraint combination, evaluates each deterministically, and accumulates the result as reusable knowledge. The industry's answer has been complex infrastructure: random simulation, formal property checkers, cloud platforms. All produce ephemeral PASS/FAIL logs discarded at the end of each run.
+## Agentic design substrate that never forgets
 
-ExaVerif does something fundamentally different. A YAML description becomes a Spec Space: field domains define its axes, constraints carve admissible subspaces. A single command enumerates and evaluates every point exhaustively. Every result is an immutable Fact—a permanent contribution to a shared body of verified knowledge that compounds across runs, across tools, across time. This is the beginning of exhaustive verification as a service: a category that didn't exist until now.
+We are in the middle of 2026. RISC‑V has moved beyond early adoption—the technology market is projected to grow from $1.91 billion in 2026 to $10.7 billion by 2031 at a 41.2% CAGR. Custom instruction extensions (XIF) are its defining advantage, enabling domain‑specific acceleration for AI inference, cryptography, and embedded control. Every custom instruction must be verified across its full operational envelope—but more than that, design decisions must be informed by complete, deterministic knowledge of the design space.
+
+The problem is not the tools. It is that every verification run starts from zero, and every design decision is made with incomplete information. Coverage is statistical or scoped to specific properties—no approach enumerates every valid constraint combination, evaluates each deterministically, and accumulates the result as reusable design knowledge. The industry's answer has been complex infrastructure: random simulation, formal property checkers, cloud platforms. All produce ephemeral PASS/FAIL logs that inform nothing beyond the current run.
+
+ExaVerif does something fundamentally different. A YAML description becomes a Spec Space: field domains define its axes, constraints carve admissible subspaces. A single command enumerates and evaluates every point exhaustively. Every result is an immutable Fact—a permanent contribution to a shared body of verified design knowledge that compounds across runs, across tools, and across time.
 
 ## Built on neXus
 
-ExaVerif is the first verification product built on the neXus Runtime, an engine for state‑space computation. neXus provides foundational infrastructure: a model that structures knowledge, a time‑index for time‑travel queries, semantic search across verification space, and a contribution contract that ensures fairness in open networks.
+ExaVerif is the first verification product built on the neXus, an engine for state‑space computation. neXus provides foundational infrastructure: a model that structures knowledge, a time‑index for time‑travel queries, semantic search across verification space, and a contribution contract that ensures fairness in open networks.
 
-The core engine is operational, validated against production RTL with exact agreement between static constraint evaluation and RISC‑V ISA simulation (Spike). What remains is integration and scalability—both proven paths made viable by the explosive growth of RISC‑V. ExaVerif's verification model is exhaustive rather than sampled. It treats verification as knowledge accumulation: each run expands the spec space, evaluates every point, and applies constraints. The result is not a PASS/FAIL log—it is permanent, queryable, auditable knowledge. That is the difference between verifying data and accumulating structured intelligence.
+ExaVerif's verification model is exhaustive rather than sampled. It treats verification as knowledge accumulation: each run expands the spec space, evaluates every point, and applies constraints. The result is not a PASS/FAIL log—it is permanent, queryable, auditable knowledge. That is the difference between verifying data and accumulating structured intelligence.
+
+## Verification in practice: a reference case
+
+As a reference case, a single command exhaustively evaluates 33.5 million raw field combinations against the actual CVA6 CV‑X‑IF encoding specification. The coprocessor accepts 196,608 valid encodings—the exact funct3/funct7/rs1/rs2/rd combinations that match its decoder—and correctly rejects the remaining 33.3 million. Execution time on a laptop (Apple M1 Max): 32 seconds. All 196,608 valid encodings are independently confirmed through RISC‑V ISA simulation (Spike) with exact agreement.
+
+This is not a theoretical projection—it is a measured result from a publicly available RISC‑V core, demonstrating that exhaustive verification of a non‑trivial instruction extension is not only possible but practical on commodity hardware. The same approach applies to any custom instruction set, with the spec space growing predictably with the number of parameters.
 
 ## The verification gap
 
-The RISC‑V verification landscape in 2026 is well‑served by established tools. Open‑source frameworks like RISCV‑DV (Google) and TestRIG generate random instruction streams. RISC‑V ACT provides architectural conformance testing. The OpenHW CORE‑V‑VERIF suite offers a comprehensive UVM environment. Commercial offerings from Breker, Imperas, and Siemens (OneSpin) cover simulation and formal verification. The global EDA market reached $187.6B in 2026, with functional verification demand accelerating.
+The RISC‑V verification landscape in 2026 is well‑served by established tools. Open‑source frameworks like RISCV‑DV (Google) and TestRIG generate random instruction streams. RISC‑V ACT provides architectural conformance testing. The OpenHW CORE‑V‑VERIF suite offers a comprehensive UVM environment. Commercial offerings from Breker, Imperas, and Siemens (OneSpin) cover simulation and formal verification.
 
-Yet a persistent gap remains. Random simulation delivers statistical coverage, not exhaustive proof. Formal property checking is powerful but requires deep expertise and is scoped to specific properties. The ACT suite cannot test custom instructions due to combinatorial explosion. Verification teams increasingly move to hybrid strategies combining simulation, formal, and hardware‑assisted methods—but no tool today provides complete, deterministic coverage of the entire constraint space.
+Yet a persistent gap remains. Random simulation delivers statistical coverage, not exhaustive proof. Formal property checking requires deep expertise and is scoped to specific properties. The ACT suite cannot test custom instructions due to combinatorial explosion.
 
-This is the gap ExaVerif fills: a deterministic, exhaustive approach that systematically covers the space random and formal methods leave untouched. It is not a replacement—it is the missing piece in a hybrid verification strategy.
+In the energy sector, every watt counts. Inefficient silicon design leads to higher power consumption across data centers, edge devices, and industrial control systems—amplifying operational costs and carbon footprints. ExaVerif addresses this at the source: by ensuring that custom instructions are not only functionally correct but also energy‑optimal from the outset.
+
+**From verification to prediction.** ExaVerif does not stop at functional correctness. Every verified instruction combination becomes training data for machine learning models that predict post-silicon power consumption—directly from the RTL stage. Studies have demonstrated that ML models can predict power consumption with less than 5% error, and early PPA (Power, Performance, Area) estimation from HDL code has achieved up to 90% accuracy. By integrating ExaVerif's exhaustive verification output with ML-based power modeling, design teams can answer the critical question: *"How much energy will this custom instruction consume in silicon?"*—before the design reaches the tapeout stage. This transforms verification from a gate that catches bugs into a lens that predicts physical outcomes.
+
+This is the gap ExaVerif fills: a deterministic, exhaustive approach that systematically covers the space random and formal methods leave untouched, while bridging design intent, functional verification, and post-silicon energy consumption through ML-driven predictability. It is not a replacement—it is the missing piece in a hybrid verification strategy.
 
 ## Phased rollout
 
-ExaVerif may launch in phases: from a CLI to validate the approach, to a full verification suite with ecosystem validation, and finally the ExaVerif Network—a shared knowledge store where verification results accumulate across teams and time. Every contribution enriches the whole. The business model is straightforward: subscription for advanced services, one‑time license for enterprise use, and optional upgrades for power users and teams. The timing is right—2026 is the year of verification automation, with major EDA vendors investing in AI‑assisted verification and custom silicon reaching mass adoption. ExaVerif is the first product to deliver exhaustive, deterministic verification of pre‑compiled instruction encoding in a portable form.
+ExaVerif launches in phases: from a core CLI to validate the approach, to a full verification suite with ecosystem validation, and finally the ExaVerif Network—a shared knowledge store where verification results accumulate across teams and time. Every contribution enriches the whole.
+
+The business model is straightforward: subscription for advanced services, one‑time license for enterprise use, and optional upgrades for power users and teams. The timing is right—2026 is the year of verification automation, with major EDA vendors investing in AI‑assisted verification and custom silicon reaching mass adoption.
 
 [^ev]: ExaVerif is an open‑core commercial‑extension project based on the open‑source neXus project.
 [^nexus]: neXus is open source under Apache 2.0. Until the first production case like ExaVerif is publicly unveiled, the repository is kept invitation‑only by strategic choice.
