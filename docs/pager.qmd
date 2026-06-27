@@ -73,15 +73,25 @@ Yet a persistent gap remains. Random simulation delivers statistical coverage, n
 
 In the energy sector, every watt counts. Inefficient silicon design leads to higher power consumption across data centers, edge devices, and industrial control systems—amplifying operational costs and carbon footprints. ExaVerif addresses this at the source: by ensuring that custom instructions are not only functionally correct but also energy‑optimal from the outset.
 
-**From verification to prediction.** ExaVerif does not stop at functional correctness. Every verified instruction combination becomes training data for machine learning models that predict post-silicon power consumption—directly from the RTL stage. Studies have demonstrated that ML models can predict power consumption with less than 5% error, and early PPA (Power, Performance, Area) estimation from HDL code has achieved up to 90% accuracy. By integrating ExaVerif's exhaustive verification output with ML-based power modeling, design teams can answer the critical question: *"How much energy will this custom instruction consume in silicon?"*—before the design reaches the tapeout stage. This transforms verification from a gate that catches bugs into a lens that predicts physical outcomes.
+From verification to prediction. ExaVerif does not stop at functional correctness. Every verified instruction combination becomes training data for machine learning models that predict post-silicon power consumption—directly from the RTL stage. Studies have demonstrated that ML models can predict power consumption with less than 5% error, and early PPA (Power, Performance, Area) estimation from HDL code has achieved up to 90% accuracy. By integrating ExaVerif's exhaustive verification output with ML-based power modeling, design teams can answer the critical question: *"How much energy will this custom instruction consume in silicon?"*—before the design reaches the tapeout stage. This transforms verification from a gate that catches bugs into a lens that predicts physical outcomes.
 
 This is the gap ExaVerif fills: a deterministic, exhaustive approach that systematically covers the space random and formal methods leave untouched, while bridging design intent, functional verification, and post-silicon energy consumption through ML-driven predictability. It is not a replacement—it is the missing piece in a hybrid verification strategy.
 
+## ExaSpect is the way: The Spec Space based Autonomous Design Infrastructure
+
+ExaVerif's Spec Space model is a universal representation that applies to every layer of silicon design—registers, buses, memory, physical layout—with each layer defining its own axes and admissible subspaces. As the natural evolution of this model, ExaSpect turns the Spec Space from a verification concept into an autonomous design engine that extends exhaustive enumeration from verification into generation, synthesis prediction, power estimation, and timing closure, then executes them through autonomous agents. Verification today, prediction tomorrow, tapeout the day after—all rooted in the same deterministic enumeration, all executed automatically, auditably, and repeatably. RISC‑V is the entry point, but the architecture is domain-agnostic; any deterministic system—robotics, finance, simulation—maps to the same framework, making ExaSpect not a verification tool or a database, but the ontological ground for deterministic design itself.
+
 ## Phased rollout
 
-ExaVerif launches in phases: from a core CLI to validate the approach, to a full verification suite with ecosystem validation, and finally the ExaVerif Network—a shared knowledge store where verification results accumulate across teams and time. Every contribution enriches the whole.
+ExaVerif launches in three phases.
 
-The business model is straightforward: subscription for advanced services, one‑time license for enterprise use, and optional upgrades for power users and teams. The timing is right—2026 is the year of verification automation, with major EDA vendors investing in AI‑assisted verification and custom silicon reaching mass adoption.
+**Phase 1: CLI.** `ev verify` already runs against CVA6 CV‑X‑IF—33.5M combinations, 32 seconds on a laptop, 100% agreement with RISC‑V simulation. Open‑source under Apache 2.0. The model works.
 
-[^ev]: ExaVerif is an open‑core commercial‑extension project based on the open‑source neXus project.
-[^nexus]: neXus is open source under Apache 2.0. Until the first production case like ExaVerif is publicly unveiled, the repository is kept invitation‑only by strategic choice.
+**Phase 2: Ecosystem validation.** Global EDA is $20.8B in 2026, growing 8.1% to $30.7B by 2031. AI‑EDA is the fastest segment at 24.4% CAGR, reaching $15.85B by 2032. Verification consumes up to 70% of chip project effort; a single bug at 2nm costs over $20M to respin. ExaVerif is not another AI‑assisted tool—it is the deterministic foundation that makes agentic verification trustworthy.
+
+**Phase 3: ExaSpect.** The Spec Space model extends from verification into generation, synthesis prediction, power estimation, and timing closure—executed by autonomous agents. Verification today, prediction tomorrow, tapeout the day after.
+
+**Why now.** RISC‑V alone grows from $1.91B in 2026 to $10.7B by 2031 at 41.2% CAGR. The global semiconductor market reaches $1.51T in 2026. Custom silicon is mainstream. Every custom instruction needs verification. Every verification run needs a foundation that does not forget. ExaVerif is that foundation.
+
+[^ev]: ExaVerif is an open‑core project that is the first instantiation of the ExaBase vision, built on the open‑source neXus project.
+[^nexus]: neXus is open source under Apache 2.0. Until the first production case is publicly unveiled, the repository is kept invitation‑only by strategic choice.
