@@ -1,0 +1,57 @@
+# Ibex RV32IMCB ALU encoding space.
+#
+# Models the OPCODE_OP (0x33) register-register ALU operation decoding
+# of the Ibex RISC-V core, extracted from ibex/rtl/ibex_decoder.sv.
+#
+# Assumes RV32BFull and RV32MFast are enabled. funct7[6:0] + funct3[2:0]
+# select the ALU operation per the RISC-V specification and Ibex decoder.
+# Each funct7 appears once in the cross constraint (YAML mapping keys
+# are unique, so duplicate keys would override).
+#
+# Verification space: 128 x 8 x 8 x 8 x 8 = 524,288 raw combinations
+# Valid (after constraints): TBD funct7/funct3 pairs x 4,096 register combos
+
+target: ibex_rv32imcb
+fields:
+  funct7:
+    range: [0, 127]
+  funct3:
+    range: [0, 7]
+  rs1:
+    range: [0, 7]
+  rs2:
+    range: [0, 7]
+  rd:
+    range: [0, 7]
+constraints:
+  # funct7[6:0] + funct3[2:0] valid combinations from ibex_decoder.sv
+  # Each funct7 appears once. All funct3 values for that funct7 are
+  # enumerated together, combining RV32I, RV32B (all sub-extensions),
+  # and RV32M operations.
+  - type: cross
+    field_a: "funct7"
+    field_b: "funct3"
+    mapping:
+      # RV32I base (8 ALU ops + 2 shift ops)
+      0: [0, 1, 2, 3, 4, 5, 6, 7]
+      # funct7=32: RV32I SUB/SRA + RV32B zbb xnor/orn/andn
+      32: [0, 4, 5, 6, 7]
+      # RV32M: multiply/divide (8 ops)
+      1: [0, 1, 2, 3, 4, 5, 6, 7]
+      # RV32B zbb + zbp + zbe + zbf + zbs (consolidated by funct7)
+      4: [1, 5, 6]
+      5: [1, 2, 3, 4, 5, 6, 7]    # funct7=5: min/max/u, pack/u/h, clmul/r/h, orc.b
+      # funct7=16 (0b0010000): zba + zbb rot + zbp slo/sro + zbb sext
+      16: [1, 2, 4, 5, 6]      # funct7=16: SH1ADD, SH2ADD, SH3ADD, SLO, SRO
+      # funct7=20 (0b0010100): zbs bset + zbp xperm + zbb orc.b
+      20: [1, 2, 4, 5, 6, 7]      # funct7=20: BSET, XPERM_B, XPERM_H, ORC.B
+      # funct7=32 (0b0100000): RV32I SUB/SRA + zbb xnor/orn/andn
+      32: [0, 4, 5, 6, 7]          # funct7=32: SUB, XNOR, ORN, ANDN
+      # funct7=36 (0b0100100): zbs bclr + zbf bext + zbe bdecompress + zbf bfp
+      36: [1, 5, 6, 7]             # funct7=36: BCLR, BEXT, BDECOMPRESS, BFP
+      # funct7=48 (0b0110000): zbb rol/ror
+      48: [1, 5]                   # funct7=48: ROL, ROR
+      # funct7=52 (0b0110100): zbs binv + zbp grev/gorc
+      52: [1, 5, 6, 7]             # funct7=52: BINV, GREV, GORC
+projector:
+  type: sum
