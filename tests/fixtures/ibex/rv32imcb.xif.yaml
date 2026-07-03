@@ -8,7 +8,7 @@
 # select the ALU operation per the RISC-V specification and Ibex decoder.
 #
 # Verification space: 128 x 8 x 8 x 8 x 8 = 524,288 raw combinations
-# Valid (after constraints): TBD funct7/funct3 pairs x 4,096 register combos
+# Valid (after constraints): 180 funct7/funct3 pairs x 4,096 register combos
 
 target: ibex_rv32imcb
 fields:
@@ -24,29 +24,110 @@ fields:
     range: [0, 7]
 constraints:
   # funct7[6:0] + funct3[2:0] valid combinations from ibex_decoder.sv
-  # funct7=0: RV32I base (ADD, SLL, SLT, SLTU, XOR, SRL, OR, AND) — 8 ops
-  # funct7=1: RV32M (MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU) — 8 ops
-  # funct7=4: zbb PACK(4)/PACKH(7) + zbp SHFL(1)/UNSHFL(5) + zbe BCOMPRESS(6)
-  # funct7=5: zbc CLMUL(1)/CLMULR(2)/CLMULH(3) + zbb MIN(4)/MINU(5)/MAX(6)/MAXU(7)
-  # funct7=16: zba SH1ADD(2)/SH2ADD(4)/SH3ADD(6) + zbp SLO(1)/SRO(5)
-  # funct7=20: zbs BSET(1) + zbp XPERM_N(2)/XPERM_B(4)/GORC(5)/XPERM_H(6)
-  # funct7=32: RV32I SUB(0)/SRA(5) + zbb XNOR(4)/ORN(6)/ANDN(7)
-  # funct7=36: zbs BCLR(1)/BEXT(5) + zbb PACKU(4) + zbe BDECOMPRESS(6) + zbf BFP(7)
-  # funct7=48: zbb ROL(1)/ROR(5)
-  # funct7=52: zbs BINV(1) + zbp GREV(5)
+  #
+  # RV32I + RV32M + RV32B main case (funct7 bit1=0):
+  #   funct7=0:  RV32I base (ADD, SLL, SLT, SLTU, XOR, SRL, OR, AND)
+  #   funct7=1:  RV32M (MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU)
+  #   funct7=4:  zbb PACK(4)/PACKH(7) + zbp SHFL(1)/UNSHFL(5) + zbe BCOMPRESS(6)
+  #   funct7=5:  zbc CLMUL(1)/CLMULR(2)/CLMULH(3) + zbb MIN(4)/MINU(5)/MAX(6)/MAXU(7)
+  #   funct7=16: zba SH1ADD(2)/SH2ADD(4)/SH3ADD(6) + zbp SLO(1)/SRO(5)
+  #   funct7=20: zbs BSET(1) + zbp XPERM_N(2)/XPERM_B(4)/GORC(5)/XPERM_H(6)
+  #   funct7=32: RV32I SUB(0)/SRA(5) + zbb XNOR(4)/ORN(6)/ANDN(7)
+  #   funct7=36: zbs BCLR(1)/BEXT(5) + zbb PACKU(4) + zbe BDECOMPRESS(6) + zbf BFP(7)
+  #   funct7=48: zbb ROL(1)/ROR(5)
+  #   funct7=52: zbs BINV(1) + zbp GREV(5)
+  #
+  # Zbt ternary (R4-type, funct7 bit1=1): CMIX/CMOV(funct2=11) + FSL/FSR(funct2=10)
+  #   All funct7 values with bit 1 set decode as Zbt when funct3∈{1,5}.
+  #   funct2=11 → CMIX(3=1)/CMOV(3=5); funct2=10 → FSL(3=1)/FSR(3=5)
   - type: cross
     field_a: "funct7"
     field_b: "funct3"
     mapping:
+      # RV32I base
       0: [0, 1, 2, 3, 4, 5, 6, 7]
+      # RV32M
       1: [0, 1, 2, 3, 4, 5, 6, 7]
+      # zbb + zbp + zbe
       4: [1, 4, 5, 6, 7]
+      # zbc + zbb
       5: [1, 2, 3, 4, 5, 6, 7]
+      # zba + zbp
       16: [1, 2, 4, 5, 6]
+      # zbs + zbp
       20: [1, 2, 4, 5, 6]
+      # RV32I shift variants + zbb
       32: [0, 4, 5, 6, 7]
+      # zbs + zbb + zbe + zbf
       36: [1, 4, 5, 6, 7]
+      # zbb rot
       48: [1, 5]
+      # zbs + zbp
       52: [1, 5]
+      # Zbt ternary: funct7[1]=1, funct3∈{1,5} → CMIX/CMOV/FSL/FSR
+      2: [1, 5]
+      3: [1, 5]
+      6: [1, 5]
+      7: [1, 5]
+      10: [1, 5]
+      11: [1, 5]
+      14: [1, 5]
+      15: [1, 5]
+      18: [1, 5]
+      19: [1, 5]
+      22: [1, 5]
+      23: [1, 5]
+      26: [1, 5]
+      27: [1, 5]
+      30: [1, 5]
+      31: [1, 5]
+      34: [1, 5]
+      35: [1, 5]
+      38: [1, 5]
+      39: [1, 5]
+      42: [1, 5]
+      43: [1, 5]
+      46: [1, 5]
+      47: [1, 5]
+      50: [1, 5]
+      51: [1, 5]
+      54: [1, 5]
+      55: [1, 5]
+      58: [1, 5]
+      59: [1, 5]
+      62: [1, 5]
+      63: [1, 5]
+      66: [1, 5]
+      67: [1, 5]
+      70: [1, 5]
+      71: [1, 5]
+      74: [1, 5]
+      75: [1, 5]
+      78: [1, 5]
+      79: [1, 5]
+      82: [1, 5]
+      83: [1, 5]
+      86: [1, 5]
+      87: [1, 5]
+      90: [1, 5]
+      91: [1, 5]
+      94: [1, 5]
+      95: [1, 5]
+      98: [1, 5]
+      99: [1, 5]
+      102: [1, 5]
+      103: [1, 5]
+      106: [1, 5]
+      107: [1, 5]
+      110: [1, 5]
+      111: [1, 5]
+      114: [1, 5]
+      115: [1, 5]
+      118: [1, 5]
+      119: [1, 5]
+      122: [1, 5]
+      123: [1, 5]
+      126: [1, 5]
+      127: [1, 5]
 projector:
   type: sum
