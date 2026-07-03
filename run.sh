@@ -16,6 +16,10 @@ cd "$(dirname "$0")"
 export RUSTFLAGS="-D warnings"
 EV_IMAGE="${EV_IMAGE:-ghcr.io/ssccsorg/ev:latest}"
 
+# Assertion accumulator: set to 1 if any _verify_check fails.
+# Survives || true because it's a global variable, not an exit code.
+VERIFY_FAILED=0
+
 # Pre-process: auto-fmt for all build modes except --help and --demo.
 if [[ "${1:-}" != "--help" && "${1:-}" != "-h" && "${1:-}" != "--demo" ]]; then
     cargo fmt --all
@@ -132,6 +136,37 @@ _timed() {
     return ${ec}
 }
 
+# Assert a fixture's pass/fail counts match expected values.
+# Usage: _verify_check <label> <expected_pass> <expected_fail> <target>
+_verify_check() {
+    local label="$1"; shift
+    local exp_pass="$1"; shift
+    local exp_fail="$1"; shift
+    local target="$1"; shift
+    local out
+    out=$($EV verify --target "$target" 2>&1) || true
+    local pass fail
+    pass=$(echo "$out" | awk '/^passed:/ {print $2}') || true
+    fail=$(echo "$out" | awk '/^failed:/ {print $2}') || true
+    echo "=== ${label} ==="
+    echo "  target: $(echo "$out" | awk '/^target:/ {print $2}')"
+    if [ -z "$pass" ] || [ -z "$fail" ]; then
+        echo "  FAILED: could not parse output"
+        return 1
+    fi
+    if [ "$pass" -ne "$exp_pass" ]; then
+        echo "  FAILED: expected ${exp_pass} passed, got ${pass}"
+        VERIFY_FAILED=1
+        return 1
+    fi
+    if [ "$fail" -ne "$exp_fail" ]; then
+        echo "  FAILED: expected ${exp_fail} failed, got ${fail}"
+        VERIFY_FAILED=1
+        return 1
+    fi
+    echo "  passed: ${pass}, failed: ${fail} — ok"
+}
+
 verify_large_fixtures() {
     # 33M fixture skipped in CI to conserve Actions minutes.
     if [ -n "${CI:-}" ]; then
@@ -143,8 +178,8 @@ verify_large_fixtures() {
     _timed "cva6 xif madd fixture (32k combos)" $EV verify --target "tests/fixtures/cva6/xif_madd.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
     _timed "cva6 xif mac fixture (32k combos)" $EV verify --target "tests/fixtures/cva6/xif_mac.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
     _timed "ibex custom alu fixture (524k combos)" $EV verify --target "tests/fixtures/ibex/alu_ext.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
-    _timed "ibex rv32imcb alu encoding (524k combos)" $EV verify --target "tests/fixtures/ibex/rv32imcb.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
-    _timed "ibex rv32imcb imm fixture (65k combos)" $EV verify --target "tests/fixtures/ibex/rv32imcb_imm.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
+    _verify_check "ibex rv32imcb encoding"      313344 210944 "tests/fixtures/ibex/rv32imcb.xif.yaml"
+    _verify_check "ibex rv32imcb imm ops"       55616   9920  "tests/fixtures/ibex/rv32imcb_imm.xif.yaml"
 }
 
 # ── Modes ─────────────────────────────────────────────────────────────
@@ -158,6 +193,10 @@ case ${1:-} in
         echo ""
         echo "  All code checks passed."
         echo "══════════════════════════════════════"
+        if [ "$VERIFY_FAILED" -ne 0 ]; then
+            echo "  Some fixture assertions failed!"
+            exit 1
+        fi
         ;;
     --fix)
         echo "══════════════════════════════════════"
@@ -186,7 +225,11 @@ case ${1:-} in
         verify_large_fixtures || true
         verify_sim || true
         echo ""
-        echo "  Verification passed (ignoring expected fixture failures)."
+        if [ "$VERIFY_FAILED" -ne 0 ]; then
+            echo "  Some fixture assertions FAILED!"
+            exit 1
+        fi
+        echo "  Verification passed."
         echo "══════════════════════════════════════"
         ;;
     --demo)
@@ -218,6 +261,10 @@ case ${1:-} in
         verify_large_fixtures || true
         verify_sim || true
         echo ""
+        if [ "$VERIFY_FAILED" -ne 0 ]; then
+            echo "  Some fixture assertions FAILED!"
+            exit 1
+        fi
         echo "══════════════════════════════════════"
         echo "  All done."
         echo "══════════════════════════════════════"
