@@ -221,6 +221,21 @@ impl Default for ConstraintRegistry {
                 panic!("cross builder called on non-cross spec")
             }
         });
+        reg.register("bitmask", |spec, axis_of| {
+            if let ConstraintSpec::Bitmask { field, mask, value } = spec {
+                let axis = axis_of[field];
+                AnyCheck::new(BitmaskC {
+                    field_name: field.clone(),
+                    axis,
+                    mask: *mask,
+                    value: *value,
+                })
+            } else {
+                panic!("bitmask builder called on non-bitmask spec")
+            }
+        });
+        // enable_set is processed at compose time (like enable_mask), not as a runtime check.
+        reg.register("enable_set", |_, _| AnyCheck::new(NoopC));
         reg
     }
 }
@@ -238,6 +253,8 @@ fn spec_type_name(spec: &ConstraintSpec) -> &str {
         ConstraintSpec::Oneof { .. } => "oneof",
         ConstraintSpec::Cross { .. } => "cross",
         ConstraintSpec::EnableMask { .. } => "enable_mask",
+        ConstraintSpec::Bitmask { .. } => "bitmask",
+        ConstraintSpec::EnableSet { .. } => "enable_set",
     }
 }
 
@@ -466,6 +483,39 @@ impl Check for CrossC {
             self.field_b,
             entries.join("; ")
         )
+    }
+}
+
+#[derive(Debug, Clone)]
+struct BitmaskC {
+    field_name: String,
+    axis: usize,
+    mask: i64,
+    value: i64,
+}
+
+impl Check for BitmaskC {
+    fn allows(&self, coords: &Coordinates) -> bool {
+        coords
+            .get_axis(self.axis)
+            .map(|v| (v & self.mask) == self.value)
+            .unwrap_or(false)
+    }
+    fn describe(&self) -> String {
+        format!("{} & {} == {}", self.field_name, self.mask, self.value)
+    }
+}
+
+/// No-op check for constraints processed at compose time (enable_set, enable_mask).
+#[derive(Debug, Clone)]
+struct NoopC;
+
+impl Check for NoopC {
+    fn allows(&self, _coords: &Coordinates) -> bool {
+        true
+    }
+    fn describe(&self) -> String {
+        String::new()
     }
 }
 

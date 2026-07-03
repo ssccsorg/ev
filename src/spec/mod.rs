@@ -144,6 +144,43 @@ pub enum ConstraintSpec {
         /// Fields to force to zero when trigger matches.
         disable: Vec<String>,
     },
+    /// Bitmask constraint: `field & mask` must equal `value`.
+    ///
+    /// Checks that specific bits of a field are set/cleared.
+    /// Used to model bit-field decode conditions (e.g. funct7[1]=1 for Zbt).
+    #[serde(rename = "bitmask")]
+    Bitmask {
+        /// Field name.
+        field: String,
+        /// Bitmask to apply.
+        mask: i64,
+        /// Expected value after masking.
+        value: i64,
+    },
+    /// Conditional field assignment: when `field` equals `value`,
+    /// assign the listed `set` fields to their specified values.
+    ///
+    /// Generalization of enable_mask: instead of forcing to zero,
+    /// forces to arbitrary per-field values when trigger matches.
+    /// Used for instructions where specific fields are tied to fixed values.
+    #[serde(rename = "enable_set")]
+    EnableSet {
+        /// Trigger field name.
+        field: String,
+        /// Trigger value — when field equals this value, assignment applies.
+        value: i64,
+        /// Fields and their assigned values when trigger matches.
+        set: Vec<FieldAssignment>,
+    },
+}
+
+/// A single field-to-value assignment for enable_set.
+#[derive(Debug, Clone, Deserialize)]
+pub struct FieldAssignment {
+    /// Field name to assign.
+    pub field: String,
+    /// Value to assign.
+    pub value: i64,
 }
 
 /// A projector to resolve from the ProjectorRegistry.

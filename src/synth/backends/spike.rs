@@ -468,6 +468,28 @@ fn generate_c_constraint_expr(constraint: &ConstraintSpec, _field_names: &[&Stri
                 )
             }
         }
+        ConstraintSpec::Bitmask { field, mask, value } => {
+            format!(
+                "    if ((enc[IDX_{}] & {}) != {}) return 0;",
+                field, mask, value
+            )
+        }
+        ConstraintSpec::EnableSet { field, value, set } => {
+            let assignments: Vec<String> = set
+                .iter()
+                .map(|a| format!("    enc[IDX_{f}] = {v};", f = a.field, v = a.value))
+                .collect();
+            if assignments.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "    if (enc[IDX_{field}] == {value}) {{\n{body}\n    }}",
+                    field = field,
+                    value = value,
+                    body = assignments.join("\n")
+                )
+            }
+        }
     }
 }
 

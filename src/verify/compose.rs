@@ -151,6 +151,27 @@ pub fn expand_all(spec: &VerificationSpec) -> Result<Vec<Combination>, String> {
         }
     }
 
+    // Apply enable_set constraints: force specific fields to specified values
+    // when their trigger condition is met.
+    for constraint in &spec.constraints {
+        if let ConstraintSpec::EnableSet { field, value, set } = constraint {
+            let trigger_axis = field_names.iter().position(|n| *n == field);
+            if let Some(trigger_axis) = trigger_axis {
+                for combo in combinations.iter_mut() {
+                    if combo.values[trigger_axis] == *value {
+                        for assignment in set {
+                            if let Some(axis) =
+                                field_names.iter().position(|n| *n == &assignment.field)
+                            {
+                                combo.values[axis] = assignment.value;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Rebuild coordinates and point after mask application
     for combo in combinations.iter_mut() {
         combo.coordinates = Coordinates::new(combo.values.clone());
@@ -488,6 +509,93 @@ mod tests {
                     );
                 }
                 _ => {} // op=2: no restriction
+            }
+        }
+    }
+
+    #[test]
+    fn expand_enable_set_forces_value_on_trigger_match() {
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "op".into(),
+            FieldSpec {
+                range: None,
+                alignment: None,
+                values: Some(vec![0, 1, 2]),
+            },
+        );
+        fields.insert(
+            "rs1".into(),
+            FieldSpec {
+                range: Some((0, 7)),
+                alignment: None,
+                values: None,
+            },
+        );
+        fields.insert(
+            "rd".into(),
+            FieldSpec {
+                range: Some((0, 7)),
+                alignment: None,
+                values: None,
+            },
+        );
+        let spec = VerificationSpec {
+            target: "test".into(),
+            fields,
+            encoding: None,
+            constraints: vec![crate::spec::ConstraintSpec::EnableSet {
+                field: "op".into(),
+                value: 0,
+                set: vec![
+                    crate::spec::FieldAssignment {
+                        field: "rs1".into(),
+                        value: 5,
+                    },
+                    crate::spec::FieldAssignment {
+                        field: "rd".into(),
+                        value: 3,
+                    },
+                ],
+            }],
+            projector: crate::spec::ProjectorSpec::Sum,
+        };
+        let combos = expand_all(&spec).unwrap();
+        // op ∈ {0,1,2}, rs1 ∈ {0..7}, rd ∈ {0..7} = 3 × 8 × 8 = 192
+        assert_eq!(combos.len(), 192);
+        // BTreeMap key order: op, rd, rs1
+        // When op=0, rd must be 3 and rs1 must be 5
+        // When op≠0, rd and rs1 are unrestricted
+        for combo in &combos {
+            match combo.values[0] {
+                0 => {
+                    assert_eq!(
+                        combo.values[1], 3,
+                        "when op=0, rd must be 3, got {:?}",
+                        combo.values
+                    );
+                    assert_eq!(
+                        combo.values[2], 5,
+                        "when op=0, rs1 must be 5, got {:?}",
+                        combo.values
+                    );
+                }
+                1 | 2 => {
+                    // rd and rs1 are unrestricted when op≠0
+                    assert!(
+                        combo.values[1] >= 0 && combo.values[1] <= 7,
+                        "rd out of range when op={}, got {:?}",
+                        combo.values[0],
+                        combo.values
+                    );
+                    assert!(
+                        combo.values[2] >= 0 && combo.values[2] <= 7,
+                        "rs1 out of range when op={}, got {:?}",
+                        combo.values[0],
+                        combo.values
+                    );
+                }
+                _ => unreachable!(),
             }
         }
     }

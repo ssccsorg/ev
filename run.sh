@@ -144,6 +144,7 @@ verify_large_fixtures() {
     _timed "cva6 xif mac fixture (32k combos)" $EV verify --target "tests/fixtures/cva6/xif_mac.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
     _timed "ibex custom alu fixture (524k combos)" $EV verify --target "tests/fixtures/ibex/alu_ext.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
     _timed "ibex rv32imcb alu encoding (524k combos)" $EV verify --target "tests/fixtures/ibex/rv32imcb.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
+    _timed "ibex rv32imcb imm fixture (65k combos)" $EV verify --target "tests/fixtures/ibex/rv32imcb_imm.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
 }
 
 # ── Modes ─────────────────────────────────────────────────────────────

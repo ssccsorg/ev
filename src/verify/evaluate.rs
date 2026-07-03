@@ -584,6 +584,60 @@ mod tests {
     }
 
     #[test]
+    fn bitmask_constraint() {
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "a".into(),
+            FieldSpec {
+                range: None,
+                alignment: None,
+                values: Some(vec![0, 1, 2, 3]),
+            },
+        );
+        fields.insert(
+            "b".into(),
+            FieldSpec {
+                range: None,
+                alignment: None,
+                values: Some(vec![0, 1, 2, 3]),
+            },
+        );
+        let spec = make_spec(
+            fields,
+            vec![ConstraintSpec::Bitmask {
+                field: "a".into(),
+                mask: 2,
+                value: 2,
+            }],
+            ProjectorSpec::Sum,
+        );
+        let combos = crate::verify::compose::expand_all(&spec).unwrap();
+        assert_eq!(combos.len(), 16); // 4 × 4
+        let results = evaluate_all(
+            &spec,
+            combos,
+            &ConstraintRegistry::default(),
+            &ProjectorRegistry::default(),
+        );
+        for r in &results {
+            let a = r.combination.values[0];
+            let b = r.combination.values[1];
+            match a {
+                0 | 1 => {
+                    // 0 & 2 = 0 ≠ 2, 1 & 2 = 0 ≠ 2
+                    assert!(!r.passed, "a={}, b={} should fail (bit 1 not set)", a, b);
+                }
+                2 | 3 => {
+                    // 2 & 2 = 2, 3 & 2 = 2
+                    assert!(r.passed, "a={}, b={} should pass (bit 1 set)", a, b);
+                    assert_eq!(r.projection, Some(a + b));
+                }
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    #[test]
     fn cross_constraint() {
         let mut fields = BTreeMap::new();
         fields.insert(

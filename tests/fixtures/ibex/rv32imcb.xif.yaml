@@ -37,9 +37,8 @@ constraints:
   #   funct7=48: zbb ROL(1)/ROR(5)
   #   funct7=52: zbs BINV(1) + zbp GREV(5)
   #
-  # Zbt ternary (R4-type, funct7 bit1=1): CMIX/CMOV(funct2=11) + FSL/FSR(funct2=10)
-  #   All funct7 values with bit 1 set decode as Zbt when funct3∈{1,5}.
-  #   funct2=11 → CMIX(3=1)/CMOV(3=5); funct2=10 → FSL(3=1)/FSR(3=5)
+  # Zbt (R4-type, funct7 bit1=1): funct7[1]=1 decodes as CMIX/CMOV(funct2=11)
+  #   or FSL/FSR(funct2=10) when funct3∈{1,5}. funct7[6:2] is rs3 (unrestricted).
   - type: cross
     field_a: "funct7"
     field_b: "funct3"
@@ -64,7 +63,7 @@ constraints:
       48: [1, 5]
       # zbs + zbp
       52: [1, 5]
-      # Zbt ternary: funct7[1]=1, funct3∈{1,5} → CMIX/CMOV/FSL/FSR
+      # Zbt ternary: funct7[1]=1 → funct3∈{1,5} (CMIX/CMOV/FSL/FSR)
       2: [1, 5]
       3: [1, 5]
       6: [1, 5]

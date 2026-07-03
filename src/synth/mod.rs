@@ -266,6 +266,13 @@ fn sv_constraint_assertion(
                 .collect();
             assertions.join("\n")
         }
+        crate::spec::ConstraintSpec::Bitmask { field, mask, value } => {
+            format!(
+                "// synthesis translate_off\n  if (({} & {}) != {}) $error(\"bitmask\");\n  // synthesis translate_on\n",
+                field, mask, value
+            )
+        }
+        crate::spec::ConstraintSpec::EnableSet { .. } => String::new(),
     }
 }
 
