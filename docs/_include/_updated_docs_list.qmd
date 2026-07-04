@@ -3,8 +3,8 @@
 
 | Updated | Document |
 |----------|---------|
-| 2026-06-27 | [ExaVerif](/pager.html) <sup style="background:#2c8;color:#fff;font-size:.65em;padding:0 .4em;border-radius:3px;">N</sup> |
-| 2026-06-23 | [ExaVerif](/index.html) |
+| 2026-06-27 | Devlog > [C Harness Generation and the Fractal Nature of Compilation](/devlog/20260627a.html) <sup style="background:#2c8;color:#fff;font-size:.65em;padding:0 .4em;border-radius:3px;">N</sup> |
+| 2026-06-28 | [ExaVerif](/index.html) |
 | 2026-06-01 | [CVA6 CV-X-IF Exhaustive Verification Report](/cva6.html) |
 
 
