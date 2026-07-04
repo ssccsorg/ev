@@ -223,6 +223,11 @@ impl Default for ConstraintRegistry {
         });
         reg.register("bitmask", |spec, axis_of| {
             if let ConstraintSpec::Bitmask { field, mask, value } = spec {
+                assert!(
+                    *mask >= 0,
+                    "bitmask: mask must be non-negative, got {}",
+                    mask
+                );
                 let axis = axis_of[field];
                 AnyCheck::new(BitmaskC {
                     field_name: field.clone(),
