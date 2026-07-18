@@ -367,29 +367,39 @@ fn bench_constraint_check(c: &mut Criterion) {
 // Criterion configuration
 // ===========================================================================
 
+// Fast microbenchmarks (ns-µs scale): high sample count for tight CIs.
+criterion_group!(
+    name = coordspace;
+    config = Criterion::default().sample_size(1000);
+    targets = bench_space_lookup_valid, bench_space_lookup_invalid,
+              bench_constraint_check
+);
+
+// Expand/enumerate: ms scale for ibex/cva6, µs for small.
 criterion_group!(
     name = expand;
-    config = Criterion::default().sample_size(30);
+    config = Criterion::default().sample_size(100);
     targets = bench_expand_small, bench_enumerate_small,
               bench_expand_medium, bench_enumerate_medium,
               bench_expand_ibex, bench_enumerate_ibex,
               bench_expand_cva6_r4, bench_enumerate_cva6_r4
 );
 
+// Light evaluation: small/medium scale, runs in µs-ms.
 criterion_group!(
-    name = evaluate;
-    config = Criterion::default().sample_size(30);
+    name = eval_light;
+    config = Criterion::default().sample_size(100);
     targets = bench_evaluate_small, bench_structural_enum_small, bench_validate_small,
-              bench_evaluate_medium, bench_structural_enum_medium, bench_validate_medium,
-              bench_evaluate_ibex, bench_structural_enum_ibex, bench_validate_ibex,
+              bench_evaluate_medium, bench_structural_enum_medium, bench_validate_medium
+);
+
+// Heavy evaluation: ibex/cva6 scale, runs in seconds per iter.
+// 10 samples is practical: ibex evaluate = 36s, cva6 evaluate = 14s.
+criterion_group!(
+    name = eval_heavy;
+    config = Criterion::default().sample_size(10);
+    targets = bench_evaluate_ibex, bench_structural_enum_ibex, bench_validate_ibex,
               bench_evaluate_cva6_r4, bench_structural_enum_cva6_r4, bench_validate_cva6_r4
 );
 
-criterion_group!(
-    name = coordspace;
-    config = Criterion::default().sample_size(100);
-    targets = bench_space_lookup_valid, bench_space_lookup_invalid,
-              bench_constraint_check
-);
-
-criterion_main!(expand, evaluate, coordspace);
+criterion_main!(coordspace, expand, eval_light, eval_heavy);
