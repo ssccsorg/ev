@@ -3,7 +3,7 @@
 //! Uses pluggable checks resolved from registries.
 
 use crate::spec::{ConstraintSpec, VerificationSpec};
-use crate::verify::compose::{coords_to_coord_vec, Combination, EnumerateIter};
+use crate::verify::compose::{coords_to_coord_vec, Combination, StructuralEnum};
 use crate::verify::registry::{Check, ConstraintRegistry, ProjectorRegistry};
 
 /// Result of evaluating a single constraint combination.
@@ -95,57 +95,61 @@ pub fn evaluate_all(
 
 /// Validate all combinations into a DynCoordSpace.
 ///
-/// Only valid combinations are stored in the CoordSpace.
-/// Invalid combinations are structurally absent (vacant slots),
-/// detectable in 1.65 ns via DynCoordSpace lookup.
-///
-/// Uses EnumerateIter for O(1) memory iteration — no Vec allocation.
+/// Uses StructuralEnum to generate only structurally valid combinations.
+/// Runtime-only constraints (eq, neq, lt, gt, le, ge, even) are evaluated
+/// on the reduced set. Invalid combinations are structurally absent.
 pub fn validate_into_space(
     spec: &VerificationSpec,
     constraint_registry: &ConstraintRegistry,
 ) -> tagma_core::DynCoordSpace<()> {
     use tagma_core::DynCoordSpace;
 
-    let checks = constraint_registry.build_all(&spec.constraints, &spec.fields);
-    let field_list: Vec<&String> = spec.fields.keys().collect();
+    let runtime_checks = build_runtime_checks(spec, constraint_registry);
     let mut space: DynCoordSpace<()> = DynCoordSpace::new();
 
-    for combo in EnumerateIter::new(spec) {
-        let coords = &combo.coordinates;
-
-        // Check field domain validity
-        let mut valid = true;
-        for (axis, name) in field_list.iter().enumerate() {
-            if let Some(value) = coords.get_axis(axis) {
-                if !spec.fields.get(*name).unwrap().allows(value) {
-                    valid = false;
-                    break;
-                }
-            }
-        }
-        if !valid {
-            continue;
-        }
-
-        // Check all constraints
+    for combo in StructuralEnum::new(spec) {
         let mut passes = true;
-        for check in &checks {
+        for check in &runtime_checks {
             if !check.allows(combo.point.coordinates()) {
                 passes = false;
                 break;
             }
         }
-        if !passes {
-            continue;
-        }
-
-        // Valid: store in CoordSpace
-        if let Some(path) = coords_to_coord_vec(&coords.raw) {
-            let _ = space.place(&path, ());
+        if passes {
+            if let Some(path) = coords_to_coord_vec(&combo.coordinates.raw) {
+                let _ = space.place(&path, ());
+            }
         }
     }
 
     space
+}
+
+/// Build only runtime-evaluated checks, excluding structurally-enforced constraints.
+fn build_runtime_checks(
+    spec: &VerificationSpec,
+    registry: &ConstraintRegistry,
+) -> Vec<Box<dyn Check>> {
+    let runtime_types = ["eq", "neq", "lt", "gt", "le", "ge", "even"];
+    registry
+        .build_all(&spec.constraints, &spec.fields)
+        .into_iter()
+        .zip(spec.constraints.iter())
+        .filter(|(_, c)| {
+            let type_name = match c {
+                ConstraintSpec::Eq { .. } => "eq",
+                ConstraintSpec::Neq { .. } => "neq",
+                ConstraintSpec::Lt { .. } => "lt",
+                ConstraintSpec::Gt { .. } => "gt",
+                ConstraintSpec::Le { .. } => "le",
+                ConstraintSpec::Ge { .. } => "ge",
+                ConstraintSpec::Even { .. } => "even",
+                _ => "",
+            };
+            runtime_types.contains(&type_name)
+        })
+        .map(|(check, _)| check.into_check())
+        .collect()
 }
 
 fn describe_field(field_spec: &crate::spec::FieldSpec) -> String {

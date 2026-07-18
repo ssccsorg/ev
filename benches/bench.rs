@@ -10,7 +10,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::collections::BTreeMap;
 
 use ev::spec::{ConstraintSpec, FieldSpec, ProjectorSpec, VerificationSpec};
-use ev::verify::compose::{coords_to_coord_vec, expand_all, EnumerateIter, MAX_COMBINATIONS};
+use ev::verify::compose::{coords_to_coord_vec, expand_all, EnumerateIter, StructuralEnum, MAX_COMBINATIONS};
 use ev::verify::evaluate::{evaluate_all, validate_into_space};
 use ev::verify::registry::{Check, ConstraintRegistry, ProjectorRegistry};
 
@@ -158,6 +158,16 @@ fn bench_evaluate_small(c: &mut Criterion) {
     });
 }
 
+fn bench_structural_enum_small(c: &mut Criterion) {
+    let spec = small_spec();
+    c.bench_function("struct_enum/small_27", |b| {
+        b.iter(|| {
+            let count = StructuralEnum::new(black_box(&spec)).count();
+            black_box(count);
+        })
+    });
+}
+
 fn bench_validate_small(c: &mut Criterion) {
     let spec = small_spec();
     c.bench_function("validate/small_27", |b| {
@@ -184,6 +194,16 @@ fn bench_evaluate_medium(c: &mut Criterion) {
     });
 }
 
+fn bench_structural_enum_medium(c: &mut Criterion) {
+    let spec = medium_spec();
+    c.bench_function("struct_enum/medium_32k", |b| {
+        b.iter(|| {
+            let count = StructuralEnum::new(black_box(&spec)).count();
+            black_box(count);
+        })
+    });
+}
+
 fn bench_validate_medium(c: &mut Criterion) {
     let spec = medium_spec();
     c.bench_function("validate/medium_32k", |b| {
@@ -206,6 +226,16 @@ fn bench_evaluate_ibex(c: &mut Criterion) {
                 &ProjectorRegistry::default(),
             );
             let count = results.iter().filter(|r| r.passed).count();
+            black_box(count);
+        })
+    });
+}
+
+fn bench_structural_enum_ibex(c: &mut Criterion) {
+    let spec = ibex_spec();
+    c.bench_function("struct_enum/ibex_524k", |b| {
+        b.iter(|| {
+            let count = StructuralEnum::new(black_box(&spec)).count();
             black_box(count);
         })
     });
@@ -294,6 +324,16 @@ fn bench_evaluate_cva6_r4(c: &mut Criterion) {
     });
 }
 
+fn bench_structural_enum_cva6_r4(c: &mut Criterion) {
+    let spec = cva6_r4_spec();
+    c.bench_function("struct_enum/cva6_r4_2M", |b| {
+        b.iter(|| {
+            let count = StructuralEnum::new(black_box(&spec)).count();
+            black_box(count);
+        })
+    });
+}
+
 fn bench_validate_cva6_r4(c: &mut Criterion) {
     let spec = cva6_r4_spec();
     c.bench_function("validate/cva6_r4_2M", |b| {
@@ -339,10 +379,10 @@ criterion_group!(
 criterion_group!(
     name = evaluate;
     config = Criterion::default().sample_size(10);
-    targets = bench_evaluate_small, bench_validate_small,
-              bench_evaluate_medium, bench_validate_medium,
-              bench_evaluate_ibex, bench_validate_ibex,
-              bench_evaluate_cva6_r4, bench_validate_cva6_r4
+    targets = bench_evaluate_small, bench_structural_enum_small, bench_validate_small,
+              bench_evaluate_medium, bench_structural_enum_medium, bench_validate_medium,
+              bench_evaluate_ibex, bench_structural_enum_ibex, bench_validate_ibex,
+              bench_evaluate_cva6_r4, bench_structural_enum_cva6_r4, bench_validate_cva6_r4
 );
 
 criterion_group!(
