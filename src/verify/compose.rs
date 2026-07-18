@@ -1079,9 +1079,14 @@ mod tests {
     #[test]
     fn structural_filters_oneof_restricts_domain() {
         let mut fields = BTreeMap::new();
-        fields.insert("x".into(), FieldSpec {
-            range: Some((0, 9)), alignment: None, values: None,
-        });
+        fields.insert(
+            "x".into(),
+            FieldSpec {
+                range: Some((0, 9)),
+                alignment: None,
+                values: None,
+            },
+        );
         let spec = VerificationSpec {
             target: "test".into(),
             fields,
@@ -1101,9 +1106,14 @@ mod tests {
     #[test]
     fn structural_filters_bitmask_restricts_domain() {
         let mut fields = BTreeMap::new();
-        fields.insert("a".into(), FieldSpec {
-            range: Some((0, 7)), alignment: None, values: None,
-        });
+        fields.insert(
+            "a".into(),
+            FieldSpec {
+                range: Some((0, 7)),
+                alignment: None,
+                values: None,
+            },
+        );
         let spec = VerificationSpec {
             target: "test".into(),
             fields,
@@ -1122,14 +1132,22 @@ mod tests {
     #[test]
     fn structural_filters_cross_produces_mapping() {
         let mut fields = BTreeMap::new();
-        fields.insert("op".into(), FieldSpec {
-            range: None, alignment: None,
-            values: Some(vec![0, 1, 2]),
-        });
-        fields.insert("sub".into(), FieldSpec {
-            range: None, alignment: None,
-            values: Some(vec![0, 1, 2, 3]),
-        });
+        fields.insert(
+            "op".into(),
+            FieldSpec {
+                range: None,
+                alignment: None,
+                values: Some(vec![0, 1, 2]),
+            },
+        );
+        fields.insert(
+            "sub".into(),
+            FieldSpec {
+                range: None,
+                alignment: None,
+                values: Some(vec![0, 1, 2, 3]),
+            },
+        );
         let mapping: std::collections::HashMap<i64, Vec<i64>> =
             [(0, vec![0]), (1, vec![0, 1, 2])].into();
         let spec = VerificationSpec {
@@ -1156,25 +1174,42 @@ mod tests {
     #[test]
     fn structural_enum_no_cross_matches_expand_all() {
         let mut fields = BTreeMap::new();
-        fields.insert("a".into(), FieldSpec {
-            range: Some((0, 2)), alignment: None, values: None,
-        });
-        fields.insert("b".into(), FieldSpec {
-            range: Some((0, 3)), alignment: None, values: None,
-        });
+        fields.insert(
+            "a".into(),
+            FieldSpec {
+                range: Some((0, 2)),
+                alignment: None,
+                values: None,
+            },
+        );
+        fields.insert(
+            "b".into(),
+            FieldSpec {
+                range: Some((0, 3)),
+                alignment: None,
+                values: None,
+            },
+        );
         let spec = make_spec(fields);
         let expand_count = expand_all(&spec).unwrap().len();
         let struct_count = StructuralEnum::new(&spec).count();
-        assert_eq!(struct_count, expand_count,
-            "without constraints, StructuralEnum should match expand_all");
+        assert_eq!(
+            struct_count, expand_count,
+            "without constraints, StructuralEnum should match expand_all"
+        );
     }
 
     #[test]
     fn structural_enum_with_oneof_reduces_space() {
         let mut fields = BTreeMap::new();
-        fields.insert("x".into(), FieldSpec {
-            range: Some((0, 4)), alignment: None, values: None,
-        });
+        fields.insert(
+            "x".into(),
+            FieldSpec {
+                range: Some((0, 4)),
+                alignment: None,
+                values: None,
+            },
+        );
         let spec = VerificationSpec {
             target: "test".into(),
             fields,
@@ -1188,7 +1223,6 @@ mod tests {
         let expand_count = expand_all(&spec).unwrap().len();
         assert_eq!(expand_count, 5);
         let struct_count = StructuralEnum::new(&spec).count();
-        assert_eq!(struct_count, 3,
-            "oneof should reduce enumeration space");
+        assert_eq!(struct_count, 3, "oneof should reduce enumeration space");
     }
 }

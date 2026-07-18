@@ -901,25 +901,69 @@ mod tests {
     fn build_runtime_checks_excludes_structural() {
         let (allowed, cross_maps) = crate::verify::compose::structural_filters(&make_spec(
             BTreeMap::from([
-                ("a".into(), FieldSpec { range: Some((0, 7)), alignment: None, values: None }),
-                ("b".into(), FieldSpec { range: Some((0, 7)), alignment: None, values: None }),
+                (
+                    "a".into(),
+                    FieldSpec {
+                        range: Some((0, 7)),
+                        alignment: None,
+                        values: None,
+                    },
+                ),
+                (
+                    "b".into(),
+                    FieldSpec {
+                        range: Some((0, 7)),
+                        alignment: None,
+                        values: None,
+                    },
+                ),
             ]),
             vec![
-                ConstraintSpec::Eq { field_a: "a".into(), field_b: "b".into() },
-                ConstraintSpec::Oneof { field: "a".into(), values: vec![0, 2, 4, 6] },
-                ConstraintSpec::Bitmask { field: "b".into(), mask: 1, value: 0 },
+                ConstraintSpec::Eq {
+                    field_a: "a".into(),
+                    field_b: "b".into(),
+                },
+                ConstraintSpec::Oneof {
+                    field: "a".into(),
+                    values: vec![0, 2, 4, 6],
+                },
+                ConstraintSpec::Bitmask {
+                    field: "b".into(),
+                    mask: 1,
+                    value: 0,
+                },
             ],
             ProjectorSpec::Sum,
         ));
         let _ = (allowed, cross_maps);
         let spec = make_spec(
             BTreeMap::from([
-                ("a".into(), FieldSpec { range: Some((0, 7)), alignment: None, values: None }),
-                ("b".into(), FieldSpec { range: Some((0, 7)), alignment: None, values: None }),
+                (
+                    "a".into(),
+                    FieldSpec {
+                        range: Some((0, 7)),
+                        alignment: None,
+                        values: None,
+                    },
+                ),
+                (
+                    "b".into(),
+                    FieldSpec {
+                        range: Some((0, 7)),
+                        alignment: None,
+                        values: None,
+                    },
+                ),
             ]),
             vec![
-                ConstraintSpec::Eq { field_a: "a".into(), field_b: "b".into() },
-                ConstraintSpec::Oneof { field: "a".into(), values: vec![0, 2, 4, 6] },
+                ConstraintSpec::Eq {
+                    field_a: "a".into(),
+                    field_b: "b".into(),
+                },
+                ConstraintSpec::Oneof {
+                    field: "a".into(),
+                    values: vec![0, 2, 4, 6],
+                },
             ],
             ProjectorSpec::Sum,
         );
