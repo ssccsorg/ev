@@ -1051,4 +1051,144 @@ mod tests {
             err
         );
     }
+
+    // ── coords_to_coord_vec ─────────────────────────────────────
+
+    #[test]
+    fn coords_to_coord_vec_basic() {
+        let path = coords_to_coord_vec(&[0, 1, 2, 3, 4]).unwrap();
+        assert_eq!(path.len(), 5);
+        assert_eq!(path[0].index(), 0);
+        assert_eq!(path[4].index(), 4);
+    }
+
+    #[test]
+    fn coords_to_coord_vec_out_of_range() {
+        let result = coords_to_coord_vec(&[0, 20000]);
+        assert!(result.is_none(), "values > 11171 should return None");
+    }
+
+    #[test]
+    fn coords_to_coord_vec_empty() {
+        let path = coords_to_coord_vec(&[]).unwrap();
+        assert!(path.is_empty());
+    }
+
+    // ── structural_filters ───────────────────────────────────────
+
+    #[test]
+    fn structural_filters_oneof_restricts_domain() {
+        let mut fields = BTreeMap::new();
+        fields.insert("x".into(), FieldSpec {
+            range: Some((0, 9)), alignment: None, values: None,
+        });
+        let spec = VerificationSpec {
+            target: "test".into(),
+            fields,
+            encoding: None,
+            constraints: vec![ConstraintSpec::Oneof {
+                field: "x".into(),
+                values: vec![2, 4, 6, 8],
+            }],
+            projector: crate::spec::ProjectorSpec::Sum,
+        };
+        let (allowed, cross_maps) = structural_filters(&spec);
+        assert_eq!(allowed.len(), 1);
+        assert_eq!(allowed[0], vec![2, 4, 6, 8]);
+        assert!(cross_maps.is_empty());
+    }
+
+    #[test]
+    fn structural_filters_bitmask_restricts_domain() {
+        let mut fields = BTreeMap::new();
+        fields.insert("a".into(), FieldSpec {
+            range: Some((0, 7)), alignment: None, values: None,
+        });
+        let spec = VerificationSpec {
+            target: "test".into(),
+            fields,
+            encoding: None,
+            constraints: vec![ConstraintSpec::Bitmask {
+                field: "a".into(),
+                mask: 2,
+                value: 2,
+            }],
+            projector: crate::spec::ProjectorSpec::Sum,
+        };
+        let (allowed, _) = structural_filters(&spec);
+        assert_eq!(allowed[0], vec![2, 3, 6, 7]);
+    }
+
+    #[test]
+    fn structural_filters_cross_produces_mapping() {
+        let mut fields = BTreeMap::new();
+        fields.insert("op".into(), FieldSpec {
+            range: None, alignment: None,
+            values: Some(vec![0, 1, 2]),
+        });
+        fields.insert("sub".into(), FieldSpec {
+            range: None, alignment: None,
+            values: Some(vec![0, 1, 2, 3]),
+        });
+        let mapping: std::collections::HashMap<i64, Vec<i64>> =
+            [(0, vec![0]), (1, vec![0, 1, 2])].into();
+        let spec = VerificationSpec {
+            target: "test".into(),
+            fields,
+            encoding: None,
+            constraints: vec![ConstraintSpec::Cross {
+                field_a: "op".into(),
+                field_b: "sub".into(),
+                mapping,
+            }],
+            projector: crate::spec::ProjectorSpec::Sum,
+        };
+        let (allowed, cross_maps) = structural_filters(&spec);
+        assert_eq!(allowed[0], vec![0, 1, 2]);
+        assert_eq!(allowed[1], vec![0, 1, 2, 3]);
+        assert_eq!(cross_maps.len(), 1);
+        assert_eq!(cross_maps[0].0, 0);
+        assert_eq!(cross_maps[0].1, 1);
+    }
+
+    // ── StructuralEnum (no cross) ────────────────────────────────
+
+    #[test]
+    fn structural_enum_no_cross_matches_expand_all() {
+        let mut fields = BTreeMap::new();
+        fields.insert("a".into(), FieldSpec {
+            range: Some((0, 2)), alignment: None, values: None,
+        });
+        fields.insert("b".into(), FieldSpec {
+            range: Some((0, 3)), alignment: None, values: None,
+        });
+        let spec = make_spec(fields);
+        let expand_count = expand_all(&spec).unwrap().len();
+        let struct_count = StructuralEnum::new(&spec).count();
+        assert_eq!(struct_count, expand_count,
+            "without constraints, StructuralEnum should match expand_all");
+    }
+
+    #[test]
+    fn structural_enum_with_oneof_reduces_space() {
+        let mut fields = BTreeMap::new();
+        fields.insert("x".into(), FieldSpec {
+            range: Some((0, 4)), alignment: None, values: None,
+        });
+        let spec = VerificationSpec {
+            target: "test".into(),
+            fields,
+            encoding: None,
+            constraints: vec![ConstraintSpec::Oneof {
+                field: "x".into(),
+                values: vec![0, 2, 4],
+            }],
+            projector: crate::spec::ProjectorSpec::Sum,
+        };
+        let expand_count = expand_all(&spec).unwrap().len();
+        assert_eq!(expand_count, 5);
+        let struct_count = StructuralEnum::new(&spec).count();
+        assert_eq!(struct_count, 3,
+            "oneof should reduce enumeration space");
+    }
 }
