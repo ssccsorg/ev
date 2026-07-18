@@ -50,7 +50,7 @@ pub struct Combination {
 ///
 /// Set to 10 million to cover typical RISC-V XIF designs (4-6 fields, small domains)
 /// while preventing OOM from accidentally large specifications.
-pub const MAX_COMBINATIONS: usize = 34_000_000;
+pub const MAX_COMBINATIONS: usize = 1_000_000_000; // 1B — CoordSpace removes Vec allocation
 
 /// Expand all field domains into the full cartesian product.
 ///
