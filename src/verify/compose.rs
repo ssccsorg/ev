@@ -207,14 +207,18 @@ pub fn coords_to_path<const N: usize>(coords: &[i64]) -> Option<CoordPath<N>> {
     Some(CoordPath::new(arr))
 }
 
+/// Type alias for structural filter result: (per-field allowed, cross mappings).
+pub type StructuralFilters = (
+    Vec<Vec<i64>>,
+    Vec<(usize, usize, std::collections::HashMap<i64, Vec<i64>>)>,
+);
+
 /// Build a structural filter from constraints.
 ///
 /// Returns per-field allowed values where constraints structurally
 /// restrict the space. Constraints that cannot be expressed as
 /// structural filters (eq, neq) are returned for runtime evaluation.
-pub fn structural_filters(
-    spec: &VerificationSpec,
-) -> (Vec<Vec<i64>>, Vec<(usize, usize, std::collections::HashMap<i64, Vec<i64>>)>) {
+pub fn structural_filters(spec: &VerificationSpec) -> StructuralFilters {
     use std::collections::HashMap;
 
     let field_names: Vec<&String> = spec.fields.keys().collect();
@@ -325,8 +329,10 @@ impl StructuralEnum {
 
         // Re-index cross maps: for each child field, store a reference
         // to its parent field and mapping
-        let mut indexed: std::collections::HashMap<usize, (usize, std::collections::HashMap<i64, Vec<i64>>)> =
-            std::collections::HashMap::new();
+        let mut indexed: std::collections::HashMap<
+            usize,
+            (usize, std::collections::HashMap<i64, Vec<i64>>),
+        > = std::collections::HashMap::new();
         for (parent, child, mapping) in cross_maps {
             indexed.insert(child, (parent, mapping));
         }
@@ -342,7 +348,7 @@ impl StructuralEnum {
         }
     }
 
-    fn advance_indices(&mut self, current_values: &mut Vec<i64>) -> bool {
+    fn advance_indices(&mut self, current_values: &mut [i64]) -> bool {
         for i in (0..self.indices.len()).rev() {
             // For cross-constrained fields, we may need to try multiple
             // values until we find one that satisfies the constraint.
@@ -417,7 +423,11 @@ impl StructuralEnum {
         let mut result = values.to_vec();
         for constraint in &self.constraints {
             match constraint {
-                ConstraintSpec::EnableMask { field, value, disable } => {
+                ConstraintSpec::EnableMask {
+                    field,
+                    value,
+                    disable,
+                } => {
                     if let Some(trigger_axis) = self.field_names.iter().position(|n| n == field) {
                         if result[trigger_axis] == *value {
                             for f in disable {
@@ -432,7 +442,9 @@ impl StructuralEnum {
                     if let Some(trigger_axis) = self.field_names.iter().position(|n| n == field) {
                         if result[trigger_axis] == *value {
                             for assignment in set {
-                                if let Some(axis) = self.field_names.iter().position(|n| n == &assignment.field) {
+                                if let Some(axis) =
+                                    self.field_names.iter().position(|n| n == &assignment.field)
+                                {
                                     result[axis] = assignment.value;
                                 }
                             }
@@ -552,33 +564,22 @@ impl EnumerateIter {
                     value,
                     disable,
                 } => {
-                    if let Some(trigger_axis) =
-                        self.field_names.iter().position(|n| n == field)
-                    {
+                    if let Some(trigger_axis) = self.field_names.iter().position(|n| n == field) {
                         if result[trigger_axis] == *value {
                             for f in disable {
-                                if let Some(axis) =
-                                    self.field_names.iter().position(|n| n == f)
-                                {
+                                if let Some(axis) = self.field_names.iter().position(|n| n == f) {
                                     result[axis] = 0;
                                 }
                             }
                         }
                     }
                 }
-                ConstraintSpec::EnableSet {
-                    field,
-                    value,
-                    set,
-                } => {
-                    if let Some(trigger_axis) =
-                        self.field_names.iter().position(|n| n == field)
-                    {
+                ConstraintSpec::EnableSet { field, value, set } => {
+                    if let Some(trigger_axis) = self.field_names.iter().position(|n| n == field) {
                         if result[trigger_axis] == *value {
                             for assignment in set {
                                 if let Some(axis) =
-                                    self.field_names.iter()
-                                        .position(|n| n == &assignment.field)
+                                    self.field_names.iter().position(|n| n == &assignment.field)
                                 {
                                     result[axis] = assignment.value;
                                 }

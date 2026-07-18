@@ -21,9 +21,30 @@ use ev::verify::registry::{Check, ConstraintRegistry, ProjectorRegistry};
 /// Small spec: 3 fields × 3 values = 27 combos.
 fn small_spec() -> VerificationSpec {
     let mut fields = BTreeMap::new();
-    fields.insert("a".into(), FieldSpec { range: Some((0, 2)), alignment: None, values: None });
-    fields.insert("b".into(), FieldSpec { range: Some((0, 2)), alignment: None, values: None });
-    fields.insert("c".into(), FieldSpec { range: Some((0, 2)), alignment: None, values: None });
+    fields.insert(
+        "a".into(),
+        FieldSpec {
+            range: Some((0, 2)),
+            alignment: None,
+            values: None,
+        },
+    );
+    fields.insert(
+        "b".into(),
+        FieldSpec {
+            range: Some((0, 2)),
+            alignment: None,
+            values: None,
+        },
+    );
+    fields.insert(
+        "c".into(),
+        FieldSpec {
+            range: Some((0, 2)),
+            alignment: None,
+            values: None,
+        },
+    );
     VerificationSpec {
         target: "bench_small".into(),
         fields,
@@ -36,16 +57,52 @@ fn small_spec() -> VerificationSpec {
 /// Medium spec: 5 fields × 8 values = 32,768 combos (ibex-like).
 fn medium_spec() -> VerificationSpec {
     let mut fields = BTreeMap::new();
-    fields.insert("funct7".into(), FieldSpec { range: Some((0, 7)), alignment: None, values: None });
-    fields.insert("funct3".into(), FieldSpec { range: Some((0, 7)), alignment: None, values: None });
-    fields.insert("rs1".into(),    FieldSpec { range: Some((0, 7)), alignment: None, values: None });
-    fields.insert("rs2".into(),    FieldSpec { range: Some((0, 7)), alignment: None, values: None });
-    fields.insert("rd".into(),     FieldSpec { range: Some((0, 7)), alignment: None, values: None });
+    fields.insert(
+        "funct7".into(),
+        FieldSpec {
+            range: Some((0, 7)),
+            alignment: None,
+            values: None,
+        },
+    );
+    fields.insert(
+        "funct3".into(),
+        FieldSpec {
+            range: Some((0, 7)),
+            alignment: None,
+            values: None,
+        },
+    );
+    fields.insert(
+        "rs1".into(),
+        FieldSpec {
+            range: Some((0, 7)),
+            alignment: None,
+            values: None,
+        },
+    );
+    fields.insert(
+        "rs2".into(),
+        FieldSpec {
+            range: Some((0, 7)),
+            alignment: None,
+            values: None,
+        },
+    );
+    fields.insert(
+        "rd".into(),
+        FieldSpec {
+            range: Some((0, 7)),
+            alignment: None,
+            values: None,
+        },
+    );
     let mapping: std::collections::HashMap<i64, Vec<i64>> = [
-        (0, vec![0,1,2,3,4,5,6,7]),
-        (4, vec![1,4,5,6,7]),
-        (5, vec![1,2,3,4,5,6,7]),
-    ].into();
+        (0, vec![0, 1, 2, 3, 4, 5, 6, 7]),
+        (4, vec![1, 4, 5, 6, 7]),
+        (5, vec![1, 2, 3, 4, 5, 6, 7]),
+    ]
+    .into();
     VerificationSpec {
         target: "bench_medium".into(),
         fields,
@@ -348,7 +405,11 @@ fn bench_validate_cva6_r4(c: &mut Criterion) {
 fn bench_constraint_check(c: &mut Criterion) {
     let spec = ibex_spec();
     let checks = ConstraintRegistry::default().build_all(&spec.constraints, &spec.fields);
-    let combo = expand_all(&spec).unwrap().into_iter().find(|c| c.values[0] == 4 && c.values[1] == 4).unwrap();
+    let combo = expand_all(&spec)
+        .unwrap()
+        .into_iter()
+        .find(|c| c.values[0] == 4 && c.values[1] == 4)
+        .unwrap();
     c.bench_function("constraint/check_single", |b| {
         b.iter(|| {
             let mut passes = true;

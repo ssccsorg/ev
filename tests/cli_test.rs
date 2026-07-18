@@ -153,7 +153,7 @@ fn verify_cva6_xif_mac_fixture() {
 }
 
 #[test]
-#[ignore = "medium: 2M combinations, ~25s on M1 Max (CI may timeout)"]
+#[ignore = "medium: 2M combos via CLI (old pipeline). Use release build or struct_enum for speed."]
 fn verify_cva6_xif_ref_r4_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("verify")
@@ -219,7 +219,7 @@ fn synth_json_with_mock_backend() {
 }
 
 #[test]
-#[ignore = "slow: 33M combinations, run with -- --include-ignored (CI skips by default)"]
+#[ignore = "33M combos via CLI (old pipeline). struct_enum does it in ~200ms; pending CLI integration."]
 fn verify_cva6_xif_ref_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("verify")

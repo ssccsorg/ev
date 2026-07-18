@@ -131,16 +131,23 @@ fn build_runtime_checks(
     registry: &ConstraintRegistry,
 ) -> Vec<Box<dyn Check>> {
     // Filter to runtime-required constraints before building
-    let runtime_specs: Vec<ConstraintSpec> = spec.constraints.iter().filter(|c| match c {
-        ConstraintSpec::Eq { .. }
-        | ConstraintSpec::Neq { .. }
-        | ConstraintSpec::Lt { .. }
-        | ConstraintSpec::Gt { .. }
-        | ConstraintSpec::Le { .. }
-        | ConstraintSpec::Ge { .. }
-        | ConstraintSpec::Even { .. } => true,
-        _ => false,
-    }).cloned().collect();
+    let runtime_specs: Vec<ConstraintSpec> = spec
+        .constraints
+        .iter()
+        .filter(|c| {
+            matches!(
+                c,
+                ConstraintSpec::Eq { .. }
+                    | ConstraintSpec::Neq { .. }
+                    | ConstraintSpec::Lt { .. }
+                    | ConstraintSpec::Gt { .. }
+                    | ConstraintSpec::Le { .. }
+                    | ConstraintSpec::Ge { .. }
+                    | ConstraintSpec::Even { .. }
+            )
+        })
+        .cloned()
+        .collect();
 
     registry
         .build_all(&runtime_specs, &spec.fields)
