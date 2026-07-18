@@ -10,7 +10,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::collections::BTreeMap;
 
 use ev::spec::{ConstraintSpec, FieldSpec, ProjectorSpec, VerificationSpec};
-use ev::verify::compose::{coords_to_coord_vec, expand_all, EnumerateIter, StructuralEnum, MAX_COMBINATIONS};
+use ev::verify::compose::{coords_to_coord_vec, expand_all, EnumerateIter, StructuralEnum};
 use ev::verify::evaluate::{evaluate_all, validate_into_space};
 use ev::verify::registry::{Check, ConstraintRegistry, ProjectorRegistry};
 
