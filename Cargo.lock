@@ -300,6 +300,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "sha2",
+ "tagma-core",
  "tempfile",
  "tracing",
 ]
@@ -1188,6 +1189,11 @@ dependencies = [
  "quote",
  "syn",
 ]
+
+[[package]]
+name = "tagma-core"
+version = "0.1.0"
+source = "git+https://github.com/ssccsorg/tagma#205e3a0f948d583b0200dec7fa1243c474a7605a"
 
 [[package]]
 name = "tempfile"

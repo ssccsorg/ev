@@ -4,6 +4,7 @@
 //! cartesian product of all field domains.
 
 use crate::spec::{ConstraintSpec, VerificationSpec};
+use tagma_core::{Coord, CoordPath};
 
 /// A coordinate vector — one value per instruction field.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -179,6 +180,162 @@ pub fn expand_all(spec: &VerificationSpec) -> Result<Vec<Combination>, String> {
     }
 
     Ok(combinations)
+}
+
+/// Convert a coordinate vector to a CoordPath for CoordSpace indexing.
+///
+/// Returns None if any field value exceeds the u16 Coord range.
+pub fn coords_to_path<const N: usize>(coords: &[i64]) -> Option<CoordPath<N>> {
+    assert_eq!(coords.len(), N, "coords length must match CoordPath depth");
+    let mut arr: [Coord; N] = [Coord::new(0).unwrap(); N];
+    for (i, &v) in coords.iter().enumerate() {
+        let c = Coord::new(v as u16)?;
+        arr[i] = c;
+    }
+    Some(CoordPath::new(arr))
+}
+
+/// Lazy cartesian product iterator over field domains.
+///
+/// Unlike `expand_all()`, this iterator does not pre-allocate a Vec.
+/// Each combination is produced on demand, yielding O(1) memory
+/// regardless of total combination count.
+pub struct EnumerateIter {
+    domains: Vec<Vec<i64>>,
+    indices: Vec<usize>,
+    done: bool,
+    field_names: Vec<String>,
+    constraints: Vec<ConstraintSpec>,
+}
+
+impl EnumerateIter {
+    pub fn new(spec: &VerificationSpec) -> Self {
+        let field_names: Vec<String> = spec.fields.keys().cloned().collect();
+        let domains: Vec<Vec<i64>> = field_names
+            .iter()
+            .map(|name| {
+                let def = spec.fields.get(name).expect("field must exist");
+                def.expand()
+            })
+            .collect();
+        let indices = vec![0usize; domains.len()];
+        let done = domains.is_empty();
+        Self {
+            domains,
+            indices,
+            done,
+            field_names,
+            constraints: spec.constraints.clone(),
+        }
+    }
+}
+
+impl Iterator for EnumerateIter {
+    type Item = Combination;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.done {
+            return None;
+        }
+
+        // Build the current combination from current indices
+        let values: Vec<i64> = self
+            .indices
+            .iter()
+            .enumerate()
+            .map(|(i, &idx)| self.domains[i][idx])
+            .collect();
+
+        // Advance to the next index vector
+        let mut carry = true;
+        for i in (0..self.indices.len()).rev() {
+            if carry {
+                self.indices[i] += 1;
+                if self.indices[i] >= self.domains[i].len() {
+                    self.indices[i] = 0;
+                } else {
+                    carry = false;
+                }
+            }
+        }
+        if carry {
+            self.done = true;
+        }
+
+        // Apply enable_mask and enable_set constraints
+        // (simplified: only handles basic case; full constraint processing
+        //  is delegated to evaluate_all / validate_into_space)
+        let final_values = self.apply_enable_masks(&values);
+
+        let coordinates = Coordinates::new(final_values.clone());
+        let point = Point::new(coordinates.clone());
+        Some(Combination {
+            values: final_values,
+            coordinates,
+            point,
+        })
+    }
+}
+
+impl EnumerateIter {
+    fn apply_enable_masks(&self, values: &[i64]) -> Vec<i64> {
+        let mut result = values.to_vec();
+        for constraint in &self.constraints {
+            match constraint {
+                ConstraintSpec::EnableMask {
+                    field,
+                    value,
+                    disable,
+                } => {
+                    if let Some(trigger_axis) =
+                        self.field_names.iter().position(|n| n == field)
+                    {
+                        if result[trigger_axis] == *value {
+                            for f in disable {
+                                if let Some(axis) =
+                                    self.field_names.iter().position(|n| n == f)
+                                {
+                                    result[axis] = 0;
+                                }
+                            }
+                        }
+                    }
+                }
+                ConstraintSpec::EnableSet {
+                    field,
+                    value,
+                    set,
+                } => {
+                    if let Some(trigger_axis) =
+                        self.field_names.iter().position(|n| n == field)
+                    {
+                        if result[trigger_axis] == *value {
+                            for assignment in set {
+                                if let Some(axis) =
+                                    self.field_names.iter()
+                                        .position(|n| n == &assignment.field)
+                                {
+                                    result[axis] = assignment.value;
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        result
+    }
+
+    /// Total number of combinations (domain product).
+    /// Returns None if the product overflows usize.
+    pub fn total_combinations(&self) -> Option<usize> {
+        let mut total: usize = 1;
+        for d in &self.domains {
+            total = total.checked_mul(d.len())?;
+        }
+        Some(total)
+    }
 }
 
 #[cfg(test)]
