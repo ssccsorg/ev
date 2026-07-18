@@ -130,25 +130,22 @@ fn build_runtime_checks(
     spec: &VerificationSpec,
     registry: &ConstraintRegistry,
 ) -> Vec<Box<dyn Check>> {
-    let runtime_types = ["eq", "neq", "lt", "gt", "le", "ge", "even"];
+    // Filter to runtime-required constraints before building
+    let runtime_specs: Vec<ConstraintSpec> = spec.constraints.iter().filter(|c| match c {
+        ConstraintSpec::Eq { .. }
+        | ConstraintSpec::Neq { .. }
+        | ConstraintSpec::Lt { .. }
+        | ConstraintSpec::Gt { .. }
+        | ConstraintSpec::Le { .. }
+        | ConstraintSpec::Ge { .. }
+        | ConstraintSpec::Even { .. } => true,
+        _ => false,
+    }).cloned().collect();
+
     registry
-        .build_all(&spec.constraints, &spec.fields)
+        .build_all(&runtime_specs, &spec.fields)
         .into_iter()
-        .zip(spec.constraints.iter())
-        .filter(|(_, c)| {
-            let type_name = match c {
-                ConstraintSpec::Eq { .. } => "eq",
-                ConstraintSpec::Neq { .. } => "neq",
-                ConstraintSpec::Lt { .. } => "lt",
-                ConstraintSpec::Gt { .. } => "gt",
-                ConstraintSpec::Le { .. } => "le",
-                ConstraintSpec::Ge { .. } => "ge",
-                ConstraintSpec::Even { .. } => "even",
-                _ => "",
-            };
-            runtime_types.contains(&type_name)
-        })
-        .map(|(check, _)| check.into_check())
+        .map(|check| check.into_check())
         .collect()
 }
 

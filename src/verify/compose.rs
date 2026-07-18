@@ -296,19 +296,6 @@ pub fn structural_filters(
         }
     }
 
-    // Also apply field-level range restrictions from FieldSpec
-    for (i, name) in field_names.iter().enumerate() {
-        let def = spec.fields.get(*name).expect("field must exist");
-        let restricted: Vec<i64> = allowed[i]
-            .iter()
-            .filter(|v| def.allows(**v))
-            .copied()
-            .collect();
-        if !restricted.is_empty() {
-            allowed[i] = restricted;
-        }
-    }
-
     (allowed, cross_maps)
 }
 
@@ -458,8 +445,12 @@ impl StructuralEnum {
         result
     }
 
-    /// Total number of structurally valid combinations.
-    /// Returns None if the product overflows.
+    /// Upper bound on structurally valid combinations.
+    ///
+    /// This is the product of per-field allowed values, which may be larger
+    /// than the true count because cross constraints are not reflected in
+    /// per-field value counts. For the exact count, iterate and count.
+    /// Returns None if the product overflows usize.
     pub fn total_combinations(&self) -> Option<usize> {
         let mut total: usize = 1;
         for i in 0..self.allowed.len() {

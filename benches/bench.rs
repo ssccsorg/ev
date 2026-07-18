@@ -369,7 +369,7 @@ fn bench_constraint_check(c: &mut Criterion) {
 
 criterion_group!(
     name = expand;
-    config = Criterion::default().sample_size(10);
+    config = Criterion::default().sample_size(30);
     targets = bench_expand_small, bench_enumerate_small,
               bench_expand_medium, bench_enumerate_medium,
               bench_expand_ibex, bench_enumerate_ibex,
@@ -378,7 +378,7 @@ criterion_group!(
 
 criterion_group!(
     name = evaluate;
-    config = Criterion::default().sample_size(10);
+    config = Criterion::default().sample_size(30);
     targets = bench_evaluate_small, bench_structural_enum_small, bench_validate_small,
               bench_evaluate_medium, bench_structural_enum_medium, bench_validate_medium,
               bench_evaluate_ibex, bench_structural_enum_ibex, bench_validate_ibex,
