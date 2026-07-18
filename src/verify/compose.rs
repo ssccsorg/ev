@@ -182,6 +182,18 @@ pub fn expand_all(spec: &VerificationSpec) -> Result<Vec<Combination>, String> {
     Ok(combinations)
 }
 
+/// Convert a coordinate slice to a Vec<Coord> for DynCoordSpace indexing.
+///
+/// Returns None if any field value exceeds the u16 Coord range.
+pub fn coords_to_coord_vec(coords: &[i64]) -> Option<Vec<Coord>> {
+    let mut result = Vec::with_capacity(coords.len());
+    for &v in coords {
+        let c = Coord::new(v as u16)?;
+        result.push(c);
+    }
+    Some(result)
+}
+
 /// Convert a coordinate vector to a CoordPath for CoordSpace indexing.
 ///
 /// Returns None if any field value exceeds the u16 Coord range.

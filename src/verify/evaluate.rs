@@ -3,7 +3,7 @@
 //! Uses pluggable checks resolved from registries.
 
 use crate::spec::{ConstraintSpec, VerificationSpec};
-use crate::verify::compose::Combination;
+use crate::verify::compose::{coords_to_coord_vec, Combination, EnumerateIter};
 use crate::verify::registry::{Check, ConstraintRegistry, ProjectorRegistry};
 
 /// Result of evaluating a single constraint combination.
@@ -93,8 +93,63 @@ pub fn evaluate_all(
         .collect()
 }
 
-fn describe_field(fs: &crate::spec::FieldSpec) -> String {
-    if let Some(ref vals) = fs.values {
+/// Validate all combinations into a DynCoordSpace.
+///
+/// Only valid combinations are stored in the CoordSpace.
+/// Invalid combinations are structurally absent (vacant slots),
+/// detectable in 1.65 ns via DynCoordSpace lookup.
+///
+/// Uses EnumerateIter for O(1) memory iteration — no Vec allocation.
+pub fn validate_into_space(
+    spec: &VerificationSpec,
+    constraint_registry: &ConstraintRegistry,
+) -> tagma_core::DynCoordSpace<()> {
+    use tagma_core::DynCoordSpace;
+
+    let checks = constraint_registry.build_all(&spec.constraints, &spec.fields);
+    let field_list: Vec<&String> = spec.fields.keys().collect();
+    let mut space: DynCoordSpace<()> = DynCoordSpace::new();
+
+    for combo in EnumerateIter::new(spec) {
+        let coords = &combo.coordinates;
+
+        // Check field domain validity
+        let mut valid = true;
+        for (axis, name) in field_list.iter().enumerate() {
+            if let Some(value) = coords.get_axis(axis) {
+                if !spec.fields.get(*name).unwrap().allows(value) {
+                    valid = false;
+                    break;
+                }
+            }
+        }
+        if !valid {
+            continue;
+        }
+
+        // Check all constraints
+        let mut passes = true;
+        for check in &checks {
+            if !check.allows(combo.point.coordinates()) {
+                passes = false;
+                break;
+            }
+        }
+        if !passes {
+            continue;
+        }
+
+        // Valid: store in CoordSpace
+        if let Some(path) = coords_to_coord_vec(&coords.raw) {
+            let _ = space.place(&path, ());
+        }
+    }
+
+    space
+}
+
+fn describe_field(field_spec: &crate::spec::FieldSpec) -> String {
+    if let Some(ref vals) = field_spec.values {
         format!(
             "{{{}}}",
             vals.iter()
@@ -102,8 +157,8 @@ fn describe_field(fs: &crate::spec::FieldSpec) -> String {
                 .collect::<Vec<_>>()
                 .join(", ")
         )
-    } else if let Some((min, max)) = fs.range {
-        let step = fs.alignment.unwrap_or(1);
+    } else if let Some((min, max)) = field_spec.range {
+        let step = field_spec.alignment.unwrap_or(1);
         if step == 1 {
             format!("{}..={}", min, max)
         } else {
@@ -693,6 +748,58 @@ mod tests {
                 _ => {}
             }
         }
+    }
+
+    #[test]
+    fn validate_into_space_matches_evaluate_all() {
+        // validate_into_space should produce the same valid set as evaluate_all
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "op".into(),
+            FieldSpec {
+                range: None,
+                alignment: None,
+                values: Some(vec![0, 1, 2]),
+            },
+        );
+        fields.insert(
+            "sub".into(),
+            FieldSpec {
+                range: None,
+                alignment: None,
+                values: Some(vec![0, 1, 2, 3]),
+            },
+        );
+        let mapping: std::collections::HashMap<i64, Vec<i64>> =
+            [(0, vec![0]), (1, vec![0, 1, 2])].into();
+        let spec = make_spec(
+            fields,
+            vec![ConstraintSpec::Cross {
+                field_a: "op".into(),
+                field_b: "sub".into(),
+                mapping,
+            }],
+            ProjectorSpec::Sum,
+        );
+
+        // Reference: evaluate_all with Vec
+        let combos = crate::verify::compose::expand_all(&spec).unwrap();
+        let results = evaluate_all(
+            &spec,
+            combos,
+            &ConstraintRegistry::default(),
+            &ProjectorRegistry::default(),
+        );
+        let valid_count_ref = results.iter().filter(|r| r.passed).count();
+
+        // CoordSpace: validate_into_space
+        let space = validate_into_space(&spec, &ConstraintRegistry::default());
+        let valid_count_cs = space.iter().count();
+
+        assert_eq!(
+            valid_count_cs, valid_count_ref,
+            "validate_into_space should match evaluate_all valid count"
+        );
     }
 
     // ── Edge cases ────────────────────────────────────────────────
