@@ -4,6 +4,7 @@
 //! cartesian product of all field domains.
 
 use crate::spec::{ConstraintSpec, VerificationSpec};
+use tagma_core::{Coord, CoordPath};
 
 /// A coordinate vector — one value per instruction field.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -49,7 +50,7 @@ pub struct Combination {
 ///
 /// Set to 10 million to cover typical RISC-V XIF designs (4-6 fields, small domains)
 /// while preventing OOM from accidentally large specifications.
-pub const MAX_COMBINATIONS: usize = 34_000_000;
+pub const MAX_COMBINATIONS: usize = 1_000_000_000; // 1B — CoordSpace removes Vec allocation
 
 /// Expand all field domains into the full cartesian product.
 ///
@@ -179,6 +180,428 @@ pub fn expand_all(spec: &VerificationSpec) -> Result<Vec<Combination>, String> {
     }
 
     Ok(combinations)
+}
+
+/// Convert a coordinate slice to a Vec<Coord> for DynCoordSpace indexing.
+///
+/// Returns None if any field value exceeds the u16 Coord range.
+pub fn coords_to_coord_vec(coords: &[i64]) -> Option<Vec<Coord>> {
+    let mut result = Vec::with_capacity(coords.len());
+    for &v in coords {
+        let c = Coord::new(v as u16)?;
+        result.push(c);
+    }
+    Some(result)
+}
+
+/// Convert a coordinate vector to a CoordPath for CoordSpace indexing.
+///
+/// Returns None if any field value exceeds the u16 Coord range.
+pub fn coords_to_path<const N: usize>(coords: &[i64]) -> Option<CoordPath<N>> {
+    assert_eq!(coords.len(), N, "coords length must match CoordPath depth");
+    let mut arr: [Coord; N] = [Coord::new(0).unwrap(); N];
+    for (i, &v) in coords.iter().enumerate() {
+        let c = Coord::new(v as u16)?;
+        arr[i] = c;
+    }
+    Some(CoordPath::new(arr))
+}
+
+/// Type alias for structural filter result: (per-field allowed, cross mappings).
+pub type StructuralFilters = (
+    Vec<Vec<i64>>,
+    Vec<(usize, usize, std::collections::HashMap<i64, Vec<i64>>)>,
+);
+
+/// Build a structural filter from constraints.
+///
+/// Returns per-field allowed values where constraints structurally
+/// restrict the space. Constraints that cannot be expressed as
+/// structural filters (eq, neq) are returned for runtime evaluation.
+pub fn structural_filters(spec: &VerificationSpec) -> StructuralFilters {
+    use std::collections::HashMap;
+
+    let field_names: Vec<&String> = spec.fields.keys().collect();
+    let domains: Vec<Vec<i64>> = field_names
+        .iter()
+        .map(|name| {
+            let def = spec.fields.get(*name).expect("field must exist");
+            def.expand()
+        })
+        .collect();
+
+    // Start with full domain per field
+    let mut allowed: Vec<Vec<i64>> = domains.clone();
+    // Cross constraints: (parent_idx, child_idx, mapping)
+    let mut cross_maps: Vec<(usize, usize, HashMap<i64, Vec<i64>>)> = Vec::new();
+
+    for constraint in &spec.constraints {
+        match constraint {
+            // oneof: restrict field to specific values
+            ConstraintSpec::Oneof { field, values } => {
+                if let Some(idx) = field_names.iter().position(|n| *n == field) {
+                    // Intersect current allowed with the oneof values
+                    let current = &allowed[idx];
+                    let restricted: Vec<i64> = current
+                        .iter()
+                        .filter(|v| values.contains(v))
+                        .copied()
+                        .collect();
+                    if !restricted.is_empty() {
+                        allowed[idx] = restricted;
+                    }
+                }
+            }
+            // range: restrict field to [min, max]
+            ConstraintSpec::Range { field, min, max } => {
+                if let Some(idx) = field_names.iter().position(|n| *n == field) {
+                    let current = &allowed[idx];
+                    let restricted: Vec<i64> = current
+                        .iter()
+                        .filter(|v| **v >= *min && **v <= *max)
+                        .copied()
+                        .collect();
+                    if !restricted.is_empty() {
+                        allowed[idx] = restricted;
+                    }
+                }
+            }
+            // cross: field_a → field_b mapping
+            // Do NOT restrict field_b's domain here — the restriction is
+            // applied per-parent-value during enumeration via cross_maps.
+            // When field_a is NOT in the mapping, field_b is unrestricted.
+            ConstraintSpec::Cross {
+                field_a,
+                field_b,
+                mapping,
+            } => {
+                let idx_a = field_names.iter().position(|n| *n == field_a);
+                let idx_b = field_names.iter().position(|n| *n == field_b);
+                if let (Some(ia), Some(ib)) = (idx_a, idx_b) {
+                    cross_maps.push((ia, ib, mapping.clone()));
+                }
+            }
+            // bitmask: field & mask == value → filter field values
+            ConstraintSpec::Bitmask { field, mask, value } => {
+                if let Some(idx) = field_names.iter().position(|n| *n == field) {
+                    let current = &allowed[idx];
+                    let restricted: Vec<i64> = current
+                        .iter()
+                        .filter(|v| (**v & *mask) == *value)
+                        .copied()
+                        .collect();
+                    if !restricted.is_empty() {
+                        allowed[idx] = restricted;
+                    }
+                }
+            }
+            // eq, neq, lt, gt, le, ge, even: runtime only
+            _ => {}
+        }
+    }
+
+    (allowed, cross_maps)
+}
+
+/// A structural iterator that generates only valid combinations
+/// by encoding constraints into the enumeration space.
+pub struct StructuralEnum {
+    /// Per-field allowed values after applying structural constraints.
+    allowed: Vec<Vec<i64>>,
+    /// Current index into each field's allowed values.
+    indices: Vec<usize>,
+    /// Cross mapping: field_a_idx → (field_b_idx, mapping)
+    /// When iterating field_b, use the current field_a value to
+    /// restrict which field_b values are valid.
+    cross_maps: std::collections::HashMap<usize, (usize, std::collections::HashMap<i64, Vec<i64>>)>,
+    /// Done flag.
+    done: bool,
+    /// Field names (for enable_mask/ enable_set).
+    field_names: Vec<String>,
+    /// Constraints for enable processing at enumeration time.
+    constraints: Vec<ConstraintSpec>,
+}
+
+impl StructuralEnum {
+    pub fn new(spec: &VerificationSpec) -> Self {
+        let (allowed, cross_maps) = structural_filters(spec);
+        let field_names: Vec<String> = spec.fields.keys().cloned().collect();
+
+        // Re-index cross maps: for each child field, store a reference
+        // to its parent field and mapping
+        let mut indexed: std::collections::HashMap<
+            usize,
+            (usize, std::collections::HashMap<i64, Vec<i64>>),
+        > = std::collections::HashMap::new();
+        for (parent, child, mapping) in cross_maps {
+            indexed.insert(child, (parent, mapping));
+        }
+
+        let n = allowed.len();
+        Self {
+            allowed,
+            indices: vec![0; n],
+            cross_maps: indexed,
+            done: n == 0,
+            field_names,
+            constraints: spec.constraints.clone(),
+        }
+    }
+
+    fn advance_indices(&mut self, current_values: &mut [i64]) -> bool {
+        for i in (0..self.indices.len()).rev() {
+            // For cross-constrained fields, we may need to try multiple
+            // values until we find one that satisfies the constraint.
+            loop {
+                self.indices[i] += 1;
+                if self.indices[i] >= self.allowed[i].len() {
+                    self.indices[i] = 0;
+                    current_values[i] = self.allowed[i][0];
+                    break; // carry to next higher field
+                }
+                current_values[i] = self.allowed[i][self.indices[i]];
+
+                // Check cross constraint, if any
+                let cross_ok = if let Some((parent_idx, mapping)) = self.cross_maps.get(&i) {
+                    let parent_val = current_values[*parent_idx];
+                    mapping
+                        .get(&parent_val)
+                        .map(|vals| vals.contains(&current_values[i]))
+                        .unwrap_or(true) // not in mapping = unrestricted
+                } else {
+                    true
+                };
+
+                if cross_ok {
+                    return false; // found a valid value, no carry
+                }
+                // else: try next value (continue inner loop)
+            }
+        }
+        true // all fields carried = done
+    }
+}
+
+impl Iterator for StructuralEnum {
+    type Item = Combination;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.done {
+            return None;
+        }
+
+        // First iteration: use initial indices
+        // Build current values
+        let mut values: Vec<i64> = self
+            .indices
+            .iter()
+            .enumerate()
+            .map(|(i, &idx)| self.allowed[i][idx])
+            .collect();
+
+        // Advance to next combination
+        let carry = self.advance_indices(&mut values);
+        if carry {
+            self.done = true;
+        }
+
+        // Apply enable_mask / enable_set
+        let final_values = self.apply_enable_masks(&values);
+
+        let coordinates = Coordinates::new(final_values.clone());
+        let point = Point::new(coordinates.clone());
+        Some(Combination {
+            values: final_values,
+            coordinates,
+            point,
+        })
+    }
+}
+
+impl StructuralEnum {
+    fn apply_enable_masks(&self, values: &[i64]) -> Vec<i64> {
+        let mut result = values.to_vec();
+        for constraint in &self.constraints {
+            match constraint {
+                ConstraintSpec::EnableMask {
+                    field,
+                    value,
+                    disable,
+                } => {
+                    if let Some(trigger_axis) = self.field_names.iter().position(|n| n == field) {
+                        if result[trigger_axis] == *value {
+                            for f in disable {
+                                if let Some(axis) = self.field_names.iter().position(|n| n == f) {
+                                    result[axis] = 0;
+                                }
+                            }
+                        }
+                    }
+                }
+                ConstraintSpec::EnableSet { field, value, set } => {
+                    if let Some(trigger_axis) = self.field_names.iter().position(|n| n == field) {
+                        if result[trigger_axis] == *value {
+                            for assignment in set {
+                                if let Some(axis) =
+                                    self.field_names.iter().position(|n| n == &assignment.field)
+                                {
+                                    result[axis] = assignment.value;
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        result
+    }
+
+    /// Upper bound on structurally valid combinations.
+    ///
+    /// This is the product of per-field allowed values, which may be larger
+    /// than the true count because cross constraints are not reflected in
+    /// per-field value counts. For the exact count, iterate and count.
+    /// Returns None if the product overflows usize.
+    pub fn total_combinations(&self) -> Option<usize> {
+        let mut total: usize = 1;
+        for i in 0..self.allowed.len() {
+            total = total.checked_mul(self.allowed[i].len())?;
+        }
+        Some(total)
+    }
+}
+
+/// Lazy cartesian product iterator over field domains.
+///
+/// Unlike `expand_all()`, this iterator does not pre-allocate a Vec.
+/// Each combination is produced on demand, yielding O(1) memory
+/// regardless of total combination count.
+pub struct EnumerateIter {
+    domains: Vec<Vec<i64>>,
+    indices: Vec<usize>,
+    done: bool,
+    field_names: Vec<String>,
+    constraints: Vec<ConstraintSpec>,
+}
+
+impl EnumerateIter {
+    pub fn new(spec: &VerificationSpec) -> Self {
+        let field_names: Vec<String> = spec.fields.keys().cloned().collect();
+        let domains: Vec<Vec<i64>> = field_names
+            .iter()
+            .map(|name| {
+                let def = spec.fields.get(name).expect("field must exist");
+                def.expand()
+            })
+            .collect();
+        let indices = vec![0usize; domains.len()];
+        let done = domains.is_empty();
+        Self {
+            domains,
+            indices,
+            done,
+            field_names,
+            constraints: spec.constraints.clone(),
+        }
+    }
+}
+
+impl Iterator for EnumerateIter {
+    type Item = Combination;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.done {
+            return None;
+        }
+
+        // Build the current combination from current indices
+        let values: Vec<i64> = self
+            .indices
+            .iter()
+            .enumerate()
+            .map(|(i, &idx)| self.domains[i][idx])
+            .collect();
+
+        // Advance to the next index vector
+        let mut carry = true;
+        for i in (0..self.indices.len()).rev() {
+            if carry {
+                self.indices[i] += 1;
+                if self.indices[i] >= self.domains[i].len() {
+                    self.indices[i] = 0;
+                } else {
+                    carry = false;
+                }
+            }
+        }
+        if carry {
+            self.done = true;
+        }
+
+        // Apply enable_mask and enable_set constraints
+        // (simplified: only handles basic case; full constraint processing
+        //  is delegated to evaluate_all / validate_into_space)
+        let final_values = self.apply_enable_masks(&values);
+
+        let coordinates = Coordinates::new(final_values.clone());
+        let point = Point::new(coordinates.clone());
+        Some(Combination {
+            values: final_values,
+            coordinates,
+            point,
+        })
+    }
+}
+
+impl EnumerateIter {
+    fn apply_enable_masks(&self, values: &[i64]) -> Vec<i64> {
+        let mut result = values.to_vec();
+        for constraint in &self.constraints {
+            match constraint {
+                ConstraintSpec::EnableMask {
+                    field,
+                    value,
+                    disable,
+                } => {
+                    if let Some(trigger_axis) = self.field_names.iter().position(|n| n == field) {
+                        if result[trigger_axis] == *value {
+                            for f in disable {
+                                if let Some(axis) = self.field_names.iter().position(|n| n == f) {
+                                    result[axis] = 0;
+                                }
+                            }
+                        }
+                    }
+                }
+                ConstraintSpec::EnableSet { field, value, set } => {
+                    if let Some(trigger_axis) = self.field_names.iter().position(|n| n == field) {
+                        if result[trigger_axis] == *value {
+                            for assignment in set {
+                                if let Some(axis) =
+                                    self.field_names.iter().position(|n| n == &assignment.field)
+                                {
+                                    result[axis] = assignment.value;
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        result
+    }
+
+    /// Total number of combinations (domain product).
+    /// Returns None if the product overflows usize.
+    pub fn total_combinations(&self) -> Option<usize> {
+        let mut total: usize = 1;
+        for d in &self.domains {
+            total = total.checked_mul(d.len())?;
+        }
+        Some(total)
+    }
 }
 
 #[cfg(test)]
@@ -627,5 +1050,179 @@ mod tests {
             "error should mention limit: {}",
             err
         );
+    }
+
+    // ── coords_to_coord_vec ─────────────────────────────────────
+
+    #[test]
+    fn coords_to_coord_vec_basic() {
+        let path = coords_to_coord_vec(&[0, 1, 2, 3, 4]).unwrap();
+        assert_eq!(path.len(), 5);
+        assert_eq!(path[0].index(), 0);
+        assert_eq!(path[4].index(), 4);
+    }
+
+    #[test]
+    fn coords_to_coord_vec_out_of_range() {
+        let result = coords_to_coord_vec(&[0, 20000]);
+        assert!(result.is_none(), "values > 11171 should return None");
+    }
+
+    #[test]
+    fn coords_to_coord_vec_empty() {
+        let path = coords_to_coord_vec(&[]).unwrap();
+        assert!(path.is_empty());
+    }
+
+    // ── structural_filters ───────────────────────────────────────
+
+    #[test]
+    fn structural_filters_oneof_restricts_domain() {
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "x".into(),
+            FieldSpec {
+                range: Some((0, 9)),
+                alignment: None,
+                values: None,
+            },
+        );
+        let spec = VerificationSpec {
+            target: "test".into(),
+            fields,
+            encoding: None,
+            constraints: vec![ConstraintSpec::Oneof {
+                field: "x".into(),
+                values: vec![2, 4, 6, 8],
+            }],
+            projector: crate::spec::ProjectorSpec::Sum,
+        };
+        let (allowed, cross_maps) = structural_filters(&spec);
+        assert_eq!(allowed.len(), 1);
+        assert_eq!(allowed[0], vec![2, 4, 6, 8]);
+        assert!(cross_maps.is_empty());
+    }
+
+    #[test]
+    fn structural_filters_bitmask_restricts_domain() {
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "a".into(),
+            FieldSpec {
+                range: Some((0, 7)),
+                alignment: None,
+                values: None,
+            },
+        );
+        let spec = VerificationSpec {
+            target: "test".into(),
+            fields,
+            encoding: None,
+            constraints: vec![ConstraintSpec::Bitmask {
+                field: "a".into(),
+                mask: 2,
+                value: 2,
+            }],
+            projector: crate::spec::ProjectorSpec::Sum,
+        };
+        let (allowed, _) = structural_filters(&spec);
+        assert_eq!(allowed[0], vec![2, 3, 6, 7]);
+    }
+
+    #[test]
+    fn structural_filters_cross_produces_mapping() {
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "op".into(),
+            FieldSpec {
+                range: None,
+                alignment: None,
+                values: Some(vec![0, 1, 2]),
+            },
+        );
+        fields.insert(
+            "sub".into(),
+            FieldSpec {
+                range: None,
+                alignment: None,
+                values: Some(vec![0, 1, 2, 3]),
+            },
+        );
+        let mapping: std::collections::HashMap<i64, Vec<i64>> =
+            [(0, vec![0]), (1, vec![0, 1, 2])].into();
+        let spec = VerificationSpec {
+            target: "test".into(),
+            fields,
+            encoding: None,
+            constraints: vec![ConstraintSpec::Cross {
+                field_a: "op".into(),
+                field_b: "sub".into(),
+                mapping,
+            }],
+            projector: crate::spec::ProjectorSpec::Sum,
+        };
+        let (allowed, cross_maps) = structural_filters(&spec);
+        assert_eq!(allowed[0], vec![0, 1, 2]);
+        assert_eq!(allowed[1], vec![0, 1, 2, 3]);
+        assert_eq!(cross_maps.len(), 1);
+        assert_eq!(cross_maps[0].0, 0);
+        assert_eq!(cross_maps[0].1, 1);
+    }
+
+    // ── StructuralEnum (no cross) ────────────────────────────────
+
+    #[test]
+    fn structural_enum_no_cross_matches_expand_all() {
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "a".into(),
+            FieldSpec {
+                range: Some((0, 2)),
+                alignment: None,
+                values: None,
+            },
+        );
+        fields.insert(
+            "b".into(),
+            FieldSpec {
+                range: Some((0, 3)),
+                alignment: None,
+                values: None,
+            },
+        );
+        let spec = make_spec(fields);
+        let expand_count = expand_all(&spec).unwrap().len();
+        let struct_count = StructuralEnum::new(&spec).count();
+        assert_eq!(
+            struct_count, expand_count,
+            "without constraints, StructuralEnum should match expand_all"
+        );
+    }
+
+    #[test]
+    fn structural_enum_with_oneof_reduces_space() {
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "x".into(),
+            FieldSpec {
+                range: Some((0, 4)),
+                alignment: None,
+                values: None,
+            },
+        );
+        let spec = VerificationSpec {
+            target: "test".into(),
+            fields,
+            encoding: None,
+            constraints: vec![ConstraintSpec::Oneof {
+                field: "x".into(),
+                values: vec![0, 2, 4],
+            }],
+            projector: crate::spec::ProjectorSpec::Sum,
+        };
+        let expand_count = expand_all(&spec).unwrap().len();
+        assert_eq!(expand_count, 5);
+        let struct_count = StructuralEnum::new(&spec).count();
+        assert_eq!(struct_count, 3, "oneof should reduce enumeration space");
     }
 }

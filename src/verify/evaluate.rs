@@ -3,7 +3,7 @@
 //! Uses pluggable checks resolved from registries.
 
 use crate::spec::{ConstraintSpec, VerificationSpec};
-use crate::verify::compose::Combination;
+use crate::verify::compose::{coords_to_coord_vec, Combination, StructuralEnum};
 use crate::verify::registry::{Check, ConstraintRegistry, ProjectorRegistry};
 
 /// Result of evaluating a single constraint combination.
@@ -93,8 +93,71 @@ pub fn evaluate_all(
         .collect()
 }
 
-fn describe_field(fs: &crate::spec::FieldSpec) -> String {
-    if let Some(ref vals) = fs.values {
+/// Validate all combinations into a DynCoordSpace.
+///
+/// Uses StructuralEnum to generate only structurally valid combinations.
+/// Runtime-only constraints (eq, neq, lt, gt, le, ge, even) are evaluated
+/// on the reduced set. Invalid combinations are structurally absent.
+pub fn validate_into_space(
+    spec: &VerificationSpec,
+    constraint_registry: &ConstraintRegistry,
+) -> tagma_core::DynCoordSpace<()> {
+    use tagma_core::DynCoordSpace;
+
+    let runtime_checks = build_runtime_checks(spec, constraint_registry);
+    let mut space: DynCoordSpace<()> = DynCoordSpace::new();
+
+    for combo in StructuralEnum::new(spec) {
+        let mut passes = true;
+        for check in &runtime_checks {
+            if !check.allows(combo.point.coordinates()) {
+                passes = false;
+                break;
+            }
+        }
+        if passes {
+            if let Some(path) = coords_to_coord_vec(&combo.coordinates.raw) {
+                let _ = space.place(&path, ());
+            }
+        }
+    }
+
+    space
+}
+
+/// Build only runtime-evaluated checks, excluding structurally-enforced constraints.
+fn build_runtime_checks(
+    spec: &VerificationSpec,
+    registry: &ConstraintRegistry,
+) -> Vec<Box<dyn Check>> {
+    // Filter to runtime-required constraints before building
+    let runtime_specs: Vec<ConstraintSpec> = spec
+        .constraints
+        .iter()
+        .filter(|c| {
+            matches!(
+                c,
+                ConstraintSpec::Eq { .. }
+                    | ConstraintSpec::Neq { .. }
+                    | ConstraintSpec::Lt { .. }
+                    | ConstraintSpec::Gt { .. }
+                    | ConstraintSpec::Le { .. }
+                    | ConstraintSpec::Ge { .. }
+                    | ConstraintSpec::Even { .. }
+            )
+        })
+        .cloned()
+        .collect();
+
+    registry
+        .build_all(&runtime_specs, &spec.fields)
+        .into_iter()
+        .map(|check| check.into_check())
+        .collect()
+}
+
+fn describe_field(field_spec: &crate::spec::FieldSpec) -> String {
+    if let Some(ref vals) = field_spec.values {
         format!(
             "{{{}}}",
             vals.iter()
@@ -102,8 +165,8 @@ fn describe_field(fs: &crate::spec::FieldSpec) -> String {
                 .collect::<Vec<_>>()
                 .join(", ")
         )
-    } else if let Some((min, max)) = fs.range {
-        let step = fs.alignment.unwrap_or(1);
+    } else if let Some((min, max)) = field_spec.range {
+        let step = field_spec.alignment.unwrap_or(1);
         if step == 1 {
             format!("{}..={}", min, max)
         } else {
@@ -695,6 +758,58 @@ mod tests {
         }
     }
 
+    #[test]
+    fn validate_into_space_matches_evaluate_all() {
+        // validate_into_space should produce the same valid set as evaluate_all
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "op".into(),
+            FieldSpec {
+                range: None,
+                alignment: None,
+                values: Some(vec![0, 1, 2]),
+            },
+        );
+        fields.insert(
+            "sub".into(),
+            FieldSpec {
+                range: None,
+                alignment: None,
+                values: Some(vec![0, 1, 2, 3]),
+            },
+        );
+        let mapping: std::collections::HashMap<i64, Vec<i64>> =
+            [(0, vec![0]), (1, vec![0, 1, 2])].into();
+        let spec = make_spec(
+            fields,
+            vec![ConstraintSpec::Cross {
+                field_a: "op".into(),
+                field_b: "sub".into(),
+                mapping,
+            }],
+            ProjectorSpec::Sum,
+        );
+
+        // Reference: evaluate_all with Vec
+        let combos = crate::verify::compose::expand_all(&spec).unwrap();
+        let results = evaluate_all(
+            &spec,
+            combos,
+            &ConstraintRegistry::default(),
+            &ProjectorRegistry::default(),
+        );
+        let valid_count_ref = results.iter().filter(|r| r.passed).count();
+
+        // CoordSpace: validate_into_space
+        let space = validate_into_space(&spec, &ConstraintRegistry::default());
+        let valid_count_cs = space.iter().count();
+
+        assert_eq!(
+            valid_count_cs, valid_count_ref,
+            "validate_into_space should match evaluate_all valid count"
+        );
+    }
+
     // ── Edge cases ────────────────────────────────────────────────
 
     // ── EnableMask ────────────────────────────────────────────────
@@ -780,5 +895,79 @@ mod tests {
             &ProjectorRegistry::default(),
         );
         assert!(results.is_empty());
+    }
+
+    #[test]
+    fn build_runtime_checks_excludes_structural() {
+        let (allowed, cross_maps) = crate::verify::compose::structural_filters(&make_spec(
+            BTreeMap::from([
+                (
+                    "a".into(),
+                    FieldSpec {
+                        range: Some((0, 7)),
+                        alignment: None,
+                        values: None,
+                    },
+                ),
+                (
+                    "b".into(),
+                    FieldSpec {
+                        range: Some((0, 7)),
+                        alignment: None,
+                        values: None,
+                    },
+                ),
+            ]),
+            vec![
+                ConstraintSpec::Eq {
+                    field_a: "a".into(),
+                    field_b: "b".into(),
+                },
+                ConstraintSpec::Oneof {
+                    field: "a".into(),
+                    values: vec![0, 2, 4, 6],
+                },
+                ConstraintSpec::Bitmask {
+                    field: "b".into(),
+                    mask: 1,
+                    value: 0,
+                },
+            ],
+            ProjectorSpec::Sum,
+        ));
+        let _ = (allowed, cross_maps);
+        let spec = make_spec(
+            BTreeMap::from([
+                (
+                    "a".into(),
+                    FieldSpec {
+                        range: Some((0, 7)),
+                        alignment: None,
+                        values: None,
+                    },
+                ),
+                (
+                    "b".into(),
+                    FieldSpec {
+                        range: Some((0, 7)),
+                        alignment: None,
+                        values: None,
+                    },
+                ),
+            ]),
+            vec![
+                ConstraintSpec::Eq {
+                    field_a: "a".into(),
+                    field_b: "b".into(),
+                },
+                ConstraintSpec::Oneof {
+                    field: "a".into(),
+                    values: vec![0, 2, 4, 6],
+                },
+            ],
+            ProjectorSpec::Sum,
+        );
+        let runtime = build_runtime_checks(&spec, &ConstraintRegistry::default());
+        assert_eq!(runtime.len(), 1);
     }
 }
