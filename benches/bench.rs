@@ -435,6 +435,31 @@ fn bench_validate_cva6_r4(c: &mut Criterion) {
 }
 
 
+fn bench_enumerate_all_cva6_full(c: &mut Criterion) {
+    let spec = cva6_full_spec();
+    let all_checks = ConstraintRegistry::default().build_all(&spec.constraints, &spec.fields);
+    let evaluator = ProjectorRegistry::default().resolve(&spec.projector, &spec.fields).unwrap();
+    c.bench_function("enumerate_all/cva6_full_33M", |b| {
+        b.iter(|| {
+            let mut passed = 0usize;
+            let mut total = 0usize;
+            for combo in EnumerateIter::new(black_box(&spec)) {
+                let mut ok = true;
+                for check in &all_checks {
+                    if !check.allows(combo.point.coordinates()) {
+                        ok = false;
+                        break;
+                    }
+                }
+                let _proj = evaluator.evaluate(&combo.point);
+                if ok { passed += 1; }
+                total += 1;
+            }
+            black_box((total, passed));
+        })
+    });
+}
+
 fn bench_structural_verify_cva6_full(c: &mut Criterion) {
     let spec = cva6_full_spec();
     let all_checks = ConstraintRegistry::default().build_all(&spec.constraints, &spec.fields);
@@ -525,7 +550,7 @@ criterion_group!(
 criterion_group!(
     name = eval_cva6_full;
     config = Criterion::default().sample_size(3);
-    targets = bench_evaluate_cva6_full
+    targets = bench_evaluate_cva6_full, bench_enumerate_all_cva6_full
 );
 
 criterion_main!(coordspace, expand, eval_light, eval_heavy, eval_cva6_full);
