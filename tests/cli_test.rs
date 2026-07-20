@@ -153,7 +153,6 @@ fn verify_cva6_xif_mac_fixture() {
 }
 
 #[test]
-#[ignore = "medium: 2M combos via CLI (old pipeline). Use release build or struct_enum for speed."]
 fn verify_cva6_xif_ref_r4_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("verify")
@@ -219,7 +218,6 @@ fn synth_json_with_mock_backend() {
 }
 
 #[test]
-#[ignore = "33M combos via CLI (old pipeline). struct_enum does it in ~200ms; pending CLI integration."]
 fn verify_cva6_xif_ref_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("verify")
@@ -228,7 +226,6 @@ fn verify_cva6_xif_ref_fixture() {
         .arg("--json")
         .output()
         .expect("failed to run ev verify on cva6_xif_ref fixture");
-    // cva6_xif_ref has many illegal encodings → exit non-zero, which is expected.
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
         stdout.contains("fact_type"),

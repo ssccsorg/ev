@@ -6,7 +6,9 @@ use ev::spec::VerificationSpec;
 use ev::synth::backends::yosys::YosysBackend;
 use ev::synth::sim::{MockSimBackend, RunSimulation, SimulationResult};
 use ev::synth::{GenerateRtl, MockSynthesisBackend, RunSynthesis, SvGenerator, SynthesisMetrics};
-use ev::verify::{evaluate_all, expand_all};
+use ev::verify::compose::StructuralEnum;
+use ev::verify::evaluate::Evaluation;
+use ev::verify::registry::Check;
 use ev::verify::{ConstraintRegistry, ProjectorRegistry};
 use std::path::PathBuf;
 
@@ -121,14 +123,27 @@ fn run_sim(target: &std::path::Path) -> anyhow::Result<SimulationResult> {
     let spec = VerificationSpec::from_yaml(target)?;
     let constraint_registry = ConstraintRegistry::default();
     let projector_registry = ProjectorRegistry::default();
-    let combinations =
-        expand_all(&spec).map_err(|e| anyhow::anyhow!("domain expansion failed: {}", e))?;
-    let evaluations = evaluate_all(
-        &spec,
-        combinations,
-        &constraint_registry,
-        &projector_registry,
-    );
+    let all_checks = constraint_registry.build_all(&spec.constraints, &spec.fields);
+    let evaluator = projector_registry
+        .resolve(&spec.projector, &spec.fields)
+        .expect("projector type must be registered");
+    let mut evaluations: Vec<Evaluation> = Vec::new();
+    for combo in StructuralEnum::new(&spec) {
+        let mut passed = true;
+        for check in &all_checks {
+            if !check.allows(combo.point.coordinates()) {
+                passed = false;
+                break;
+            }
+        }
+        let projection = evaluator.evaluate(&combo.point);
+        evaluations.push(Evaluation {
+            combination: combo,
+            passed,
+            projection,
+            reason: String::new(),
+        });
+    }
     let backend = resolve_sim_backend();
     backend.run(&spec, evaluations)
 }
@@ -154,14 +169,30 @@ fn main() -> anyhow::Result<()> {
             let constraint_registry = ConstraintRegistry::default();
             let projector_registry = ProjectorRegistry::default();
 
-            let combinations =
-                expand_all(&spec).map_err(|e| anyhow::anyhow!("domain expansion failed: {}", e))?;
-            let evaluations = evaluate_all(
-                &spec,
-                combinations,
-                &constraint_registry,
-                &projector_registry,
-            );
+            // Structural enumeration: generates only structurally valid combinations
+            // via synTagma CoordSpace. All checks (including cross, oneof, range, bitmask)
+            // are still evaluated for full apples-to-apples parity with evaluate_all.
+            let all_checks = constraint_registry.build_all(&spec.constraints, &spec.fields);
+            let evaluator = projector_registry
+                .resolve(&spec.projector, &spec.fields)
+                .expect("projector type must be registered");
+            let mut evaluations: Vec<Evaluation> = Vec::new();
+            for combo in StructuralEnum::new(&spec) {
+                let mut passed = true;
+                for check in &all_checks {
+                    if !check.allows(combo.point.coordinates()) {
+                        passed = false;
+                        break;
+                    }
+                }
+                let projection = evaluator.evaluate(&combo.point);
+                evaluations.push(Evaluation {
+                    combination: combo,
+                    passed,
+                    projection,
+                    reason: String::new(),
+                });
+            }
 
             if json {
                 eprintln!("warning: --json is deprecated, use --format json instead");

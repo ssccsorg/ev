@@ -551,13 +551,8 @@ criterion_group!(
     config = Criterion::default().sample_size(10);
     targets = bench_evaluate_ibex, bench_structural_enum_ibex, bench_validate_ibex,
               bench_evaluate_cva6_full, bench_evaluate_cva6_r4, bench_structural_enum_cva6_r4, bench_validate_cva6_r4,
-              bench_structural_enum_cva6_full, bench_structural_verify_cva6_full
+              bench_structural_enum_cva6_full, bench_structural_verify_cva6_full,
+              bench_enumerate_all_cva6_full
 );
 
-criterion_group!(
-    name = eval_cva6_full;
-    config = Criterion::default().sample_size(3);
-    targets = bench_evaluate_cva6_full, bench_enumerate_all_cva6_full
-);
-
-criterion_main!(coordspace, expand, eval_light, eval_heavy, eval_cva6_full);
+criterion_main!(coordspace, expand, eval_light, eval_heavy);

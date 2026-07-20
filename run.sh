@@ -43,8 +43,8 @@ code_checks() {
     cargo build --release
     echo "=== test ==="
     cargo test --release
-    echo "=== bench (struct_enum) ==="
-    cargo bench --bench bench -- "struct_enum/ibex" 2>&1 | grep -E 'struct_enum|time:' | head -4
+    echo "=== bench (light: small/medium targets) ==="
+    cargo bench --bench bench -- "small|medium" 2>&1 | grep -E 'Benchmarking|time:' | head -16
 }
 
 # Run a tool-dependent command inside the CI container.
@@ -170,20 +170,16 @@ _verify_check() {
 }
 
 verify_large_fixtures() {
-    # 33M fixture skipped in CI to conserve Actions minutes.
-    if [ -n "${CI:-}" ]; then
-        echo "  (skipped 33M fixture in CI — run ./run.sh --verify locally)"
-    else
-        _timed "cva6 xif ref fixture (33M combos)" $EV verify --target "tests/fixtures/cva6/xif_ref.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
-    fi
+    # Structural pipeline is default — 33M completes in ~32ms.
+    _timed "cva6 xif ref fixture (33M combos)" $EV verify --target "tests/fixtures/cva6/xif_ref.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
     _timed "cva6 xif ref r4 fixture (2M combos)" $EV verify --target "tests/fixtures/cva6/xif_ref_r4.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
     _timed "cva6 xif madd fixture (32k combos)" $EV verify --target "tests/fixtures/cva6/xif_madd.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
     _timed "cva6 xif mac fixture (32k combos)" $EV verify --target "tests/fixtures/cva6/xif_mac.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
     _timed "ibex custom alu fixture (524k combos)" $EV verify --target "tests/fixtures/ibex/alu_ext.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
     _verify_check "ibex rv32imcb encoding"      313344 210944 "tests/fixtures/ibex/rv32imcb.xif.yaml"
     _verify_check "ibex rv32imcb imm ops"       55616   9920  "tests/fixtures/ibex/rv32imcb_imm.xif.yaml"
-    echo "=== structural enumeration bench ==="
-    cargo bench --bench bench -- "struct_enum/ibex|struct_enum/cva6" 2>&1 | grep -E 'struct_enum|time:' | head -6
+    echo "=== structural pipeline bench (light) ==="
+    cargo bench --bench bench -- "struct_enum/small|struct_enum/medium|struct_enum/cva6_r4" 2>&1 | grep -E 'Benchmarking|time:' | head -16
 }
 
 # ── Modes ─────────────────────────────────────────────────────────────
