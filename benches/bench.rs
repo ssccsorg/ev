@@ -128,6 +128,11 @@ fn cva6_r4_spec() -> VerificationSpec {
     VerificationSpec::from_yaml(path).expect("failed to load cva6 xif ref r4 fixture")
 }
 
+fn cva6_full_spec() -> VerificationSpec {
+    let path = std::path::Path::new("tests/fixtures/cva6/xif_ref.xif.yaml");
+    VerificationSpec::from_yaml(path).expect("failed to load cva6 xif ref fixture")
+}
+
 // ===========================================================================
 // Domain expansion: expand_all (Vec) vs EnumerateIter
 // ===========================================================================
@@ -381,6 +386,16 @@ fn bench_evaluate_cva6_r4(c: &mut Criterion) {
     });
 }
 
+fn bench_structural_enum_cva6_full(c: &mut Criterion) {
+    let spec = cva6_full_spec();
+    c.bench_function("struct_enum/cva6_full_33M", |b| {
+        b.iter(|| {
+            let count = StructuralEnum::new(black_box(&spec)).count();
+            black_box(count);
+        })
+    });
+}
+
 fn bench_structural_enum_cva6_r4(c: &mut Criterion) {
     let spec = cva6_r4_spec();
     c.bench_function("struct_enum/cva6_r4_2M", |b| {
@@ -460,7 +475,8 @@ criterion_group!(
     name = eval_heavy;
     config = Criterion::default().sample_size(10);
     targets = bench_evaluate_ibex, bench_structural_enum_ibex, bench_validate_ibex,
-              bench_evaluate_cva6_r4, bench_structural_enum_cva6_r4, bench_validate_cva6_r4
+              bench_evaluate_cva6_r4, bench_structural_enum_cva6_r4, bench_validate_cva6_r4,
+              bench_structural_enum_cva6_full
 );
 
 criterion_main!(coordspace, expand, eval_light, eval_heavy);
