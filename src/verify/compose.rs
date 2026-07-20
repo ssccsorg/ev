@@ -4,7 +4,8 @@
 //! cartesian product of all field domains.
 
 use crate::spec::{ConstraintSpec, VerificationSpec};
-use tagma_core::{Coord, CoordPath};
+use tagma_core::{Coord, CoordPath, CoordSet};
+
 
 /// A coordinate vector — one value per instruction field.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -310,10 +311,11 @@ pub struct StructuralEnum {
     allowed: Vec<Vec<i64>>,
     /// Current index into each field's allowed values.
     indices: Vec<usize>,
-    /// Cross mapping: field_a_idx → (field_b_idx, mapping)
-    /// When iterating field_b, use the current field_a value to
-    /// restrict which field_b values are valid.
-    cross_maps: std::collections::HashMap<usize, (usize, Vec<Option<u128>>)>,
+    /// Cross mapping: for each child field, a DynCoordSpace<CoordSet>
+    /// mapping parent coord → allowed child CoordSet.
+    /// None = this field has no cross constraint.
+    cross_spaces: Vec<Option<tagma_core::DynCoordSpace<CoordSet>>>,
+    cross_parents: Vec<Option<usize>>,
     /// Done flag.
     done: bool,
     /// Field names (for enable_mask/ enable_set).
@@ -327,36 +329,39 @@ impl StructuralEnum {
         let (allowed, cross_maps) = structural_filters(spec);
         let field_names: Vec<String> = spec.fields.keys().cloned().collect();
 
-        // Re-index cross maps: pre-compute bitmasks for fast lookup
-        // bitmask[parent_val] = allowed child bitmask, None = unrestricted
-        let mut indexed: std::collections::HashMap<
-            usize,
-            (usize, Vec<Option<u128>>),
-        > = std::collections::HashMap::new();
+        // Build DynCoordSpace<CoordSet> for cross constraints.
+        // Each space maps parent_coord → CoordSet of allowed child values.
+        let n = allowed.len();
+        let mut cross_spaces: Vec<Option<tagma_core::DynCoordSpace<CoordSet>>> = vec![None; n];
+        let mut cross_parents: Vec<Option<usize>> = vec![None; n];
         for (parent, child, mapping) in cross_maps {
-            let max_child = allowed[child].last().copied().unwrap_or(0) as u64;
-            let max_parent = allowed[parent].last().copied().unwrap_or(0) as usize;
-            let mut bitmasks: Vec<Option<u128>> = vec![None; max_parent + 1];
+            let mut space: tagma_core::DynCoordSpace<CoordSet> = tagma_core::DynCoordSpace::new();
+            let parent_domain = &allowed[parent];
+            let _child_domain = &allowed[child];
+            // For each parent value in the mapping, build a CoordSet of allowed child values
             for (pv, cvs) in &mapping {
-                let idx = *pv as usize;
-                if idx <= max_parent {
-                    let mut mask: u128 = 0;
+                if let Some(pcoord) = Coord::new(*pv as u16) {
+                    let mut cs = CoordSet::new();
                     for cv in cvs {
-                        if *cv as u64 <= max_child {
-                            mask |= 1u128 << *cv;
+                        if let Some(ccoord) = Coord::new(*cv as u16) {
+                            cs.insert(ccoord);
                         }
                     }
-                    bitmasks[idx] = Some(mask);
+                    // Only insert if the parent value is in the allowed domain
+                    if parent_domain.contains(pv) {
+                        space.place(&[pcoord], cs);
+                    }
                 }
             }
-            indexed.insert(child, (parent, bitmasks));
+            cross_spaces[child] = Some(space);
+            cross_parents[child] = Some(parent);
         }
 
-        let n = allowed.len();
         Self {
             allowed,
             indices: vec![0; n],
-            cross_maps: indexed,
+            cross_spaces,
+            cross_parents,
             done: n == 0,
             field_names,
             constraints: spec.constraints.clone(),
@@ -376,15 +381,23 @@ impl StructuralEnum {
                 }
                 current_values[i] = self.allowed[i][self.indices[i]];
 
-                // Check cross constraint via pre-computed bitmask
-                let cross_ok = if let Some((parent_idx, bitmasks)) = self.cross_maps.get(&i) {
-                    let pv = current_values[*parent_idx] as usize;
-                    if pv < bitmasks.len() {
-                        bitmasks[pv]
-                            .map(|mask| (mask >> current_values[i]) & 1 == 1)
-                            .unwrap_or(true) // None = unrestricted
+                // Check cross constraint via DynCoordSpace<CoordSet>
+                let cross_ok = if let Some(ref space) = self.cross_spaces[i] {
+                    if let Some(parent_idx) = self.cross_parents[i] {
+                        let pv = current_values[parent_idx];
+                        if let Some(pcoord) = Coord::new(pv as u16) {
+                            space.at(&[pcoord])
+                                .map(|cs| {
+                                    Coord::new(current_values[i] as u16)
+                                        .map(|cc| cs.contains(cc))
+                                        .unwrap_or(false)
+                                })
+                                .unwrap_or(true) // parent not in mapping = unrestricted
+                        } else {
+                            true
+                        }
                     } else {
-                        true // parent value out of range = unrestricted
+                        true
                     }
                 } else {
                     true
