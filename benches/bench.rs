@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 
 use ev::spec::{ConstraintSpec, FieldSpec, ProjectorSpec, VerificationSpec};
 use ev::verify::compose::{coords_to_coord_vec, expand_all, EnumerateIter, StructuralEnum};
-use ev::verify::evaluate::{build_runtime_checks, evaluate_all, validate_into_space};
+use ev::verify::evaluate::{evaluate_all, validate_into_space};
 use ev::verify::registry::{Check, ConstraintRegistry, ProjectorRegistry};
 
 // ===========================================================================
@@ -437,7 +437,7 @@ fn bench_validate_cva6_r4(c: &mut Criterion) {
 
 fn bench_structural_verify_cva6_full(c: &mut Criterion) {
     let spec = cva6_full_spec();
-    let runtime_checks = build_runtime_checks(&spec, &ConstraintRegistry::default());
+    let all_checks = ConstraintRegistry::default().build_all(&spec.constraints, &spec.fields);
     let evaluator = ProjectorRegistry::default().resolve(&spec.projector, &spec.fields).unwrap();
     c.bench_function("structural_verify/cva6_full_33M", |b| {
         b.iter(|| {
@@ -445,7 +445,7 @@ fn bench_structural_verify_cva6_full(c: &mut Criterion) {
             let mut total = 0usize;
             for combo in StructuralEnum::new(black_box(&spec)) {
                 let mut ok = true;
-                for check in &runtime_checks {
+                for check in &all_checks {
                     if !check.allows(combo.point.coordinates()) {
                         ok = false;
                         break;
