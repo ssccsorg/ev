@@ -313,7 +313,7 @@ pub struct StructuralEnum {
     /// Cross mapping: field_a_idx → (field_b_idx, mapping)
     /// When iterating field_b, use the current field_a value to
     /// restrict which field_b values are valid.
-    cross_maps: std::collections::HashMap<usize, (usize, std::collections::HashMap<i64, Vec<i64>>)>,
+    cross_maps: std::collections::HashMap<usize, (usize, Vec<Option<u128>>)>,
     /// Done flag.
     done: bool,
     /// Field names (for enable_mask/ enable_set).
@@ -327,14 +327,29 @@ impl StructuralEnum {
         let (allowed, cross_maps) = structural_filters(spec);
         let field_names: Vec<String> = spec.fields.keys().cloned().collect();
 
-        // Re-index cross maps: for each child field, store a reference
-        // to its parent field and mapping
+        // Re-index cross maps: pre-compute bitmasks for fast lookup
+        // bitmask[parent_val] = allowed child bitmask, None = unrestricted
         let mut indexed: std::collections::HashMap<
             usize,
-            (usize, std::collections::HashMap<i64, Vec<i64>>),
+            (usize, Vec<Option<u128>>),
         > = std::collections::HashMap::new();
         for (parent, child, mapping) in cross_maps {
-            indexed.insert(child, (parent, mapping));
+            let max_child = allowed[child].last().copied().unwrap_or(0) as u64;
+            let max_parent = allowed[parent].last().copied().unwrap_or(0) as usize;
+            let mut bitmasks: Vec<Option<u128>> = vec![None; max_parent + 1];
+            for (pv, cvs) in &mapping {
+                let idx = *pv as usize;
+                if idx <= max_parent {
+                    let mut mask: u128 = 0;
+                    for cv in cvs {
+                        if *cv as u64 <= max_child {
+                            mask |= 1u128 << *cv;
+                        }
+                    }
+                    bitmasks[idx] = Some(mask);
+                }
+            }
+            indexed.insert(child, (parent, bitmasks));
         }
 
         let n = allowed.len();
@@ -361,13 +376,16 @@ impl StructuralEnum {
                 }
                 current_values[i] = self.allowed[i][self.indices[i]];
 
-                // Check cross constraint, if any
-                let cross_ok = if let Some((parent_idx, mapping)) = self.cross_maps.get(&i) {
-                    let parent_val = current_values[*parent_idx];
-                    mapping
-                        .get(&parent_val)
-                        .map(|vals| vals.contains(&current_values[i]))
-                        .unwrap_or(true) // not in mapping = unrestricted
+                // Check cross constraint via pre-computed bitmask
+                let cross_ok = if let Some((parent_idx, bitmasks)) = self.cross_maps.get(&i) {
+                    let pv = current_values[*parent_idx] as usize;
+                    if pv < bitmasks.len() {
+                        bitmasks[pv]
+                            .map(|mask| (mask >> current_values[i]) & 1 == 1)
+                            .unwrap_or(true) // None = unrestricted
+                    } else {
+                        true // parent value out of range = unrestricted
+                    }
                 } else {
                     true
                 };

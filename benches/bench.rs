@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 
 use ev::spec::{ConstraintSpec, FieldSpec, ProjectorSpec, VerificationSpec};
 use ev::verify::compose::{coords_to_coord_vec, expand_all, EnumerateIter, StructuralEnum};
-use ev::verify::evaluate::{evaluate_all, validate_into_space};
+use ev::verify::evaluate::{build_runtime_checks, evaluate_all, validate_into_space};
 use ev::verify::registry::{Check, ConstraintRegistry, ProjectorRegistry};
 
 // ===========================================================================
@@ -369,6 +369,23 @@ fn bench_enumerate_cva6_r4(c: &mut Criterion) {
     });
 }
 
+fn bench_evaluate_cva6_full(c: &mut Criterion) {
+    let spec = cva6_full_spec();
+    let combos = expand_all(&spec).unwrap();
+    c.bench_function("evaluate/cva6_full_33M", |b| {
+        b.iter(|| {
+            let results = evaluate_all(
+                black_box(&spec),
+                black_box(combos.clone()),
+                &ConstraintRegistry::default(),
+                &ProjectorRegistry::default(),
+            );
+            let count = results.iter().filter(|r| r.passed).count();
+            black_box(count);
+        })
+    });
+}
+
 fn bench_evaluate_cva6_r4(c: &mut Criterion) {
     let spec = cva6_r4_spec();
     let combos = expand_all(&spec).unwrap();
@@ -413,6 +430,32 @@ fn bench_validate_cva6_r4(c: &mut Criterion) {
             let space = validate_into_space(black_box(&spec), &ConstraintRegistry::default());
             let count = space.iter().count();
             black_box(count);
+        })
+    });
+}
+
+
+fn bench_structural_verify_cva6_full(c: &mut Criterion) {
+    let spec = cva6_full_spec();
+    let runtime_checks = build_runtime_checks(&spec, &ConstraintRegistry::default());
+    let evaluator = ProjectorRegistry::default().resolve(&spec.projector, &spec.fields).unwrap();
+    c.bench_function("structural_verify/cva6_full_33M", |b| {
+        b.iter(|| {
+            let mut passed = 0usize;
+            let mut total = 0usize;
+            for combo in StructuralEnum::new(black_box(&spec)) {
+                let mut ok = true;
+                for check in &runtime_checks {
+                    if !check.allows(combo.point.coordinates()) {
+                        ok = false;
+                        break;
+                    }
+                }
+                let _proj = evaluator.evaluate(&combo.point);
+                if ok { passed += 1; }
+                total += 1;
+            }
+            black_box((total, passed));
         })
     });
 }
@@ -475,8 +518,14 @@ criterion_group!(
     name = eval_heavy;
     config = Criterion::default().sample_size(10);
     targets = bench_evaluate_ibex, bench_structural_enum_ibex, bench_validate_ibex,
-              bench_evaluate_cva6_r4, bench_structural_enum_cva6_r4, bench_validate_cva6_r4,
-              bench_structural_enum_cva6_full
+              bench_evaluate_cva6_full, bench_evaluate_cva6_r4, bench_structural_enum_cva6_r4, bench_validate_cva6_r4,
+              bench_structural_enum_cva6_full, bench_structural_verify_cva6_full
 );
 
-criterion_main!(coordspace, expand, eval_light, eval_heavy);
+criterion_group!(
+    name = eval_cva6_full;
+    config = Criterion::default().sample_size(3);
+    targets = bench_evaluate_cva6_full
+);
+
+criterion_main!(coordspace, expand, eval_light, eval_heavy, eval_cva6_full);

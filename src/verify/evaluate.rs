@@ -126,7 +126,7 @@ pub fn validate_into_space(
 }
 
 /// Build only runtime-evaluated checks, excluding structurally-enforced constraints.
-fn build_runtime_checks(
+pub fn build_runtime_checks(
     spec: &VerificationSpec,
     registry: &ConstraintRegistry,
 ) -> Vec<Box<dyn Check>> {
