@@ -6,7 +6,6 @@
 use crate::spec::{ConstraintSpec, VerificationSpec};
 use tagma_core::{Coord, CoordPath, CoordSet};
 
-
 /// A coordinate vector — one value per instruction field.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Coordinates {
@@ -386,7 +385,8 @@ impl StructuralEnum {
                     if let Some(parent_idx) = self.cross_parents[i] {
                         let pv = current_values[parent_idx];
                         if let Some(pcoord) = Coord::new(pv as u16) {
-                            space.at(&[pcoord])
+                            space
+                                .at(&[pcoord])
                                 .map(|cs| {
                                     Coord::new(current_values[i] as u16)
                                         .map(|cc| cs.contains(cc))

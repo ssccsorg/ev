@@ -434,11 +434,12 @@ fn bench_validate_cva6_r4(c: &mut Criterion) {
     });
 }
 
-
 fn bench_enumerate_all_cva6_full(c: &mut Criterion) {
     let spec = cva6_full_spec();
     let all_checks = ConstraintRegistry::default().build_all(&spec.constraints, &spec.fields);
-    let evaluator = ProjectorRegistry::default().resolve(&spec.projector, &spec.fields).unwrap();
+    let evaluator = ProjectorRegistry::default()
+        .resolve(&spec.projector, &spec.fields)
+        .unwrap();
     c.bench_function("enumerate_all/cva6_full_33M", |b| {
         b.iter(|| {
             let mut passed = 0usize;
@@ -452,7 +453,9 @@ fn bench_enumerate_all_cva6_full(c: &mut Criterion) {
                     }
                 }
                 let _proj = evaluator.evaluate(&combo.point);
-                if ok { passed += 1; }
+                if ok {
+                    passed += 1;
+                }
                 total += 1;
             }
             black_box((total, passed));
@@ -463,7 +466,9 @@ fn bench_enumerate_all_cva6_full(c: &mut Criterion) {
 fn bench_structural_verify_cva6_full(c: &mut Criterion) {
     let spec = cva6_full_spec();
     let all_checks = ConstraintRegistry::default().build_all(&spec.constraints, &spec.fields);
-    let evaluator = ProjectorRegistry::default().resolve(&spec.projector, &spec.fields).unwrap();
+    let evaluator = ProjectorRegistry::default()
+        .resolve(&spec.projector, &spec.fields)
+        .unwrap();
     c.bench_function("structural_verify/cva6_full_33M", |b| {
         b.iter(|| {
             let mut passed = 0usize;
@@ -477,7 +482,9 @@ fn bench_structural_verify_cva6_full(c: &mut Criterion) {
                     }
                 }
                 let _proj = evaluator.evaluate(&combo.point);
-                if ok { passed += 1; }
+                if ok {
+                    passed += 1;
+                }
                 total += 1;
             }
             black_box((total, passed));
