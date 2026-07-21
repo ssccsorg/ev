@@ -139,7 +139,7 @@ Every approach shares one trait: **coverage is either statistical or scoped to s
 
 ### Benchmark: CVA6 XIF Reference Coprocessor
 
-A single `ev verify` command exhaustively evaluates **33.5 million** raw field combinations against the actual CVA6 CV-X-IF encoding specification. The coprocessor accepts 196,608 valid encodings — the exact funct3/funct7/rs1/rs2/rd combinations that match its decoder — and correctly rejects the remaining 33.3 million. Execution time on a laptop (Apple M1 Max, single core): **32 seconds**. All 196,608 valid encodings are independently confirmed through RISC-V ISA simulation (Spike) with exact agreement.
+A single `ev verify` command exhaustively evaluates **33.5 million** raw field combinations against the actual CVA6 CV-X-IF encoding specification. The coprocessor accepts 196,608 valid encodings — the exact funct3/funct7/rs1/rs2/rd combinations that match its decoder — and correctly rejects the remaining 33.3 million. Execution time on a single ARMv8.4-A Firestorm system: **32 seconds**. All 196,608 valid encodings are independently confirmed through RISC-V ISA simulation (Spike) with exact agreement.
 
 | Metric | RISC-V DV (random) | Formal (OneSpin) | ExaVerif |
 |:---|---:|---:|---:|

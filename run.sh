@@ -43,8 +43,8 @@ code_checks() {
     cargo build --release
     echo "=== test ==="
     cargo test --release
-    echo "=== bench (light: small/medium targets) ==="
-    cargo bench --bench bench -- "small|medium" 2>&1 | grep -E 'Benchmarking|time:' | head -16
+    echo "=== bench (structural enumeration) ==="
+    cargo bench --bench bench -- "struct_enum" 2>&1 | grep -E 'Benchmarking|time:' | head -20
 }
 
 # Run a tool-dependent command inside the CI container.
@@ -178,8 +178,8 @@ verify_large_fixtures() {
     _timed "ibex custom alu fixture (524k combos)" $EV verify --target "tests/fixtures/ibex/alu_ext.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
     _verify_check "ibex rv32imcb encoding"      313344 210944 "tests/fixtures/ibex/rv32imcb.xif.yaml"
     _verify_check "ibex rv32imcb imm ops"       55616   9920  "tests/fixtures/ibex/rv32imcb_imm.xif.yaml"
-    echo "=== structural pipeline bench (light) ==="
-    cargo bench --bench bench -- "struct_enum/small|struct_enum/medium|struct_enum/cva6_r4" 2>&1 | grep -E 'Benchmarking|time:' | head -16
+    echo "=== structural pipeline bench ==="
+    cargo bench --bench bench -- "struct_enum|structural_verify" 2>&1 | grep -E 'Benchmarking|time:' | head -20
 }
 
 # ── Modes ─────────────────────────────────────────────────────────────

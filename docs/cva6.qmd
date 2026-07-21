@@ -8,7 +8,7 @@ abstract: |
   ExaVerif performed an exhaustive verification of the RISC-V CVA6 core's
   offloadable custom instruction encodings for the CV-X-IF coprocessor
   interface. All 33,554,432 possible operand combinations were evaluated
-  deterministically in 32 seconds on a single Apple M1 Max core, yielding
+  deterministically in 32 seconds on a single ARMv8.4-A Firestorm system, yielding
   196,608 valid encodings. Spike cross-validation confirmed 100% correctness.
   This report compares the exhaustive approach to random-based verification
   (riscv-dv) and identifies coverage gaps on both sides.
