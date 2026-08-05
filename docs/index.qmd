@@ -10,7 +10,7 @@ metadata-files:
   - ./_include/format.pdf.yml  
   - ./_include/format.html.yml  
 abstract: |
-  ExaVerif is a verification engine built for the paradigm where verification results are not discarded logs but permanent contributions to a shared knowledge base. It performs exhaustive verification of RISC‑V custom instruction extensions — every valid constraint combination is generated, evaluated deterministically, and recorded as an immutable Fact for neXus consumption. The CLI is open‑source (Apache 2.0). The engine is validated against the CVA6 CV-X-IF reference coprocessor (33.5 million combinations, 32 seconds), with cross‑verification through Spike RISC-V simulation.
+  ExaVerif is a verification engine built for the paradigm where verification results are not discarded logs but permanent contributions to a shared knowledge base. It performs exhaustive verification of RISC‑V custom instruction extensions — every valid constraint combination is generated, evaluated deterministically, and recorded as an immutable Fact for neXus consumption. The CLI is open‑source (Apache 2.0). The engine is validated against the CVA6 CV-X-IF reference coprocessor (33.5 million combinations, 18 seconds), with cross‑verification by the Spike backend running a C reimplementation of the constraint model.
 
   ExaVerif treats verification as knowledge accumulation: each run expands the spec space, evaluates every point, and applies constraints. The result is not a pass/fail log — it is a permanent, queryable, auditable body of verified knowledge that compounds across runs, across tools, and across time. This is the foundation for a new approach to silicon design where verification is not a gate at the end of the flow but a continuously growing evidentiary basis for correctness.
 ---
@@ -76,11 +76,11 @@ Internally, ExaVerif expands the full cartesian product of all field domains, th
 ```text
 target: cva6_xif_ref
 total:  33554432
-passed: 196608
-failed: 33357824
+passed: 229376
+failed: 33226752
 ```
 
-The example above shows ev verifying the CVA6 CV-X-IF reference coprocessor against its actual RTL specification — the same encoding tables used in the CVA6 verification suite (`cvxif_custom_instr.sv`). Over **33 million** raw combinations are evaluated exhaustively. Only 196,608 encodings are valid: every funct3/funct7 combination that the coprocessor actually accepts, with full RV32 register range (rs1, rs2, rd ∈ [0, 31]). The remaining 33 million are correctly identified as illegal.
+The example above shows ev verifying the CVA6 CV-X-IF reference coprocessor against the encoding model — cross-checked with the CVA6 verification suite (`cvxif_custom_instr.sv`). Over **33 million** raw combinations are evaluated exhaustively. Only 229,376 combinations are valid: every funct3/funct7 combination that the model accepts, with full RV32 register range (rs1, rs2, rd ∈ [0, 31]). The remaining 33 million are correctly identified as illegal within the modeled space.
 
 ```bash
 ev verify --target cva6_xif_ref.xif.yaml --json
@@ -92,7 +92,7 @@ Every result is also available as a **Fact** — an opaque blob consumed by [Nex
 EV_SIM_BACKEND=spike ev simulate --target cva6_xif_ref.xif.yaml
 ```
 
-Every valid encoding is also verifiable through actual RISC-V simulation. The `simulate` command packs all 196,608 valid encodings into a single ELF binary, runs it under Spike + pk on RV64, and reports the result. All 196,608 pass — the static constraint model and the RISC-V simulator agree exactly.
+Every valid combination is also cross-checked by a C reimplementation. The `simulate` command packs all 229,376 valid combinations into a single ELF binary and runs it under Spike + pk. All 229,376 rows agree between the C and Rust implementations of the constraint model.
 
 The Field Composition engine — a branchless, constant‑time verification kernel validated via x86‑64 CI — guarantees deterministic results. The same input always produces the same output, independent of random seeds or simulator state.
 
@@ -139,15 +139,15 @@ Every approach shares one trait: **coverage is either statistical or scoped to s
 
 ### Benchmark: CVA6 XIF Reference Coprocessor
 
-A single `ev verify` command exhaustively evaluates **33.5 million** raw field combinations against the actual CVA6 CV-X-IF encoding specification. The coprocessor accepts 196,608 valid encodings — the exact funct3/funct7/rs1/rs2/rd combinations that match its decoder — and correctly rejects the remaining 33.3 million. Execution time on a laptop (Apple M1 Max, single core): **32 seconds**. All 196,608 valid encodings are independently confirmed through RISC-V ISA simulation (Spike) with exact agreement.
+A single `ev verify` command exhaustively evaluates **33.5 million** raw field combinations against the modeled CVA6 CV-X-IF encoding space. The model accepts 229,376 valid combinations — the exact funct3/funct7/rs1/rs2/rd combinations that satisfy the model — and correctly rejects the remaining 33.3 million. Execution time on a single core (release build): **18 seconds**. All 229,376 valid combinations are cross-checked by the Spike backend running a C reimplementation of the constraint model.
 
 | Metric | RISC-V DV (random) | Formal (OneSpin) | ExaVerif |
 |:---|---:|---:|---:|
 | Combos evaluated | ~10⁶ (sampled) | ~10³ (properties) | **33.5 × 10⁶** (exhaustive) |
 | Coverage guarantee | Statistical | Formal (per property) | **Exhaustive** (full space) |
-| Time to result | Minutes to hours | Hours to days | **32 seconds** |
+| Time to result | Minutes to hours | Hours to days | **18 seconds** |
 | Setup | UVM env. + agent | Formal properties | **Single YAML** |
-| Cross-validated | — | — | **Spike simulation** ✓ |
+| Cross-validated | — | — | **Spike C/Rust recheck** |
 
 ```{python}
 #| label: fig-position
@@ -212,7 +212,7 @@ ExaVerif welcomes collaboration with RISC‑V verification groups — including 
 |:---|:---|
 | CLI (`ev`) | Open-source (Apache 2.0) |
 | Exhaustive engine | Validated on CVA6 XIF (33.5M combos, 32s) |
-| Spike simulation | 196,608 / 196,608 pass |
+| Spike C/Rust recheck | 229,376 / 229,376 agree |
 | Shared knowledge store | In development |
 
 ## Market Context
