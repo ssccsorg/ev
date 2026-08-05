@@ -128,6 +128,12 @@ fn cva6_r4_spec() -> VerificationSpec {
     VerificationSpec::from_yaml(path).expect("failed to load cva6 xif ref r4 fixture")
 }
 
+/// CVA6 XIF ref full spec (33,554,432 combos, full register range).
+fn cva6_full_spec() -> VerificationSpec {
+    let path = std::path::Path::new("tests/fixtures/cva6/xif_ref.xif.yaml");
+    VerificationSpec::from_yaml(path).expect("failed to load cva6 xif ref fixture")
+}
+
 // ===========================================================================
 // Domain expansion: expand_all (Vec) vs EnumerateIter
 // ===========================================================================
@@ -402,6 +408,76 @@ fn bench_validate_cva6_r4(c: &mut Criterion) {
     });
 }
 
+// ===========================================================================
+// Full CVA6 space (33M): reproduces the cva6.qmd report numbers.
+// ===========================================================================
+
+fn bench_evaluate_cva6_full(c: &mut Criterion) {
+    let spec = cva6_full_spec();
+    let combos = expand_all(&spec).unwrap();
+    // 33.5M combinations are cloned per iteration; peak memory is ~8-15 GB.
+    c.bench_function("evaluate/cva6_full_33M", |b| {
+        b.iter(|| {
+            let results = evaluate_all(
+                black_box(&spec),
+                black_box(combos.clone()),
+                &ConstraintRegistry::default(),
+                &ProjectorRegistry::default(),
+            );
+            let count = results.iter().filter(|r| r.passed).count();
+            black_box(count);
+        })
+    });
+}
+
+fn bench_structural_enum_cva6_full(c: &mut Criterion) {
+    let spec = cva6_full_spec();
+    c.bench_function("struct_enum/cva6_full_33M", |b| {
+        b.iter(|| {
+            let count = StructuralEnum::new(black_box(&spec)).count();
+            black_box(count);
+        })
+    });
+}
+
+fn bench_validate_cva6_full(c: &mut Criterion) {
+    let spec = cva6_full_spec();
+    c.bench_function("validate/cva6_full_33M", |b| {
+        b.iter(|| {
+            let space = validate_into_space(black_box(&spec), &ConstraintRegistry::default());
+            let count = space.iter().count();
+            black_box(count);
+        })
+    });
+}
+
+/// Correctness guard for the structural pipeline: every combination the
+/// structural iterator emits must satisfy the full constraint set. This is
+/// the invariant the cva6.qmd "generates only structurally valid combinations"
+/// claim rests on; it fails today for cross constraints whose first allowed
+/// child value is invalid for the new parent (advance_indices wrap bug).
+fn bench_structural_enum_validity_cva6_full(c: &mut Criterion) {
+    let spec = cva6_full_spec();
+    let checks = ConstraintRegistry::default().build_all(&spec.constraints, &spec.fields);
+    c.bench_function("struct_enum_validity/cva6_full_33M", |b| {
+        b.iter(|| {
+            let mut emitted = 0usize;
+            let mut valid = 0usize;
+            for combo in StructuralEnum::new(black_box(&spec)) {
+                emitted += 1;
+                if checks.iter().all(|c| c.allows(combo.point.coordinates())) {
+                    valid += 1;
+                }
+            }
+            assert_eq!(
+                emitted, valid,
+                "struct_enum emitted {emitted} combinations but only {valid} satisfy the full constraint set"
+            );
+            black_box(valid);
+        })
+    });
+}
+
 fn bench_constraint_check(c: &mut Criterion) {
     let spec = ibex_spec();
     let checks = ConstraintRegistry::default().build_all(&spec.constraints, &spec.fields);
@@ -455,7 +531,7 @@ criterion_group!(
 );
 
 // Heavy evaluation: ibex/cva6 scale, runs in seconds per iter.
-// 10 samples is practical: ibex evaluate = 36s, cva6 evaluate = 14s.
+// 10 samples is practical: ibex evaluate ≈ 3.7s, cva6_r4 evaluate ≈ 1s (release).
 criterion_group!(
     name = eval_heavy;
     config = Criterion::default().sample_size(10);
@@ -463,4 +539,13 @@ criterion_group!(
               bench_evaluate_cva6_r4, bench_structural_enum_cva6_r4, bench_validate_cva6_r4
 );
 
-criterion_main!(coordspace, expand, eval_light, eval_heavy);
+// Full CVA6 space (33M): evaluate is seconds per iter with ~8-15 GB peak,
+// struct/validate/validity are ms-scale. Filter with `cargo bench -- cva6_full`.
+criterion_group!(
+    name = cva6_full;
+    config = Criterion::default().sample_size(10);
+    targets = bench_evaluate_cva6_full, bench_structural_enum_cva6_full,
+              bench_validate_cva6_full, bench_structural_enum_validity_cva6_full
+);
+
+criterion_main!(coordspace, expand, eval_light, eval_heavy, cva6_full);
