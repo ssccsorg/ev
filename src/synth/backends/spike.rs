@@ -50,7 +50,14 @@ const DEFAULT_SPIKE: &str = "spike";
 const DEFAULT_PK: &str = "pk";
 const DEFAULT_CC: &str = "riscv64-unknown-elf-gcc";
 
-/// Spike ISA simulator backend.
+/// Spike backend.
+///
+/// Generates a C program that re-implements the spec's constraint checks and
+/// instruction-word assembly, cross-compiles it, and runs it under Spike + pk.
+/// The program does not execute the custom instruction words: custom opcodes
+/// are illegal in the base ISA by design, which is why CVA6 offloads them.
+/// It validates that the C reimplementation agrees with the Rust pipeline on
+/// both constraint evaluation and word assembly.
 pub struct SpikeBackend;
 
 impl RunSimulation for SpikeBackend {
@@ -143,12 +150,12 @@ fn get_spike_version() -> String {
 fn merge_results_with_indices(
     static_evaluations: Vec<Evaluation>,
     valid_indices: &[usize],
-    spike_passed: &BTreeMap<usize, bool>,
+    spike_passed: &BTreeMap<usize, (bool, bool)>,
 ) -> Vec<Evaluation> {
-    let mut spike_map: BTreeMap<usize, bool> = BTreeMap::new();
+    let mut spike_map: BTreeMap<usize, (bool, bool)> = BTreeMap::new();
     for (spike_idx, &orig_idx) in valid_indices.iter().enumerate() {
-        if let Some(passed) = spike_passed.get(&spike_idx) {
-            spike_map.insert(orig_idx, *passed);
+        if let Some(p) = spike_passed.get(&spike_idx) {
+            spike_map.insert(orig_idx, *p);
         }
     }
 
@@ -158,10 +165,14 @@ fn merge_results_with_indices(
         .map(|(i, mut eval)| {
             if eval.passed {
                 match spike_map.get(&i) {
-                    Some(true) => {}
-                    Some(false) => {
+                    Some((true, true)) => {}
+                    Some((false, _)) => {
                         eval.passed = false;
-                        eval.reason = "Spike: illegal instruction trap".into();
+                        eval.reason = "Spike: constraint re-check failed".into();
+                    }
+                    Some((true, false)) => {
+                        eval.passed = false;
+                        eval.reason = "Spike: instruction word mismatch".into();
                     }
                     None => {
                         eval.passed = false;
@@ -280,13 +291,16 @@ fn generate_c_source(
     };
     let instr_word_array = if !instr_word_lines.is_empty() {
         format!(
-            "\n/* Pre-assembled instruction words from encoding layout */\nstatic const uint64_t INSTR_WORDS[{nenc}] = {{\n{data}\n}};\n",
+            "\n/* Rust-assembled reference instruction words; the C assembler must match */\nstatic const uint64_t INSTR_WORDS[{nenc}] = {{\n{data}\n}};\n",
             nenc = num_encodings,
             data = instr_word_data
         )
     } else {
         String::new()
     };
+    // The C program cross-checks its assembled word against the Rust-computed
+    // reference only when an encoding layout exists.
+    let has_instr_words = !instr_word_lines.is_empty();
 
     format!(
         r#"#include <stdio.h>
@@ -306,6 +320,8 @@ static void init(void) {{ setbuf(stdout, NULL); setbuf(stderr, NULL); }}
 /* Fields: {nfields} */
 
 {field_indexes}
+
+#define HAS_INSTR_WORDS {has_instr_words}
 
 /* Encoding data array — each row holds raw field values */
 /* Non-const so enable_mask constraints can force fields to zero at runtime */
@@ -335,9 +351,15 @@ int main(void) {{
     uint64_t pass = 0, fail = 0;
     for (uint64_t i = 0; i < NUM_ENCODINGS; i++) {{
         int ok = check_encoding(ENCODINGS[i]);
-        uint64_t instr = assemble_instr(ENCODINGS[i]);
-        if (ok) {{ pass++; }} else {{ fail++; }}
-        printf("ENC:%llu:%d:0x%016llX\n", (unsigned long long)i, ok, (unsigned long long)instr);
+        int word_ok;
+#if HAS_INSTR_WORDS
+        word_ok = (assemble_instr(ENCODINGS[i]) == INSTR_WORDS[i]);
+#else
+        word_ok = 1;
+#endif
+        if (ok && word_ok) {{ pass++; }} else {{ fail++; }}
+        printf("ENC:%llu:%d:%d:0x%016llX\n", (unsigned long long)i, ok, word_ok,
+               (unsigned long long)(HAS_INSTR_WORDS ? assemble_instr(ENCODINGS[i]) : 0));
     }}
     printf("PASSED:%llu\n", (unsigned long long)pass);
     printf("FAILED:%llu\n", (unsigned long long)fail);
@@ -352,6 +374,7 @@ int main(void) {{
         constraint_code = constraint_code,
         instr_word_array = instr_word_array,
         assemble_code = assemble_code,
+        has_instr_words = has_instr_words as u8,
     )
 }
 
@@ -530,15 +553,19 @@ fn run_spike(elf_path: &Path) -> anyhow::Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
-fn parse_spike_output(stdout: &str, num_encodings: usize) -> BTreeMap<usize, bool> {
+fn parse_spike_output(stdout: &str, num_encodings: usize) -> BTreeMap<usize, (bool, bool)> {
     let mut results = BTreeMap::new();
     for line in stdout.lines() {
         if let Some(rest) = line.strip_prefix("ENC:") {
             let parts: Vec<&str> = rest.split(':').collect();
-            if parts.len() >= 2 {
-                if let (Ok(idx), Ok(ok)) = (parts[0].parse::<usize>(), parts[1].parse::<u8>()) {
+            if parts.len() >= 3 {
+                if let (Ok(idx), Ok(ok), Ok(word_ok)) = (
+                    parts[0].parse::<usize>(),
+                    parts[1].parse::<u8>(),
+                    parts[2].parse::<u8>(),
+                ) {
                     if idx < num_encodings {
-                        results.insert(idx, ok != 0);
+                        results.insert(idx, (ok != 0, word_ok != 0));
                     }
                 }
             }
