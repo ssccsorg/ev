@@ -310,9 +310,9 @@ pub struct StructuralEnum {
     allowed: Vec<Vec<i64>>,
     /// Current index into each field's allowed values.
     indices: Vec<usize>,
-    /// Cross mapping: field_a_idx → (field_b_idx, mapping)
-    /// When iterating field_b, use the current field_a value to
-    /// restrict which field_b values are valid.
+    /// Cross mapping: child field index → (parent field index, mapping).
+    /// When enumerating the child field, the parent value restricts which
+    /// child values are valid.
     cross_maps: std::collections::HashMap<usize, (usize, std::collections::HashMap<i64, Vec<i64>>)>,
     /// Done flag.
     done: bool,
@@ -320,6 +320,56 @@ pub struct StructuralEnum {
     field_names: Vec<String>,
     /// Constraints for enable processing at enumeration time.
     constraints: Vec<ConstraintSpec>,
+    /// Enumeration order: parents precede their cross-constrained children,
+    /// so every field can be validated against an already-fixed parent.
+    order: Vec<usize>,
+    /// For each (child field, parent value) that the mapping constrains, the
+    /// index of the first allowed child value that satisfies the mapping.
+    /// Absence of a key means the parent value has no satisfying child value.
+    first_valid: std::collections::HashMap<(usize, i64), usize>,
+}
+
+/// Order fields so parents precede their cross-constrained children.
+/// Among available fields, the smallest index is ordered first, which keeps
+/// the enumeration close to the natural field order and keeps large-domain
+/// cross-constrained children more significant (they tick less often). Falls
+/// back to natural index order when the constraints form a cycle; cyclic
+/// cross constraints are unsupported and may over-generate.
+fn build_field_order(
+    n: usize,
+    cross_maps: &std::collections::HashMap<
+        usize,
+        (usize, std::collections::HashMap<i64, Vec<i64>>),
+    >,
+) -> Vec<usize> {
+    let mut children: Vec<Vec<usize>> = vec![Vec::new(); n];
+    let mut in_degree = vec![0usize; n];
+    for (child, (parent, _)) in cross_maps {
+        children[*parent].push(*child);
+        in_degree[*child] += 1;
+    }
+    let mut order = Vec::with_capacity(n);
+    let mut remaining = vec![true; n];
+    while order.len() < n {
+        // Pick the smallest-index field whose parents are all ordered.
+        let mut next = None;
+        for i in 0..n {
+            if remaining[i] && in_degree[i] == 0 {
+                next = Some(i);
+                break;
+            }
+        }
+        let f = match next {
+            Some(f) => f,
+            None => return (0..n).collect(), // cycle: unsupported
+        };
+        remaining[f] = false;
+        order.push(f);
+        for &c in &children[f] {
+            in_degree[c] -= 1;
+        }
+    }
+    order
 }
 
 impl StructuralEnum {
@@ -338,47 +388,104 @@ impl StructuralEnum {
         }
 
         let n = allowed.len();
-        Self {
+        let order = build_field_order(n, &indexed);
+
+        // Precompute the first allowed index satisfying each constrained
+        // (child field, parent value) pair, so fix_suffix runs in O(1).
+        let mut first_valid: std::collections::HashMap<(usize, i64), usize> =
+            std::collections::HashMap::new();
+        for (child, (_, mapping)) in &indexed {
+            for (pv, vals) in mapping {
+                if let Some(idx) = allowed[*child].iter().position(|v| vals.contains(v)) {
+                    first_valid.insert((*child, *pv), idx);
+                }
+            }
+        }
+
+        let mut enum_iter = Self {
             allowed,
             indices: vec![0; n],
             cross_maps: indexed,
             done: n == 0,
             field_names,
             constraints: spec.constraints.clone(),
+            order,
+            first_valid,
+        };
+        // Start at the first fully valid state, not the raw all-zero state.
+        if !enum_iter.done {
+            enum_iter.done = !enum_iter.fix_suffix(0);
         }
+        enum_iter
     }
 
-    fn advance_indices(&mut self, current_values: &mut [i64]) -> bool {
-        for i in (0..self.indices.len()).rev() {
-            // For cross-constrained fields, we may need to try multiple
-            // values until we find one that satisfies the constraint.
-            loop {
-                self.indices[i] += 1;
-                if self.indices[i] >= self.allowed[i].len() {
-                    self.indices[i] = 0;
-                    current_values[i] = self.allowed[i][0];
-                    break; // carry to next higher field
-                }
-                current_values[i] = self.allowed[i][self.indices[i]];
-
-                // Check cross constraint, if any
-                let cross_ok = if let Some((parent_idx, mapping)) = self.cross_maps.get(&i) {
-                    let parent_val = current_values[*parent_idx];
-                    mapping
-                        .get(&parent_val)
-                        .map(|vals| vals.contains(&current_values[i]))
-                        .unwrap_or(true) // not in mapping = unrestricted
-                } else {
-                    true
-                };
-
-                if cross_ok {
-                    return false; // found a valid value, no carry
-                }
-                // else: try next value (continue inner loop)
+    /// Whether field `f` currently satisfies its cross constraint, if any.
+    fn field_ok(&self, f: usize) -> bool {
+        if let Some((parent, mapping)) = self.cross_maps.get(&f) {
+            let parent_val = self.allowed[*parent][self.indices[*parent]];
+            if let Some(vals) = mapping.get(&parent_val) {
+                return vals.contains(&self.allowed[f][self.indices[f]]);
             }
         }
-        true // all fields carried = done
+        true // not a cross child, or parent value unrestricted
+    }
+
+    /// Assign fields `order[start..]` the smallest values that satisfy their
+    /// cross constraints given the fixed prefix `order[..start]`.
+    ///
+    /// Returns false when no valid assignment exists for the prefix. Because
+    /// `order` lists parents before children, every assigned field can be
+    /// validated against an already-fixed parent, and `first_valid` makes
+    /// each lookup O(1).
+    fn fix_suffix(&mut self, start: usize) -> bool {
+        for &f in &self.order[start..] {
+            if let Some((parent, mapping)) = self.cross_maps.get(&f) {
+                let pv = self.allowed[*parent][self.indices[*parent]];
+                if mapping.contains_key(&pv) {
+                    match self.first_valid.get(&(f, pv)) {
+                        Some(&idx) => self.indices[f] = idx,
+                        None => return false,
+                    }
+                }
+            }
+        }
+        true
+    }
+
+    /// Advance to the next fully valid state. Returns true if one exists.
+    ///
+    /// The odometer runs over `order`; when a field is incremented, every less
+    /// significant field is reset and re-fixed to the smallest valid value.
+    /// This guarantees that every emitted state satisfies all cross
+    /// constraints, including after a parent field changes. The previous
+    /// implementation emitted stale child values after a parent advance.
+    fn advance(&mut self) -> bool {
+        let n = self.order.len();
+        let mut pos = n;
+        loop {
+            if pos == 0 {
+                return false; // all states exhausted
+            }
+            pos -= 1;
+            let f = self.order[pos];
+            loop {
+                self.indices[f] += 1;
+                if self.indices[f] >= self.allowed[f].len() {
+                    self.indices[f] = 0;
+                    break; // carry to the next more significant field
+                }
+                for &g in &self.order[pos + 1..] {
+                    self.indices[g] = 0;
+                }
+                if !self.field_ok(f) {
+                    continue; // try the next value of f
+                }
+                if self.fix_suffix(pos + 1) {
+                    return true;
+                }
+                // No valid suffix exists for this prefix; try the next value of f.
+            }
+        }
     }
 }
 
@@ -390,18 +497,16 @@ impl Iterator for StructuralEnum {
             return None;
         }
 
-        // First iteration: use initial indices
-        // Build current values
-        let mut values: Vec<i64> = self
+        // The current state is fully valid; it is maintained by `new` (first
+        // state) and `advance` (every subsequent state).
+        let values: Vec<i64> = self
             .indices
             .iter()
             .enumerate()
             .map(|(i, &idx)| self.allowed[i][idx])
             .collect();
 
-        // Advance to next combination
-        let carry = self.advance_indices(&mut values);
-        if carry {
+        if !self.advance() {
             self.done = true;
         }
 
