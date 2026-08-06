@@ -3,8 +3,11 @@
 Exhaustive verification CLI for RISC-V custom instruction extensions.
 Apache 2.0.
 
-33.5 million combinations exhaustive in 31 milliseconds. 100% cross-validated
-against Spike RISC-V simulation.
+33.5 million combinations evaluated deterministically: 18.0 s with the
+standard pipeline, 18.5 ms with the Tagma-based structural enumeration
+(~973x, same-language baseline). The CVA6 fixtures are derived from the
+hardware decoder mask table (commit `6544a714c`); the Spike backend
+cross-checks the constraint model and instruction-word assembly in C.
 
 ## What It Does
 
@@ -18,31 +21,35 @@ constraints (eq, neq, lt, gt, le, ge, even) that are checked per combination.
 Only structurally valid combinations are ever generated.
 
 A single command enumerates and evaluates 33.5 million combinations against the
-actual CVA6 CV-X-IF coprocessor specification — the same encoding tables used
-in OpenHW's own verification suite — and produces the result in 31 milliseconds:
+CVA6 CV-X-IF encoding space derived from the hardware decoder mask table
+(`cva6/core/cvxif_example/include/cvxif_instr_pkg.sv` at commit `6544a714c`),
+and produces the result in 18.5 milliseconds:
 
 ```bash
 ev verify --target tests/fixtures/cva6/xif_ref.xif.yaml
 ```
 
 Output:
+
 ```
 target: cva6_xif_ref
 total:  33554432
-passed: 229376
-failed: 33325056
+passed: 196608
+failed: 33357824
 ```
 
-Every valid encoding is also verifiable through actual RISC-V simulation via
-`ev simulate`, which packs all valid encodings into a single ELF binary and
-runs it under Spike:
+Every valid combination is also cross-checked by a C reimplementation via
+`ev simulate`, which packs all valid combinations into a single ELF binary and
+runs it under Spike + pk:
 
 ```bash
 EV_SIM_BACKEND=spike ev simulate --target tests/fixtures/cva6/xif_ref.xif.yaml
 ```
 
-All valid encodings pass — the static constraint model and the RISC-V simulator
-agree exactly.
+All 196,608 rows agree between the C and Rust implementations of the constraint
+model and of the instruction-word assembly. This is not ISA-level execution:
+custom-3 opcodes are illegal in the base RISC-V ISA (which is why CVA6 offloads
+them), so Spike never executes them.
 
 ## Quick Start
 
@@ -68,7 +75,7 @@ cargo test --release
 
 ```
 ev verify    --target <file> [--format <fmt>]  # Static constraint verification
-ev simulate  --target <file> [--format <fmt>]  # ISA simulation (Spike/mock)
+ev simulate  --target <file> [--format <fmt>]  # C/Rust recheck under Spike/mock
 ev synth     --target <file> [--json]          # SystemVerilog + Yosys synthesis
 ev fact decode                                  # Decode Fact JSON from stdin
 ```
@@ -103,16 +110,16 @@ constraints:
     field_b: "rs2"
 ```
 
-Cross constraint — map field_a values to allowed field_b sets:
+Cross constraint — map field_a values to allowed field_b sets. The example is
+the CVA6 decoder-derived mapping:
 
 ```yaml
   - type: cross
     field_a: "funct3"
     field_b: "funct7"
     mapping:
-      0: [2, 6, 8, 32]
-      1: [0]
-      2: [96]
+      0: [0]
+      1: [0, 1, 2, 3, 4]
 ```
 
 Bitmask constraint — field bits matching a pattern:
@@ -155,15 +162,18 @@ All types are extensible via `ConstraintRegistry` and `ProjectorRegistry`.
 
 ## Real-World Fixtures
 
+Valid counts below are the `evaluate_all` results on the committed fixtures
+(release build).
+
 | File | Based on | Combinations (raw) | Valid |
 |------|----------|-------------------:|------:|
-| `cva6/xif_ref.xif.yaml` | CVA6 CV-X-IF coprocessor (actual RTL) | 33,554,432 | 229,376 |
-| `cva6/xif_ref_r4.xif.yaml` | CVA6 CV-X-IF R4 format (func2+rs3) | 2,097,152 | 1,280 |
-| `cva6/xif_mac.xif.yaml` | CVA6 XIF multiply-accumulate | 32,768 | 18,432 |
-| `cva6/xif_madd.xif.yaml` | CVA6 XIF madd/msub encoding | — | — |
+| `cva6/xif_ref.xif.yaml` | CVA6 CV-X-IF hardware decoder mask table (commit 6544a714c) | 33,554,432 | 196,608 |
+| `cva6/xif_ref_r4.xif.yaml` | CVA6 CV-X-IF R4 format (func2 + rs3) | 16,384 | 2,560 |
+| `cva6/xif_mac.xif.yaml` | CVA6 XIF multiply-accumulate | 32,768 | 28,672 |
+| `cva6/xif_madd.xif.yaml` | CVA6 XIF madd/msub encoding | 32,768 | 4,096 |
 | `cva6/xif_encoding.xif.yaml` | CVA6 XIF encoding-only (register-reduced) | 8,192 | 48 |
 | `ibex/alu_ext.xif.yaml` | Ibex custom ALU extension | 524,288 | 4,096 |
-| `ibex/csr_access.xif.yaml` | Ibex-like CSR encoding | 4,608 | 4,608 |
+| `ibex/csr_access.xif.yaml` | Ibex-like CSR encoding | 49,152 | 49,152 |
 | `ibex/rv32imcb.xif.yaml` | Ibex RV32IMCB (ibex_decoder.sv) | 524,288 | 313,344 |
 | `ibex/rv32imcb_imm.xif.yaml` | Ibex RV32IMCB I-type encoding | 65,536 | 55,616 |
 | `common/all_pass.xif.yaml` | Simple ALU (no constraints) | 1,024 | 1,024 |
@@ -173,13 +183,20 @@ All types are extensible via `ConstraintRegistry` and `ProjectorRegistry`.
 
 | Metric | Value |
 |--------|-------|
-| Raw combinations evaluated | 33,554,432 |
-| Valid encodings identified | 229,376 |
-| Execution time (M1 Max) | 31 milliseconds |
-| Spike cross-validation | 100% agreement |
+| Raw combinations evaluated (CVA6 full) | 33,554,432 |
+| Valid combinations identified (CVA6 full) | 196,608 |
+| Standard pipeline time (evaluate_all, release) | 18.0 s |
+| Structural pipeline time (struct_enum, release) | 18.5 ms |
+| Speedup (same-language baseline, this machine) | ~973x |
+| Spike backend | C/Rust recheck: 196,608 / 196,608 agree |
 | Constraint types | 13 (range, even, eq, neq, lt, gt, le, ge, oneof, cross, bitmask, enable_mask, enable_set) |
-| Tests | 89 (73 lib + 16 CLI), all passing |
+| Tests | 92 (73 lib + 14 CLI + 5 structural), all passing |
 | Simulation backends | Mock (default), Spike (`EV_SIM_BACKEND=spike`) |
+
+Benchmark methodology and reproducibility: both pipelines are Rust, the same
+release profile, measured by criterion; the speedup is the O(N) vs O(V)
+enumeration-strategy gain, not a language effect. Reproduce with
+`cargo bench -- cva6_full` on the committed fixtures.
 
 ## Architecture
 
@@ -201,12 +218,15 @@ src/
     mod.rs          SvGenerator, MockSynthesisBackend, RunSynthesis
     sim.rs          RunSimulation trait + MockSimBackend
     backends/       SpikeBackend, YosysBackend
+benches/
+  bench.rs          Performance reference (fixtures, methodology, groups)
 tests/
   fixtures/
     common/         4 YAML fixture files
     cva6/           5 YAML fixture files
     ibex/           4 YAML fixture files
-  cli_test.rs       16 integration tests
+  cli_test.rs       14 integration tests (+ 2 heavy CVA6 tests ignored by default)
+  structural_enum.rs 5 structural enumeration regression tests
 ```
 
 Backends are pluggable via environment variables:
