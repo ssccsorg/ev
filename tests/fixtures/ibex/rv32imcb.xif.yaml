@@ -8,7 +8,9 @@
 # select the ALU operation per the RISC-V specification and Ibex decoder.
 #
 # Verification space: 128 x 8 x 8 x 8 x 8 = 524,288 raw combinations
-# Valid (after constraints): 180 funct7/funct3 pairs x 4,096 register combos
+# Valid (after constraints): 180 funct7/funct3 pairs x 512 register combos
+# = 92,160. funct7 values with an empty mapping ([]) are illegal; the
+# decoder has no case for them.
 
 target: ibex_rv32imcb
 fields:
@@ -128,5 +130,60 @@ constraints:
       123: [1, 5]
       126: [1, 5]
       127: [1, 5]
+      # Unmapped funct7 values (bit1=0, not in the main case): illegal.
+      8: []
+      9: []
+      12: []
+      13: []
+      17: []
+      21: []
+      24: []
+      25: []
+      28: []
+      29: []
+      33: []
+      37: []
+      40: []
+      41: []
+      44: []
+      45: []
+      49: []
+      53: []
+      56: []
+      57: []
+      60: []
+      61: []
+      64: []
+      65: []
+      68: []
+      69: []
+      72: []
+      73: []
+      76: []
+      77: []
+      80: []
+      81: []
+      84: []
+      85: []
+      88: []
+      89: []
+      92: []
+      93: []
+      96: []
+      97: []
+      100: []
+      101: []
+      104: []
+      105: []
+      108: []
+      109: []
+      112: []
+      113: []
+      116: []
+      117: []
+      120: []
+      121: []
+      124: []
+      125: []
 projector:
   type: sum
