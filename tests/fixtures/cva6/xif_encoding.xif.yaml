@@ -17,7 +17,11 @@
 # funct3=011..111: illegal
 #
 # Reduced space: 8×128×2×2×2 = 8,192 raw combinations
-# Valid (after constraints): 5×2×2×2 + 1×2×2×2 + 1×2×2×2 = 56 pass
+# Valid (after constraints):
+#   funct3=0: 4 funct7 values x 8 register combos = 32
+#   funct3=1: 1 funct7 value x 8 register combos = 8
+#   funct3=2: 1 funct7 value x 8 register combos = 8
+#   total = 48 pass
 #
 # Note: ADD_RS3 (func2=01, funct7 via funct3=000) requires R4 format support
 # and is not included in this encoding-only fixture.

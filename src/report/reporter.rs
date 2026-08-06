@@ -195,7 +195,19 @@ impl ReporterCapable for TextReporter {
 
         if failed_count > 0 {
             println!("Failures:");
-            for e in evaluations.iter().filter(|e| !e.passed) {
+            // Cap the detail listing: the full list can be gigabytes for
+            // sparse spaces (e.g. 432K invalid rv32imcb encodings each
+            // carrying the cross-mapping description). The summary lines
+            // above remain authoritative; the cap keeps the log usable.
+            const MAX_PRINTED_FAILURES: usize = 25;
+            for (i, e) in evaluations.iter().filter(|e| !e.passed).enumerate() {
+                if i == MAX_PRINTED_FAILURES {
+                    println!(
+                        "  ... and {} more failures",
+                        failed_count - MAX_PRINTED_FAILURES
+                    );
+                    break;
+                }
                 println!("  [FAIL] {:?} — {}", e.combination.values, e.reason);
             }
         }

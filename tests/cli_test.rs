@@ -153,7 +153,7 @@ fn verify_cva6_xif_mac_fixture() {
 }
 
 #[test]
-#[ignore = "medium: 2M combos via CLI (old pipeline). Use release build or struct_enum for speed."]
+#[ignore = "medium: 16K combos via CLI. Use release build or struct_enum for speed."]
 fn verify_cva6_xif_ref_r4_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("verify")
