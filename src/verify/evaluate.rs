@@ -41,6 +41,11 @@ pub fn evaluate_all(
     projector_registry: &ProjectorRegistry,
 ) -> Vec<Evaluation> {
     let checks = build_checks(spec, constraint_registry);
+    // Compute each check's description once. `describe()` can be expensive
+    // (e.g. a cross constraint with a large mapping), and it is the same
+    // string for every failure of the same check; formatting it per failing
+    // combination made evaluate_all O(failures x describe_cost).
+    let check_descriptions: Vec<String> = checks.iter().map(|c| c.describe()).collect();
     let evaluator = projector_registry
         .resolve(&spec.projector, &spec.fields)
         .expect("projector type must be registered");
@@ -70,13 +75,13 @@ pub fn evaluate_all(
             }
 
             // Check all constraints (field-agnostic)
-            for check in &checks {
+            for (i, check) in checks.iter().enumerate() {
                 if !check.allows(combination.point.coordinates()) {
                     return Evaluation {
                         combination,
                         passed: false,
                         projection: None,
-                        reason: check.describe(),
+                        reason: check_descriptions[i].clone(),
                     };
                 }
             }
