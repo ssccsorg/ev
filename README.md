@@ -3,9 +3,9 @@
 Exhaustive verification CLI for RISC-V custom instruction extensions.
 Apache 2.0.
 
-33.5 million combinations evaluated deterministically: 18.0 s with the
-standard pipeline, 18.5 ms with the Tagma-based structural enumeration
-(~973x, same-language baseline). The CVA6 fixtures are derived from the
+33.5 million combinations evaluated deterministically: 10.4 s with the
+standard pipeline, 19.0 ms with the Tagma-based structural enumeration
+(~550x, same-language baseline). The CVA6 fixtures are derived from the
 hardware decoder mask table (commit `6544a714c`); the Spike backend
 cross-checks the constraint model and instruction-word assembly in C.
 
@@ -23,7 +23,7 @@ Only structurally valid combinations are ever generated.
 A single command enumerates and evaluates 33.5 million combinations against the
 CVA6 CV-X-IF encoding space derived from the hardware decoder mask table
 (`cva6/core/cvxif_example/include/cvxif_instr_pkg.sv` at commit `6544a714c`),
-and produces the result in 18.5 milliseconds:
+and produces the result in 19.0 milliseconds:
 
 ```bash
 ev verify --target tests/fixtures/cva6/xif_ref.xif.yaml
@@ -174,7 +174,7 @@ Valid counts below are the `evaluate_all` results on the committed fixtures
 | `cva6/xif_encoding.xif.yaml` | CVA6 XIF encoding-only (register-reduced) | 8,192 | 48 |
 | `ibex/alu_ext.xif.yaml` | Ibex custom ALU extension | 524,288 | 4,096 |
 | `ibex/csr_access.xif.yaml` | Ibex-like CSR encoding | 49,152 | 49,152 |
-| `ibex/rv32imcb.xif.yaml` | Ibex RV32IMCB (ibex_decoder.sv) | 524,288 | 313,344 |
+| `ibex/rv32imcb.xif.yaml` | Ibex RV32IMCB (ibex_decoder.sv) | 524,288 | 92,160 |
 | `ibex/rv32imcb_imm.xif.yaml` | Ibex RV32IMCB I-type encoding | 65,536 | 55,616 |
 | `common/all_pass.xif.yaml` | Simple ALU (no constraints) | 1,024 | 1,024 |
 | `common/sample.xif.yaml` | Mixed pass/fail demo | 96 | 12 |
@@ -185,9 +185,9 @@ Valid counts below are the `evaluate_all` results on the committed fixtures
 |--------|-------|
 | Raw combinations evaluated (CVA6 full) | 33,554,432 |
 | Valid combinations identified (CVA6 full) | 196,608 |
-| Standard pipeline time (evaluate_all, release) | 18.0 s |
-| Structural pipeline time (struct_enum, release) | 18.5 ms |
-| Speedup (same-language baseline, this machine) | ~973x |
+| Standard pipeline time (evaluate_all, release) | 10.4 s |
+| Structural pipeline time (struct_enum, release) | 19.0 ms |
+| Speedup (same-language baseline, this machine) | ~550x |
 | Spike backend | C/Rust recheck: 196,608 / 196,608 agree |
 | Constraint types | 13 (range, even, eq, neq, lt, gt, le, ge, oneof, cross, bitmask, enable_mask, enable_set) |
 | Tests | 92 (73 lib + 14 CLI + 5 structural), all passing |

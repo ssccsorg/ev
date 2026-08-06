@@ -23,20 +23,20 @@
 //! -----------------
 //! | Fixture    | Source fixture                      | Raw combos | Valid combos | Density | evaluate | struct_enum | Speedup |
 //! |------------|-------------------------------------|-----------:|-------------:|--------:|---------:|------------:|--------:|
-//! | Small      | synthetic, 3 fields x 3            | 27         | 27           | 100%    | 3.26 µs  | 2.73 µs      | 1.2x    |
-//! | Medium     | synthetic, ibex-like cross         | 32,768     | 20,480       | 62.5%   | 6.58 ms  | 3.11 ms      | 2.1x    |
-//! | Ibex R-type| tests/fixtures/ibex/rv32imcb...    | 524,288    | 92,160       | 17.6%   | 3.66 s   | 46.3 ms      | 79x     |
-//! | CVA6 R4    | tests/fixtures/cva6/xif_ref_r4...   | 16,384     | 2,560        | 15.6%   | 4.93 ms  | 247 µs       | 20x     |
-//! | CVA6 full  | tests/fixtures/cva6/xif_ref...      | 33,554,432 | 196,608      | 0.6%    | 18.0 s   | 18.5 ms      | 973x    |
+//! | Small      | synthetic, 3 fields x 3            | 27         | 27           | 100%    | 4.66 µs  | 2.75 µs      | 1.7x    |
+//! | Medium     | synthetic, ibex-like cross         | 32,768     | 20,480       | 62.5%   | 6.22 ms  | 2.97 ms      | 2.1x    |
+//! | Ibex R-type| tests/fixtures/ibex/rv32imcb...    | 524,288    | 92,160       | 17.6%   | 282 ms   | 8.96 ms      | 31x     |
+//! | CVA6 R4    | tests/fixtures/cva6/xif_ref_r4...   | 16,384     | 2,560        | 15.6%   | 3.33 ms  | 242 µs       | 14x     |
+//! | CVA6 full  | tests/fixtures/cva6/xif_ref...      | 33,554,432 | 196,608      | 0.6%    | 10.4 s   | 19.0 ms      | 550x    |
 //!
 //! The CVA6 fixtures are derived from the CVA6 hardware decoder mask table
 //! (cvxif_instr_pkg.sv, instr_decoder.sv) at commit 6544a714c; see the CVA6
 //! CV-X-IF report (docs/cva6.qmd) for the full analysis.
 //!
 //! The speedup follows approximately `k / D`, where D = V/N is the valid
-//! density and k is a fixture-dependent constant (about 3-14). Sparse spaces
-//! gain the most; dense spaces gain little. See fig-density-speedup in the
-//! report.
+//! density and k is a fixture-dependent constant (about 1.3-5.5 in the
+//! measured set). Sparse spaces gain the most; dense spaces gain little.
+//! See fig-density-speedup in the report.
 //!
 //! Correctness guarantee
 //! ---------------------
@@ -49,8 +49,8 @@
 //! -------
 //! ```text
 //! cargo bench                 # all groups (heavy; the full-space evaluate
-//!                             #   benchmark takes ~18 s per sample and
-//!                             #   peaks at ~8-15 GB)
+//!                             #   benchmark takes ~10 s per sample and
+//!                             #   peaks at several GB (materialized Vec)
 //! cargo bench -- cva6_full    # full-space CVA6 group only
 //! cargo bench -- expand       # expand/enumerate group only
 //! cargo bench -- "struct_enum/cva6"   # structural enumeration only
@@ -79,7 +79,7 @@ use ev::verify::registry::{Check, ConstraintRegistry, ProjectorRegistry};
 ///
 /// No constraints, so `expand_all` and `StructuralEnum` visit the same 27
 /// points; the benchmark measures the baseline per-element cost of each
-/// pipeline (the 1.2x ratio is the constant overhead floor).
+/// pipeline (the 1.7x ratio is the constant overhead floor).
 fn small_spec() -> VerificationSpec {
     let mut fields = BTreeMap::new();
     fields.insert(
@@ -215,7 +215,7 @@ fn cva6_r4_spec() -> VerificationSpec {
 /// the full register range (rs1, rs2, rd in 0..31). Accepted custom-3
 /// encodings: funct3=0/funct7=0 (NOP) and funct3=1/funct7 in 0..4 (ADD,
 /// DOUBLE_RS1, DOUBLE_RS2, ADD_MULTI, ADD_RS3_R). The 0.6% density makes
-/// this the headline sparse case: ~973x structural speedup.
+/// this the headline sparse case: ~550x structural speedup.
 fn cva6_full_spec() -> VerificationSpec {
     let path = std::path::Path::new("tests/fixtures/cva6/xif_ref.xif.yaml");
     VerificationSpec::from_yaml(path).expect("failed to load cva6 xif ref fixture")
@@ -314,12 +314,12 @@ fn bench_enumerate_ibex(c: &mut Criterion) {
 /// evaluate_all on the small spec: 27 combos through the full check set.
 fn bench_evaluate_small(c: &mut Criterion) {
     let spec = small_spec();
-    let combos = expand_all(&spec).unwrap();
     c.bench_function("evaluate/small_27", |b| {
         b.iter(|| {
+            let combos = expand_all(black_box(&spec)).unwrap();
             let results = evaluate_all(
                 black_box(&spec),
-                black_box(combos.clone()),
+                combos,
                 &ConstraintRegistry::default(),
                 &ProjectorRegistry::default(),
             );
@@ -353,12 +353,12 @@ fn bench_validate_small(c: &mut Criterion) {
 /// evaluate_all on the medium spec: 32,768 combos through the check set.
 fn bench_evaluate_medium(c: &mut Criterion) {
     let spec = medium_spec();
-    let combos = expand_all(&spec).unwrap();
     c.bench_function("evaluate/medium_32k", |b| {
         b.iter(|| {
+            let combos = expand_all(black_box(&spec)).unwrap();
             let results = evaluate_all(
                 black_box(&spec),
-                black_box(combos.clone()),
+                combos,
                 &ConstraintRegistry::default(),
                 &ProjectorRegistry::default(),
             );
@@ -389,15 +389,15 @@ fn bench_validate_medium(c: &mut Criterion) {
     });
 }
 
-/// evaluate_all on the Ibex fixture: 524,288 combos, ~3.66 s (heavy).
+/// evaluate_all on the Ibex fixture: 524,288 combos, ~282 ms.
 fn bench_evaluate_ibex(c: &mut Criterion) {
     let spec = ibex_spec();
-    let combos = expand_all(&spec).unwrap();
     c.bench_function("evaluate/ibex_524k", |b| {
         b.iter(|| {
+            let combos = expand_all(black_box(&spec)).unwrap();
             let results = evaluate_all(
                 black_box(&spec),
-                black_box(combos.clone()),
+                combos,
                 &ConstraintRegistry::default(),
                 &ProjectorRegistry::default(),
             );
@@ -407,7 +407,7 @@ fn bench_evaluate_ibex(c: &mut Criterion) {
     });
 }
 
-/// struct_enum on the Ibex fixture: 92,160 valid combos (79x).
+/// struct_enum on the Ibex fixture: 92,160 valid combos (31x).
 fn bench_structural_enum_ibex(c: &mut Criterion) {
     let spec = ibex_spec();
     c.bench_function("struct_enum/ibex_524k", |b| {
@@ -496,15 +496,15 @@ fn bench_enumerate_cva6_r4(c: &mut Criterion) {
     });
 }
 
-/// evaluate_all on the CVA6 R4 fixture: 16,384 combos, ~4.93 ms.
+/// evaluate_all on the CVA6 R4 fixture: 16,384 combos, ~3.33 ms.
 fn bench_evaluate_cva6_r4(c: &mut Criterion) {
     let spec = cva6_r4_spec();
-    let combos = expand_all(&spec).unwrap();
     c.bench_function("evaluate/cva6_r4_16K", |b| {
         b.iter(|| {
+            let combos = expand_all(black_box(&spec)).unwrap();
             let results = evaluate_all(
                 black_box(&spec),
-                black_box(combos.clone()),
+                combos,
                 &ConstraintRegistry::default(),
                 &ProjectorRegistry::default(),
             );
@@ -514,7 +514,7 @@ fn bench_evaluate_cva6_r4(c: &mut Criterion) {
     });
 }
 
-/// struct_enum on the CVA6 R4 fixture: 2,560 valid combos, ~247 µs (20x).
+/// struct_enum on the CVA6 R4 fixture: 2,560 valid combos, ~242 µs (14x).
 fn bench_structural_enum_cva6_r4(c: &mut Criterion) {
     let spec = cva6_r4_spec();
     c.bench_function("struct_enum/cva6_r4_16K", |b| {
@@ -541,21 +541,24 @@ fn bench_validate_cva6_r4(c: &mut Criterion) {
 // CVA6 full fixture (33,554,432 raw / 196,608 valid)
 // ===========================================================================
 //
-// The headline sparse case. evaluate_all runs in ~18 s and peaks at
-// ~8-15 GB because the combination Vec is cloned per iteration; struct_enum
-// streams 196,608 valid combinations in ~18.5 ms. Run this group with
+// The headline sparse case. evaluate_all runs in ~10 s and peaks at
+// several GB because the combination Vec is materialized per iteration;
+// struct_enum streams 196,608 valid combinations in ~19.0 ms. Run this
+// group with
 // `cargo bench -- cva6_full` and keep the validity guard green.
 
-/// evaluate_all on the CVA6 full fixture: 33.5M combos, ~18 s, ~8-15 GB peak.
+/// evaluate_all on the CVA6 full fixture: 33.5M combos, ~10 s, several GB peak.
 fn bench_evaluate_cva6_full(c: &mut Criterion) {
     let spec = cva6_full_spec();
-    let combos = expand_all(&spec).unwrap();
-    // 33.5M combinations are cloned per iteration; peak memory is ~8-15 GB.
     c.bench_function("evaluate/cva6_full_33M", |b| {
         b.iter(|| {
+            // Full standard pipeline per iteration: materialize the Vec and
+            // evaluate. No clone artifact: expand + evaluate is what the CLI
+            // does, and cloning 33.5M combinations (~5 GB) would dominate.
+            let combos = expand_all(black_box(&spec)).unwrap();
             let results = evaluate_all(
                 black_box(&spec),
-                black_box(combos.clone()),
+                combos,
                 &ConstraintRegistry::default(),
                 &ProjectorRegistry::default(),
             );
@@ -565,8 +568,8 @@ fn bench_evaluate_cva6_full(c: &mut Criterion) {
     });
 }
 
-/// struct_enum on the CVA6 full fixture: 196,608 valid combos, ~18.5 ms
-/// (973x vs evaluate).
+/// struct_enum on the CVA6 full fixture: 196,608 valid combos, ~19.0 ms
+/// (550x vs evaluate).
 fn bench_structural_enum_cva6_full(c: &mut Criterion) {
     let spec = cva6_full_spec();
     c.bench_function("struct_enum/cva6_full_33M", |b| {

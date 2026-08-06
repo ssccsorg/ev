@@ -62,15 +62,15 @@ The speedup is an O(N) vs O(V) structural gain, not a language effect.
 
 ```{python}
 #| label: fig-bench-hero
-#| fig-cap: "Verification time: standard evaluate vs structural pipeline. At CVA6 33M scale, structural_verify achieves ~973x speedup."
+#| fig-cap: "Verification time: standard evaluate vs structural pipeline. At CVA6 33M scale, structural_verify achieves ~550x speedup."
 import matplotlib.pyplot as plt
 import numpy as np
 
 plt.rcParams.update({"font.family": "sans-serif", "font.size": 9, "figure.dpi": 150})
 
 fixtures = ["Ibex RV32IMCB\n524K raw · 92K valid", "CVA6 XIF full\n33M raw · 196K valid"]
-eval_us = [3.66e6, 18.0e6]
-verify_us = [46300, 18500]
+eval_us = [281670, 10.4e6]
+verify_us = [8960, 19000]
 
 speedups = [e / v for e, v in zip(eval_us, verify_us)]
 
@@ -109,7 +109,7 @@ plt.show()
 
 ```{python}
 #| label: fig-scaling-main
-#| fig-cap: "Scaling across fixtures: evaluate runs in O(N), struct_enum in O(V). The gap widens as valid density drops; CVA6 full (0.6% density) shows 973x."
+#| fig-cap: "Scaling across fixtures: evaluate runs in O(N), struct_enum in O(V). The gap widens as valid density drops; CVA6 full (0.6% density) shows 550x."
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -117,8 +117,8 @@ plt.rcParams.update({"font.family": "sans-serif", "font.size": 9, "figure.dpi": 
 
 raw_sizes = [27, 32768, 524288, 33554432]
 valid_sizes = [27, 20480, 92160, 196608]
-eval_times_us = [3.26, 6580, 3.66e6, 18.0e6]
-struct_times_us = [2.73, 3106, 46300, 18500]
+eval_times_us = [4.66, 6220, 281670, 10.4e6]
+struct_times_us = [2.75, 2970, 8960, 19000]
 labels = ['Small\n27', 'Medium\n32K', 'Ibex\n524K', 'CVA6\n33M']
 
 fig, ax = plt.subplots(figsize=(8, 4.5))
@@ -143,25 +143,25 @@ plt.show()
 ```
 
 Speedup follows approximately `k / D` (D = valid density): sparse spaces gain
-the most (CVA6 full 0.6% density, 973x; Ibex 17.6%, 79x; dense spaces 1-2x).
+the most (CVA6 full 0.6% density, 550x; Ibex 17.6%, 31x; dense spaces 1.7-2.1x).
 
 ## Fixture Speedups
 
 | Fixture | Raw | Valid | evaluate | structural | Speedup |
 |---------|----:|------:|---------:|-----------:|--------:|
-| Small | 27 | 27 | 3.26 µs | 2.73 µs | 1.2x |
-| Medium | 32,768 | 20,480 | 6.58 ms | 3.11 ms | 2.1x |
-| Ibex R-type | 524,288 | 92,160 | 3.66 s | 46.3 ms | 79x |
-| CVA6 R4 | 16,384 | 2,560 | 4.93 ms | 247 µs | 20x |
-| CVA6 full | 33,554,432 | 196,608 | 18.0 s | 18.5 ms | 973x |
+| Small | 27 | 27 | 4.66 µs | 2.75 µs | 1.7x |
+| Medium | 32,768 | 20,480 | 6.22 ms | 2.97 ms | 2.1x |
+| Ibex R-type | 524,288 | 92,160 | 282 ms | 8.96 ms | 31x |
+| CVA6 R4 | 16,384 | 2,560 | 3.33 ms | 242 µs | 14x |
+| CVA6 full | 33,554,432 | 196,608 | 10.4 s | 19.0 ms | 550x |
 
 ## Status
 
-- **CVA6 CV-X-IF** (OpenHW): 33.5M combinations, 196,608 valid, 18.0 s vs
-  18.5 ms (~970x). Space derived from the hardware decoder mask table; the DV class generates encodings the decoder rejects,
+- **CVA6 CV-X-IF** (OpenHW): 33.5M combinations, 196,608 valid, 10.4 s vs
+  19.0 ms (~550x). Space derived from the hardware decoder mask table; the DV class generates encodings the decoder rejects,
   a documented divergence. Master report: [cva6.html](/projects/ev/cva6.html).
 - **Ibex RV32IMCB** (lowRISC): 524,288 combinations, 92,160 valid,
-  3.66 s vs 46.3 ms (79x). Report: [ibex.html](/projects/ev/ibex.html).
+  282 ms vs 8.96 ms (31x). Report: [ibex.html](/projects/ev/ibex.html).
 
 ### Limits
 
