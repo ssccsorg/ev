@@ -143,15 +143,15 @@ fn load_fixture(path: &str) -> VerificationSpec {
         .unwrap_or_else(|e| panic!("failed to load fixture {path}: {e}"))
 }
 
-/// CVA6 full fixture: struct_enum must emit exactly the 4,259,840 valid
+/// CVA6 full fixture: struct_enum must emit exactly the 196,608 valid
 /// combinations, all satisfying the full constraint set. The expected count
 /// is the `evaluate_all` result measured on the committed fixture; running
-/// the full 33.5M evaluation here would add ~20 s to the suite. The count
-/// includes HW_NOP accepting any funct7 at funct3=000.
+/// the full 33.5M evaluation here would add ~20 s to the suite. The space is
+/// derived from the CVA6 hardware decoder mask table at commit 6544a714c.
 #[test]
 fn structural_enum_matches_evaluate_cva6_full() {
     let spec = load_fixture("tests/fixtures/cva6/xif_ref.xif.yaml");
-    let expected = 4_259_840usize;
+    let expected = 196_608usize;
 
     let emitted = StructuralEnum::new(&spec).count();
     assert_eq!(
@@ -165,12 +165,12 @@ fn structural_enum_matches_evaluate_cva6_full() {
     );
 }
 
-/// CVA6 R4 fixture: struct_enum must emit exactly the 266,240 valid
+/// CVA6 R4 fixture: struct_enum must emit exactly the 2,560 valid
 /// combinations.
 #[test]
 fn structural_enum_matches_evaluate_cva6_r4() {
     let spec = load_fixture("tests/fixtures/cva6/xif_ref_r4.xif.yaml");
-    let expected = 266_240usize;
+    let expected = 2_560usize;
 
     let emitted = StructuralEnum::new(&spec).count();
     assert_eq!(
@@ -181,16 +181,15 @@ fn structural_enum_matches_evaluate_cva6_r4() {
 }
 
 /// validate_into_space must place exactly the distinct valid coordinate paths
-/// into the CoordSpace, with no invalid combinations inserted. The CoordSpace
-/// is keyed by coordinates, so combinations that `enable_mask` collapses to
-/// the same path (e.g. the 2,048 CUS_ADD combinations that all become
-/// funct3=1, funct7=0, rs1=rs2=rd=0) are stored once. The expected counts are
-/// the distinct-path counts measured on the committed fixtures.
+/// into the CoordSpace, with no invalid combinations inserted. The fixtures
+/// use no enable_mask constraints, so every combination is a distinct path.
+/// The expected counts are the distinct-path counts measured on the
+/// committed fixtures.
 #[test]
 fn validate_into_space_matches_evaluate_cva6_fixtures() {
     for (path, expected_distinct) in [
-        ("tests/fixtures/cva6/xif_ref.xif.yaml", 4_195_329usize),
-        ("tests/fixtures/cva6/xif_ref_r4.xif.yaml", 262_660usize),
+        ("tests/fixtures/cva6/xif_ref.xif.yaml", 196_608usize),
+        ("tests/fixtures/cva6/xif_ref_r4.xif.yaml", 2_560usize),
     ] {
         let spec = load_fixture(path);
         let space = validate_into_space(&spec, &ConstraintRegistry::default());

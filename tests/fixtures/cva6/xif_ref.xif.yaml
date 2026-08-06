@@ -1,46 +1,28 @@
 # CVA6 CV-X-IF encoding space — full register range (33M).
 #
-# Cross-checked against actual CVA6 RTL:
-#   - cva6/core/cvxif_example/include/cvxif_instr_pkg.sv (hardware decoder)
-#   - cva6/verif/env/corev-dv/custom/cvxif_custom_instr.sv (DV class)
+# Derived from the CVA6 hardware decoder mask table:
+#   - cva6/core/cvxif_example/include/cvxif_instr_pkg.sv (CoproInstr entries)
+#   - cva6/core/cvxif_example/instr_decoder.sv (sel = (mask & instr) == pattern)
+# Cross-checked at CVA6 commit 6544a714c (master).
 #
-# This fixture uses flat R-type encoding (no func2 field).
-# For the R4 variant with func2, see cva6_xif_ref_r4.xif.yaml.
+# Hardware-accepted custom-3 (0x7B) encodings:
+#   funct3=000, funct7=0:   NOP          (writeback=0)
+#   funct3=001, funct7=0:   ADD
+#   funct3=001, funct7=1:   DOUBLE_RS1
+#   funct3=001, funct7=2:   DOUBLE_RS2
+#   funct3=001, funct7=3:   ADD_MULTI
+#   funct3=001, funct7=4:   ADD_RS3_R
 #
-# Full register range (0..31) for exhaustive verification of register field
-# independence across all valid encoding combinations.
+# The NOP entry mask checks all funct7 bits (1111111), so funct3=000 accepts
+# funct7=0 only. The DV class (cvxif_custom_instr.sv) additionally generates
+# encodings (CUS_U_ADD funct7=2, CUS_S_ADD funct7=6, CUS_ADD_MULTI funct7=8
+# at funct3=000, and CUS_EXC funct3=010 funct7=96) that the reference
+# coprocessor decoder does NOT accept; those are excluded here and documented
+# as a DV/decoder divergence.
 #
-# funct3=000: CUS_ADD_MULTI, CUS_U_ADD, CUS_S_ADD, CUS_ADD_RS3 (via funct7)
-#             NOP (hardware decoder funct3=000 with writeback=0)
-#
-# HW_NOP: the hardware decoder's NOP entry matches funct3=000 with ANY
-# funct7 value (mask only constrains funct3; more specific CUS_* entries
-# take priority for the DV-class values below). The fixture therefore leaves
-# funct7 unrestricted for funct3=000.
-# funct3=001: ADD / DOUBLE_RS1 / DOUBLE_RS2 / ADD_MULTI (via bits[26:25])
-# funct3=010: CUS_EXC (via DV class)
-# funct3=011..111: illegal
-#
-# funct7 sub-decoding (funct3=000):
-#   funct7=0  (0b0000000): CUS_NOP / CUS_ADD_RS3 (func2 via funct7=32 in flat mode)
-#   funct7=2  (0b0000010): CUS_U_ADD
-#   funct7=6  (0b0000110): CUS_S_ADD
-#   funct7=8  (0b0001000): CUS_ADD_MULTI
-#   funct7=32 (0b0100000): CUS_ADD_RS3 (flat R-type, no func2)
-#
-# funct3=001 bits[26:25] sub-decoding (via funct7[5] in flat model):
-#   funct7[5]=0 (funct7 bit 25): ADD / DOUBLE_RS1 / ADD_RS3_R
-#   funct7[5]=1: DOUBLE_RS2 / ADD_MULTI
-#   For simplicity, this fixture keeps funct7=0 for funct3=001
-#   matching the DV class constraint.
-#
-# Hardware decoder mask entries for custom3 opcode 0x7B:
-#   NOP:        funct3=000, bits[26:25]=00, writeback=0
-#   ADD:        funct3=001, bits[26:25]=00
-#   DOUBLE_RS1: funct3=001, bits[26:25]=01
-#   DOUBLE_RS2: funct3=001, bits[26:25]=10
-#   ADD_MULTI:  funct3=001, bits[26:25]=11
-#   ADD_RS3_R:  funct3=001, bits[26:25]=00, rs2[4:2]=001
+# No enable_mask constraints: the hardware accepts all register combinations
+# for the encodings above. Register semantics differ per instruction, but
+# every register combination is a valid encoding.
 
 target: cva6_xif_ref
 fields:
@@ -57,21 +39,12 @@ fields:
 constraints:
   - type: oneof
     field: "funct3"
-    values: [0, 1, 2]
+    values: [0, 1]
   - type: cross
     field_a: "funct3"
     field_b: "funct7"
     mapping:
-      # funct3=000: HW_NOP accepts any funct7 (not listed = unrestricted)
-      1: [0]
-      2: [96]
-  - type: enable_mask
-    field: "funct3"
-    value: 1
-    disable: ["rs1", "rs2", "rd"]
-  - type: enable_mask
-    field: "funct3"
-    value: 2
-    disable: ["rd"]
+      0: [0]
+      1: [0, 1, 2, 3, 4]
 projector:
   type: sum
