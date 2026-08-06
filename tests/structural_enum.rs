@@ -143,14 +143,15 @@ fn load_fixture(path: &str) -> VerificationSpec {
         .unwrap_or_else(|e| panic!("failed to load fixture {path}: {e}"))
 }
 
-/// CVA6 full fixture: struct_enum must emit exactly the 229,376 valid
+/// CVA6 full fixture: struct_enum must emit exactly the 4,259,840 valid
 /// combinations, all satisfying the full constraint set. The expected count
 /// is the `evaluate_all` result measured on the committed fixture; running
-/// the full 33.5M evaluation here would add ~20 s to the suite.
+/// the full 33.5M evaluation here would add ~20 s to the suite. The count
+/// includes HW_NOP accepting any funct7 at funct3=000.
 #[test]
 fn structural_enum_matches_evaluate_cva6_full() {
     let spec = load_fixture("tests/fixtures/cva6/xif_ref.xif.yaml");
-    let expected = 229_376usize;
+    let expected = 4_259_840usize;
 
     let emitted = StructuralEnum::new(&spec).count();
     assert_eq!(
@@ -164,12 +165,12 @@ fn structural_enum_matches_evaluate_cva6_full() {
     );
 }
 
-/// CVA6 R4 fixture: struct_enum must emit exactly the 12,288 valid
+/// CVA6 R4 fixture: struct_enum must emit exactly the 266,240 valid
 /// combinations.
 #[test]
 fn structural_enum_matches_evaluate_cva6_r4() {
     let spec = load_fixture("tests/fixtures/cva6/xif_ref_r4.xif.yaml");
-    let expected = 12_288usize;
+    let expected = 266_240usize;
 
     let emitted = StructuralEnum::new(&spec).count();
     assert_eq!(
@@ -182,14 +183,14 @@ fn structural_enum_matches_evaluate_cva6_r4() {
 /// validate_into_space must place exactly the distinct valid coordinate paths
 /// into the CoordSpace, with no invalid combinations inserted. The CoordSpace
 /// is keyed by coordinates, so combinations that `enable_mask` collapses to
-/// the same path (e.g. the 32,768 CUS_ADD combinations that all become
+/// the same path (e.g. the 2,048 CUS_ADD combinations that all become
 /// funct3=1, funct7=0, rs1=rs2=rd=0) are stored once. The expected counts are
 /// the distinct-path counts measured on the committed fixtures.
 #[test]
 fn validate_into_space_matches_evaluate_cva6_fixtures() {
     for (path, expected_distinct) in [
-        ("tests/fixtures/cva6/xif_ref.xif.yaml", 164_865usize),
-        ("tests/fixtures/cva6/xif_ref_r4.xif.yaml", 8_708usize),
+        ("tests/fixtures/cva6/xif_ref.xif.yaml", 4_195_329usize),
+        ("tests/fixtures/cva6/xif_ref_r4.xif.yaml", 262_660usize),
     ] {
         let spec = load_fixture(path);
         let space = validate_into_space(&spec, &ConstraintRegistry::default());

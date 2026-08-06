@@ -76,11 +76,11 @@ Internally, ExaVerif expands the full cartesian product of all field domains, th
 ```text
 target: cva6_xif_ref
 total:  33554432
-passed: 229376
-failed: 33226752
+passed: 4259840
+failed: 29294592
 ```
 
-The example above shows ev verifying the CVA6 CV-X-IF reference coprocessor against the encoding model — cross-checked with the CVA6 verification suite (`cvxif_custom_instr.sv`). Over **33 million** raw combinations are evaluated exhaustively. Only 229,376 combinations are valid: every funct3/funct7 combination that the model accepts, with full RV32 register range (rs1, rs2, rd ∈ [0, 31]). The remaining 33 million are correctly identified as illegal within the modeled space.
+The example above shows ev verifying the CVA6 CV-X-IF reference coprocessor against the encoding model — cross-checked with the CVA6 verification suite (`cvxif_custom_instr.sv`). Over **33 million** raw combinations are evaluated exhaustively. Only 4,259,840 combinations are valid: every funct3/funct7 combination that the model accepts, with full RV32 register range (rs1, rs2, rd ∈ [0, 31]). The remaining 29.3 million are correctly identified as illegal within the modeled space.
 
 ```bash
 ev verify --target cva6_xif_ref.xif.yaml --json
@@ -92,7 +92,7 @@ Every result is also available as a **Fact** — an opaque blob consumed by [Nex
 EV_SIM_BACKEND=spike ev simulate --target cva6_xif_ref.xif.yaml
 ```
 
-Every valid combination is also cross-checked by a C reimplementation. The `simulate` command packs all 229,376 valid combinations into a single ELF binary and runs it under Spike + pk. All 229,376 rows agree between the C and Rust implementations of the constraint model.
+Every valid combination is also cross-checked by a C reimplementation. The `simulate` command packs all 4,259,840 valid combinations into a single ELF binary and runs it under Spike + pk. All 4,259,840 rows agree between the C and Rust implementations of the constraint model.
 
 The Field Composition engine — a branchless, constant‑time verification kernel validated via x86‑64 CI — guarantees deterministic results. The same input always produces the same output, independent of random seeds or simulator state.
 
@@ -139,7 +139,7 @@ Every approach shares one trait: **coverage is either statistical or scoped to s
 
 ### Benchmark: CVA6 XIF Reference Coprocessor
 
-A single `ev verify` command exhaustively evaluates **33.5 million** raw field combinations against the modeled CVA6 CV-X-IF encoding space. The model accepts 229,376 valid combinations — the exact funct3/funct7/rs1/rs2/rd combinations that satisfy the model — and correctly rejects the remaining 33.3 million. Execution time on a single core (release build): **18 seconds**. All 229,376 valid combinations are cross-checked by the Spike backend running a C reimplementation of the constraint model.
+A single `ev verify` command exhaustively evaluates **33.5 million** raw field combinations against the modeled CVA6 CV-X-IF encoding space. The model accepts 4,259,840 valid combinations — the exact funct3/funct7/rs1/rs2/rd combinations that satisfy the model — and correctly rejects the remaining 29.3 million. Execution time on a single core (release build): **18 seconds**. All 4,259,840 valid combinations are cross-checked by the Spike backend running a C reimplementation of the constraint model.
 
 | Metric | RISC-V DV (random) | Formal (OneSpin) | ExaVerif |
 |:---|---:|---:|---:|
@@ -211,8 +211,8 @@ ExaVerif welcomes collaboration with RISC‑V verification groups — including 
 | Asset | Status |
 |:---|:---|
 | CLI (`ev`) | Open-source (Apache 2.0) |
-| Exhaustive engine | Validated on CVA6 XIF (33.5M combos, 32s) |
-| Spike C/Rust recheck | 229,376 / 229,376 agree |
+| Exhaustive engine | Validated on CVA6 XIF (33.5M combos, 18s) |
+| Spike C/Rust recheck | 4,259,840 / 4,259,840 agree |
 | Shared knowledge store | In development |
 
 ## Market Context

@@ -12,6 +12,11 @@
 #
 # funct3=000: CUS_ADD_MULTI, CUS_U_ADD, CUS_S_ADD, CUS_ADD_RS3 (via funct7)
 #             NOP (hardware decoder funct3=000 with writeback=0)
+#
+# HW_NOP: the hardware decoder's NOP entry matches funct3=000 with ANY
+# funct7 value (mask only constrains funct3; more specific CUS_* entries
+# take priority for the DV-class values below). The fixture therefore leaves
+# funct7 unrestricted for funct3=000.
 # funct3=001: ADD / DOUBLE_RS1 / DOUBLE_RS2 / ADD_MULTI (via bits[26:25])
 # funct3=010: CUS_EXC (via DV class)
 # funct3=011..111: illegal
@@ -57,7 +62,7 @@ constraints:
     field_a: "funct3"
     field_b: "funct7"
     mapping:
-      0: [0, 2, 6, 8, 32]
+      # funct3=000: HW_NOP accepts any funct7 (not listed = unrestricted)
       1: [0]
       2: [96]
   - type: enable_mask
