@@ -13,7 +13,6 @@ def generate_qmd():
     qmd = f"""---
 title: "SV Architecture Diagram"
 subtitle: "Auto-generated from POC SystemVerilog modules"
-date: last-modified
 metadata-files:
   - ../../_include/author.yml
 abstract: |
