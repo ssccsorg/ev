@@ -16,6 +16,28 @@ from pathlib import Path
 import yaml
 
 
+def latex_escape(s: str) -> str:
+    """Escape LaTeX special characters so a value typesets in text mode.
+
+    The version string combines a user-supplied prefix with a file hash and
+    date, so the prefix may carry characters such as the underscore that
+    LaTeX treats as math-mode commands. Escaping keeps the macro safe for
+    text-mode consumers such as the PDF background watermark.
+    """
+    return (
+        s.replace("\\", r"\textbackslash{}")
+        .replace("&", r"\&")
+        .replace("%", r"\%")
+        .replace("$", r"\$")
+        .replace("#", r"\#")
+        .replace("_", r"\_")
+        .replace("{", r"\{")
+        .replace("}", r"\}")
+        .replace("~", r"\textasciitilde{}")
+        .replace("^", r"\textasciicircum{}")
+    )
+
+
 def extract_front_matter(qmd_path):
     """Extract YAML front matter from a QMD file."""
     try:
@@ -186,7 +208,7 @@ def main():
 
     # ----- Write LaTeX macros -----
     with open(args.output, "w", encoding="utf-8") as f:
-        f.write(f"\\newcommand{{\\version}}{{{version_str}}}\n")
+        f.write(f"\\newcommand{{\\version}}{{{latex_escape(version_str)}}}\n")
         f.write(f"\\newcommand{{\\timestamp}}{{{datetime.now()}}}\n")
         f.write(f"\\newcommand{{\\affiliationname}}{{{affiliation_name}}}\n")
         f.write(f"\\newcommand{{\\affiliationurl}}{{{affiliation_url}}}\n")
