@@ -194,7 +194,7 @@ Valid counts below are the `evaluate_all` results on the committed fixtures
 | Spike backend | C/Rust recheck: 196,608 / 196,608 agree |
 | Constraint types | 13 (range, even, eq, neq, lt, gt, le, ge, oneof, cross, bitmask, enable_mask, enable_set) |
 | Tests | 96 (73 lib + 16 CLI + 2 tagma + 5 structural), all passing |
-| Coverage gate | 80% lines / 80% regions (llvm-cov, backends excluded) |
+| Coverage gate | 80% lines / 80% regions (llvm-cov, all modules incl. Spike/Yosys backends) |
 | Simulation backends | Mock (default), Spike (`EV_SIM_BACKEND=spike`) |
 
 Benchmark methodology and reproducibility: both pipelines are Rust, the same

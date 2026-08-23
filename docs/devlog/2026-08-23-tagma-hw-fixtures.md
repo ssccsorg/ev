@@ -59,12 +59,13 @@ not a spec target.
 
 ## Coverage gate
 
-`make coverage` runs the instrumented suite with cargo-llvm-cov and fails the
-build when lines or regions fall below 80%. The Spike, Yosys, and simulation
-backends are excluded from the measurement because they require external
-tools at runtime; the integration pipeline exercises them. Measured on the
-committed suite: 85.67% lines, 84.72% regions (backends excluded). The gate
-is wired into the CI coverage job and into `run.sh --coverage`.
+`scripts/coverage.sh`, wired into `run.sh --coverage` and `make coverage`,
+runs the instrumented suite with cargo-llvm-cov, then exercises the Spike,
+Yosys, and simulation backends with the instrumented binary (local tools or
+the ev Docker image), then merges all profraw data and fails the build when
+lines or regions fall below 80%. Measured on the committed suite: 83.35%
+lines and 82.34% regions across the full crate, including the backends. The
+gate runs in the CI coverage job.
 
 ## Milestones
 

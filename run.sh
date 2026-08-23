@@ -243,7 +243,7 @@ case ${1:-} in
         echo "══════════════════════════════════════"
         echo "  ev — code coverage gate"
         echo "══════════════════════════════════════"
-        make coverage
+        bash scripts/coverage.sh
         ;;
     --demo)
         exec bash scripts/demo-ssccs-poc.sh

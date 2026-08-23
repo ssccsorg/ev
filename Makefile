@@ -18,14 +18,12 @@ check:
 	cargo build --release
 	cargo test --release
 
-# Code coverage gate (cargo-llvm-cov). The Spike, Yosys, and simulation
-# backends are excluded: they require external tools at runtime and are
-# exercised by the integration pipeline instead. Thresholds leave headroom
-# over the measured 85.67% lines / 84.72% regions on the committed suite.
+# Code coverage gate (cargo-llvm-cov via scripts/coverage.sh). The Spike,
+# Yosys, and simulation backends are exercised with the instrumented binary
+# (local tools or the ev image), then merged into the report. Thresholds:
+# 80% lines and 80% regions on the full crate.
 coverage:
-	cargo llvm-cov --release --fail-under-lines 80 --fail-under-regions 80 \
-		--ignore-filename-regex "synth/backends|synth/sim"
-	@echo "fixture coverage: tagma decoder 11,172/11,172, tagma demo top 11,172/11,172, cva6 ref 196,608, ibex rv32imcb 92,160"
+	bash run.sh --coverage
 
 clean:
 	cargo clean
