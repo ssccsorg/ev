@@ -218,8 +218,7 @@ impl ReporterCapable for TextReporter {
             // The summary lines above are authoritative; the detail listing
             // is capped (the full list can be gigabytes for sparse spaces).
             const MAX_PRINTED_FAILURES: usize = 25;
-            let failed_rows: Vec<&Evaluation> =
-                evaluations.iter().filter(|e| !e.passed).collect();
+            let failed_rows: Vec<&Evaluation> = evaluations.iter().filter(|e| !e.passed).collect();
             if !failed_rows.is_empty() {
                 println!("Failures:");
                 for (i, e) in failed_rows.iter().enumerate() {
