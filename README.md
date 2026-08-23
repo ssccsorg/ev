@@ -58,6 +58,7 @@ them), so Spike never executes them.
 ./run.sh --demo           # Channel demo: cross-verify golden anchors
 ./run.sh --code           # fmt -> clippy -> build -> test (strict)
 ./run.sh --verify         # Full verification including 33M combo fixture
+./run.sh --coverage       # Code coverage gate (cargo-llvm-cov, 80% thresholds)
 ```
 
 Or step-by-step:
@@ -193,6 +194,7 @@ Valid counts below are the `evaluate_all` results on the committed fixtures
 | Spike backend | C/Rust recheck: 196,608 / 196,608 agree |
 | Constraint types | 13 (range, even, eq, neq, lt, gt, le, ge, oneof, cross, bitmask, enable_mask, enable_set) |
 | Tests | 96 (73 lib + 16 CLI + 2 tagma + 5 structural), all passing |
+| Coverage gate | 80% lines / 80% regions (llvm-cov, backends excluded) |
 | Simulation backends | Mock (default), Spike (`EV_SIM_BACKEND=spike`) |
 
 Benchmark methodology and reproducibility: both pipelines are Rust, the same

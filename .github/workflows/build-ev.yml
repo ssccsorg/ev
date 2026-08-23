@@ -71,3 +71,22 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
             -c "cd /workspace && ./target/release/ev simulate --target tests/fixtures/common/all_pass.xif.yaml"
         shell: bash
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt, llvm-tools-preview
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-llvm-cov
+        env:
+          RUSTFLAGS: ""
+        run: cargo install cargo-llvm-cov --locked
+
+      - name: Coverage gate
+        run: bash run.sh --coverage

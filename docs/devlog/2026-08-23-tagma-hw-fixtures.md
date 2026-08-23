@@ -57,10 +57,19 @@ testbench execution are outside the ev domain, which evaluates combinational
 encoding spaces. The testbench artifact is the reference for expected counts,
 not a spec target.
 
+## Coverage gate
+
+`make coverage` runs the instrumented suite with cargo-llvm-cov and fails the
+build when lines or regions fall below 80%. The Spike, Yosys, and simulation
+backends are excluded from the measurement because they require external
+tools at runtime; the integration pipeline exercises them. Measured on the
+committed suite: 85.67% lines, 84.72% regions (backends excluded). The gate
+is wired into the CI coverage job and into `run.sh --coverage`.
+
 ## Milestones
 
-Milestone 1 (this branch): fixture specs, `run.sh` assertions, CLI tests, and
-this plan.
+Milestone 1 (this branch): fixture specs, `run.sh` assertions, CLI tests,
+lib-level fixture tests, the CI coverage gate, and this plan.
 
 Milestone 2 (issue #46): a decode projector or an arithmetic constraint so
 the decomposition becomes expressible. This is the main engine extension.
