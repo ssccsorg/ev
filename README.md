@@ -199,9 +199,9 @@ Valid counts below are the `evaluate_all` results on the committed fixtures
 |--------|-------|
 | Raw combinations verified (CVA6 full) | 33,554,432 (counted, not enumerated) |
 | Valid combinations identified (CVA6 full) | 196,608 |
-| CLI verify time (CVA6 full, structural pipeline, release) | ~0.2 s |
-| Previous CLI time (expand_all, release) | 10.4 s |
-| struct_enum benchmark (same machine, release) | 19.0 ms |
+| CLI verify time (CVA6 full, structural pipeline, release) | ~0.2 s end-to-end (core pipeline 36 ms benched) |
+| Previous CLI time (expand_all, release) | 13.1 s (benched evaluate) |
+| struct_enum benchmark (same machine, release) | 18.8 ms |
 | Spike backend | C/Rust recheck: 196,608 / 196,608 agree |
 | Constraint types | 13 (range, even, eq, neq, lt, gt, le, ge, oneof, cross, bitmask, enable_mask, enable_set) |
 | Projector types | 4 (sum, identity, parity, tagma_decode) |

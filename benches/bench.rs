@@ -23,20 +23,32 @@
 //! -----------------
 //! | Fixture    | Source fixture                      | Raw combos | Valid combos | Density | evaluate | struct_enum | Speedup |
 //! |------------|-------------------------------------|-----------:|-------------:|--------:|---------:|------------:|--------:|
-//! | Small      | synthetic, 3 fields x 3            | 27         | 27           | 100%    | 4.66 µs  | 2.75 µs      | 1.7x    |
-//! | Medium     | synthetic, ibex-like cross         | 32,768     | 20,480       | 62.5%   | 6.22 ms  | 2.97 ms      | 2.1x    |
-//! | Ibex R-type| tests/fixtures/ibex/rv32imcb...    | 524,288    | 92,160       | 17.6%   | 282 ms   | 8.96 ms      | 31x     |
-//! | CVA6 R4    | tests/fixtures/cva6/xif_ref_r4...   | 16,384     | 2,560        | 15.6%   | 3.33 ms  | 242 µs       | 14x     |
-//! | CVA6 full  | tests/fixtures/cva6/xif_ref...      | 33,554,432 | 196,608      | 0.6%    | 10.4 s   | 19.0 ms      | 550x    |
+//! | Small      | synthetic, 3 fields x 3            | 27         | 27           | 100%    | 4.87 µs  | 2.86 µs      | 1.7x    |
+//! | Medium     | synthetic, ibex-like cross         | 32,768     | 20,480       | 62.5%   | 5.99 ms  | 3.02 ms      | 2.0x    |
+//! | Tagma      | tests/fixtures/tagma/tagma_decoder | 65,536     | 11,172       | 17.0%   | 9.74 ms  | 5.94 ms      | 1.6x    |
+//! | Ibex R-type| tests/fixtures/ibex/rv32imcb...    | 524,288    | 92,160       | 17.6%   | 297 ms   | 9.89 ms      | 30x     |
+//! | CVA6 R4    | tests/fixtures/cva6/xif_ref_r4...   | 16,384     | 2,560        | 15.6%   | 4.13 ms  | 274 µs       | 15x     |
+//! | CVA6 full  | tests/fixtures/cva6/xif_ref...      | 33,554,432 | 196,608      | 0.6%    | 13.1 s   | 18.8 ms      | ~700x   |
+//!
+//! The Tagma decoder's ge/le constraints are runtime-only, so its structural
+//! density is 100% and the 1.6x gain is the enumeration overhead difference,
+//! not a sparse-space effect; its table density (17%) is the valid/raw
+//! ratio, not the structural filter ratio.
+//!
+//! The CLI verify path (`evaluate_structural`: raw total + structural
+//! subset + evaluate_all on the valid rows) measures 36.3 ms on the CVA6
+//! full fixture; the ~0.2 s end-to-end CLI number includes YAML parse and
+//! process startup.
 //!
 //! The CVA6 fixtures are derived from the CVA6 hardware decoder mask table
-//! (cvxif_instr_pkg.sv, instr_decoder.sv) at commit 6544a714c; see the CVA6
-//! CV-X-IF report (docs/cva6.qmd) for the full analysis.
+//! (cvxif_instr_pkg.sv, instr_decoder.sv) at commit 6544a714c; see the
+//! syntagma verification devlog for the decoder analysis.
 //!
 //! The speedup follows approximately `k / D`, where D = V/N is the valid
 //! density and k is a fixture-dependent constant (about 1.3-5.5 in the
 //! measured set). Sparse spaces gain the most; dense spaces gain little.
-//! See fig-density-speedup in the report.
+//! The Tagma row is the exception: its structural density is 100%, so the
+//! model does not apply to it.
 //!
 //! Correctness guarantee
 //! ---------------------
@@ -49,7 +61,7 @@
 //! -------
 //! ```text
 //! cargo bench                 # all groups (heavy; the full-space evaluate
-//!                             #   benchmark takes ~10 s per sample and
+//!                             #   benchmark takes ~13 s per sample and
 //!                             #   peaks at several GB (materialized Vec)
 //! cargo bench -- cva6_full    # full-space CVA6 group only
 //! cargo bench -- expand       # expand/enumerate group only
@@ -62,7 +74,7 @@ use std::collections::BTreeMap;
 
 use ev::spec::{ConstraintSpec, FieldSpec, ProjectorSpec, VerificationSpec};
 use ev::verify::compose::{coords_to_coord_vec, expand_all, EnumerateIter, StructuralEnum};
-use ev::verify::evaluate::{evaluate_all, validate_into_space};
+use ev::verify::evaluate::{evaluate_all, evaluate_structural, validate_into_space};
 use ev::verify::registry::{Check, ConstraintRegistry, ProjectorRegistry};
 
 // ===========================================================================
@@ -215,10 +227,21 @@ fn cva6_r4_spec() -> VerificationSpec {
 /// the full register range (rs1, rs2, rd in 0..31). Accepted custom-3
 /// encodings: funct3=0/funct7=0 (NOP) and funct3=1/funct7 in 0..4 (ADD,
 /// DOUBLE_RS1, DOUBLE_RS2, ADD_MULTI, ADD_RS3_R). The 0.6% density makes
-/// this the headline sparse case: ~550x structural speedup.
+/// this the headline sparse case: ~700x structural speedup.
 fn cva6_full_spec() -> VerificationSpec {
     let path = std::path::Path::new("tests/fixtures/cva6/xif_ref.xif.yaml");
     VerificationSpec::from_yaml(path).expect("failed to load cva6 xif ref fixture")
+}
+
+/// Tagma decoder spec: 65,536 raw combos, 11,172 valid (17.0% density).
+///
+/// Real fixture `tests/fixtures/tagma/tagma_decoder.xif.yaml`, the input
+/// domain contract of the syntagma 3-axis Hangul decoder. Two runtime
+/// constraints (ge 0xAC00, le 0xD7A3) plus the tagma_decode projector that
+/// packs the axis decomposition into the golden-anchor layout.
+fn tagma_spec() -> VerificationSpec {
+    let path = std::path::Path::new("tests/fixtures/tagma/tagma_decoder.xif.yaml");
+    VerificationSpec::from_yaml(path).expect("failed to load tagma decoder fixture")
 }
 
 // ===========================================================================
@@ -407,7 +430,7 @@ fn bench_evaluate_ibex(c: &mut Criterion) {
     });
 }
 
-/// struct_enum on the Ibex fixture: 92,160 valid combos (31x).
+/// struct_enum on the Ibex fixture: 92,160 valid combos (30x).
 fn bench_structural_enum_ibex(c: &mut Criterion) {
     let spec = ibex_spec();
     c.bench_function("struct_enum/ibex_524k", |b| {
@@ -514,7 +537,7 @@ fn bench_evaluate_cva6_r4(c: &mut Criterion) {
     });
 }
 
-/// struct_enum on the CVA6 R4 fixture: 2,560 valid combos, ~242 µs (14x).
+/// struct_enum on the CVA6 R4 fixture: 2,560 valid combos, ~274 µs (15x).
 fn bench_structural_enum_cva6_r4(c: &mut Criterion) {
     let spec = cva6_r4_spec();
     c.bench_function("struct_enum/cva6_r4_16K", |b| {
@@ -541,13 +564,13 @@ fn bench_validate_cva6_r4(c: &mut Criterion) {
 // CVA6 full fixture (33,554,432 raw / 196,608 valid)
 // ===========================================================================
 //
-// The headline sparse case. evaluate_all runs in ~10 s and peaks at
+// The headline sparse case. evaluate_all runs in ~13 s and peaks at
 // several GB because the combination Vec is materialized per iteration;
-// struct_enum streams 196,608 valid combinations in ~19.0 ms. Run this
+// struct_enum streams 196,608 valid combinations in ~18.8 ms. Run this
 // group with
 // `cargo bench -- cva6_full` and keep the validity guard green.
 
-/// evaluate_all on the CVA6 full fixture: 33.5M combos, ~10 s, several GB peak.
+/// evaluate_all on the CVA6 full fixture: 33.5M combos, ~13 s, several GB peak.
 fn bench_evaluate_cva6_full(c: &mut Criterion) {
     let spec = cva6_full_spec();
     c.bench_function("evaluate/cva6_full_33M", |b| {
@@ -568,14 +591,34 @@ fn bench_evaluate_cva6_full(c: &mut Criterion) {
     });
 }
 
-/// struct_enum on the CVA6 full fixture: 196,608 valid combos, ~19.0 ms
-/// (550x vs evaluate).
+/// struct_enum on the CVA6 full fixture: 196,608 valid combos, ~18.8 ms
+/// (~700x vs evaluate at ~13 s).
 fn bench_structural_enum_cva6_full(c: &mut Criterion) {
     let spec = cva6_full_spec();
     c.bench_function("struct_enum/cva6_full_33M", |b| {
         b.iter(|| {
             let count = StructuralEnum::new(black_box(&spec)).count();
             black_box(count);
+        })
+    });
+}
+
+/// evaluate_structural on the CVA6 full fixture: the exact pipeline `ev
+/// verify` runs today (raw total + structural subset + evaluate_all on the
+/// 196,608 valid rows). Benched at 36.3 ms; the ~0.2 s end-to-end CLI
+/// number includes YAML parse and process startup.
+fn bench_evaluate_structural_cva6_full(c: &mut Criterion) {
+    let spec = cva6_full_spec();
+    c.bench_function("evaluate_structural/cva6_full_33M", |b| {
+        b.iter(|| {
+            let (total, results) = evaluate_structural(
+                black_box(&spec),
+                &ConstraintRegistry::default(),
+                &ProjectorRegistry::default(),
+            )
+            .expect("structural evaluation");
+            let passed = results.iter().filter(|r| r.passed).count();
+            black_box((total, passed));
         })
     });
 }
@@ -616,6 +659,61 @@ fn bench_structural_enum_validity_cva6_full(c: &mut Criterion) {
                 "struct_enum emitted {emitted} combinations but only {valid} satisfy the full constraint set"
             );
             black_box(valid);
+        })
+    });
+}
+
+// ===========================================================================
+// Tagma decoder fixture (65,536 raw / 11,172 valid, 17.0% density)
+// ===========================================================================
+
+/// struct_enum on the Tagma decoder fixture: the 11,172 valid syllables of
+/// the 65,536 code point space, ~5.9 ms.
+fn bench_structural_enum_tagma(c: &mut Criterion) {
+    let spec = tagma_spec();
+    c.bench_function("struct_enum/tagma_decoder_64K", |b| {
+        b.iter(|| {
+            let count = StructuralEnum::new(black_box(&spec)).count();
+            black_box(count);
+        })
+    });
+}
+
+/// evaluate_all on the Tagma decoder fixture: the naive path materializes
+/// all 65,536 combos and runs the ge/le checks plus the tagma_decode
+/// projection on the passing ones, ~9.7 ms.
+fn bench_evaluate_tagma(c: &mut Criterion) {
+    let spec = tagma_spec();
+    c.bench_function("evaluate/tagma_decoder_64K", |b| {
+        b.iter(|| {
+            let combos = expand_all(black_box(&spec)).unwrap();
+            let results = evaluate_all(
+                black_box(&spec),
+                combos,
+                &ConstraintRegistry::default(),
+                &ProjectorRegistry::default(),
+            );
+            let count = results.iter().filter(|r| r.passed).count();
+            black_box(count);
+        })
+    });
+}
+
+/// evaluate_structural on the Tagma decoder fixture: the CLI verify path
+/// with runtime-only constraints, where the structural subset is the full
+/// space and the gain is the raw total computed without enumeration, ~8.8 ms.
+fn bench_evaluate_structural_tagma(c: &mut Criterion) {
+    let spec = tagma_spec();
+    c.bench_function("evaluate_structural/tagma_decoder_64K", |b| {
+        b.iter(|| {
+            let (total, results) = evaluate_structural(
+                black_box(&spec),
+                &ConstraintRegistry::default(),
+                &ProjectorRegistry::default(),
+            )
+            .expect("structural evaluation");
+            let passed = results.iter().filter(|r| r.passed).count();
+            black_box((total, passed));
         })
     });
 }
@@ -678,11 +776,12 @@ criterion_group!(
     name = eval_light;
     config = Criterion::default().sample_size(100);
     targets = bench_evaluate_small, bench_structural_enum_small, bench_validate_small,
-              bench_evaluate_medium, bench_structural_enum_medium, bench_validate_medium
+              bench_evaluate_medium, bench_structural_enum_medium, bench_validate_medium,
+              bench_evaluate_tagma, bench_structural_enum_tagma, bench_evaluate_structural_tagma
 );
 
-// Heavy evaluation: ibex/cva6 scale, runs in seconds per iter.
-// 10 samples is practical: ibex evaluate ~3.7s, cva6_r4 evaluate ~5ms (release).
+// Heavy evaluation: ibex/cva6 scale, runs in ~0.3 s to ~13 s per iter.
+// 10 samples is practical: ibex evaluate ~0.3 s, cva6_r4 evaluate ~4 ms (release).
 criterion_group!(
     name = eval_heavy;
     config = Criterion::default().sample_size(10);
@@ -696,7 +795,8 @@ criterion_group!(
     name = cva6_full;
     config = Criterion::default().sample_size(10);
     targets = bench_evaluate_cva6_full, bench_structural_enum_cva6_full,
-              bench_validate_cva6_full, bench_structural_enum_validity_cva6_full
+              bench_evaluate_structural_cva6_full, bench_validate_cva6_full,
+              bench_structural_enum_validity_cva6_full
 );
 
 criterion_main!(coordspace, expand, eval_light, eval_heavy, cva6_full);
