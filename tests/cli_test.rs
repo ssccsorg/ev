@@ -153,23 +153,25 @@ fn verify_cva6_xif_mac_fixture() {
 }
 
 #[test]
-#[ignore = "medium: 16K combos via CLI. Use release build or struct_enum for speed."]
 fn verify_cva6_xif_ref_r4_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("verify")
         .arg("--target")
         .arg("tests/fixtures/cva6/xif_ref_r4.xif.yaml")
-        .arg("--json")
         .output()
         .expect("failed to run ev verify on cva6_xif_ref_r4 fixture");
+    // The fixture has invalid encodings, so the exit code is non-zero.
+    assert!(
+        !output.status.success(),
+        "cva6_xif_ref_r4 should exit non-zero"
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains("fact_type"),
-        "cva6_xif_ref_r4 should produce fact output"
-    );
-    assert!(
-        stdout.contains("\"payload\""),
-        "cva6_xif_ref_r4 should contain payload"
+        stdout.contains("total:  16384")
+            && stdout.contains("passed: 2560")
+            && stdout.contains("failed: 13824"),
+        "should report the R4 encoding counts: {}",
+        stdout
     );
 }
 
@@ -219,24 +221,25 @@ fn synth_json_with_mock_backend() {
 }
 
 #[test]
-#[ignore = "33M combos via CLI (old pipeline). struct_enum does it in ~200ms; pending CLI integration."]
 fn verify_cva6_xif_ref_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("verify")
         .arg("--target")
         .arg("tests/fixtures/cva6/xif_ref.xif.yaml")
-        .arg("--json")
         .output()
         .expect("failed to run ev verify on cva6_xif_ref fixture");
-    // cva6_xif_ref has many illegal encodings → exit non-zero, which is expected.
+    // Most of the 33.5M space is invalid, so the exit code is non-zero.
+    assert!(
+        !output.status.success(),
+        "cva6_xif_ref should exit non-zero"
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains("fact_type"),
-        "cva6_xif_ref should produce fact output"
-    );
-    assert!(
-        stdout.contains("\"payload\""),
-        "cva6_xif_ref should contain payload"
+        stdout.contains("total:  33554432")
+            && stdout.contains("passed: 196608")
+            && stdout.contains("failed: 33357824"),
+        "should report the full CVA6 decoder counts: {}",
+        stdout
     );
 }
 

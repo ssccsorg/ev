@@ -170,13 +170,12 @@ _verify_check() {
 }
 
 verify_large_fixtures() {
-    # 33M fixture skipped in CI to conserve Actions minutes.
-    if [ -n "${CI:-}" ]; then
-        echo "  (skipped 33M fixture in CI — run ./run.sh --verify locally)"
-    else
-        _timed "cva6 xif ref fixture (33M combos)" $EV verify --target "tests/fixtures/cva6/xif_ref.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
-    fi
+    # The 33M fixture now runs through the structural pipeline (~0.2 s in
+    # release), so it is asserted in CI instead of being skipped.
+    _timed "cva6 xif ref fixture (33M combos)" $EV verify --target "tests/fixtures/cva6/xif_ref.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
+    _verify_check "cva6 xif ref full"       196608  33357824 "tests/fixtures/cva6/xif_ref.xif.yaml"
     _timed "cva6 xif ref r4 fixture (16K combos)" $EV verify --target "tests/fixtures/cva6/xif_ref_r4.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
+    _verify_check "cva6 xif ref r4"         2560    13824    "tests/fixtures/cva6/xif_ref_r4.xif.yaml"
     _timed "cva6 xif madd fixture (32k combos)" $EV verify --target "tests/fixtures/cva6/xif_madd.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
     _timed "cva6 xif mac fixture (32k combos)" $EV verify --target "tests/fixtures/cva6/xif_mac.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
     _timed "ibex custom alu fixture (524k combos)" $EV verify --target "tests/fixtures/ibex/alu_ext.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true

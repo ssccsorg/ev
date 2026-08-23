@@ -3,11 +3,11 @@
 Exhaustive verification CLI for RISC-V custom instruction extensions.
 Apache 2.0.
 
-33.5 million combinations evaluated deterministically: 10.4 s with the
-standard pipeline, 19.0 ms with the Tagma-based structural enumeration
-(~550x, same-language baseline). The CVA6 fixtures are derived from the
-hardware decoder mask table (commit `6544a714c`); the Spike backend
-cross-checks the constraint model and instruction-word assembly in C.
+33.5 million combinations verified deterministically in about 0.2 s (release)
+through the structural enumeration pipeline, which is the CLI default since
+issue #42. The CVA6 fixtures are derived from the hardware decoder mask
+table (commit `6544a714c`); the Spike backend cross-checks the constraint
+model and instruction-word assembly in C.
 
 ## What It Does
 
@@ -20,10 +20,11 @@ cross) that are encoded directly into the enumeration space, and runtime
 constraints (eq, neq, lt, gt, le, ge, even) that are checked per combination.
 Only structurally valid combinations are ever generated.
 
-A single command enumerates and evaluates 33.5 million combinations against the
-CVA6 CV-X-IF encoding space derived from the hardware decoder mask table
-(`cva6/core/cvxif_example/include/cvxif_instr_pkg.sv` at commit `6544a714c`),
-and produces the result in 19.0 milliseconds:
+A single command verifies the 33.5 million combination CVA6 CV-X-IF encoding
+space derived from the hardware decoder mask table
+(`cva6/core/cvxif_example/include/cvxif_instr_pkg.sv` at commit `6544a714c`)
+in about 0.2 seconds, by enumerating only the structurally valid
+combinations:
 
 ```bash
 ev verify --target tests/fixtures/cva6/xif_ref.xif.yaml
@@ -183,20 +184,21 @@ Valid counts below are the `evaluate_all` results on the committed fixtures
 
 | Metric | Value |
 |--------|-------|
-| Raw combinations evaluated (CVA6 full) | 33,554,432 |
+| Raw combinations verified (CVA6 full) | 33,554,432 (counted, not enumerated) |
 | Valid combinations identified (CVA6 full) | 196,608 |
-| Standard pipeline time (evaluate_all, release) | 10.4 s |
-| Structural pipeline time (struct_enum, release) | 19.0 ms |
-| Speedup (same-language baseline, this machine) | ~550x |
+| CLI verify time (CVA6 full, structural pipeline, release) | ~0.2 s |
+| Previous CLI time (expand_all, release) | 10.4 s |
+| struct_enum benchmark (same machine, release) | 19.0 ms |
 | Spike backend | C/Rust recheck: 196,608 / 196,608 agree |
 | Constraint types | 13 (range, even, eq, neq, lt, gt, le, ge, oneof, cross, bitmask, enable_mask, enable_set) |
-| Tests | 92 (73 lib + 14 CLI + 5 structural), all passing |
+| Tests | 96 (73 lib + 16 CLI + 7 structural), all passing, none ignored |
 | Simulation backends | Mock (default), Spike (`EV_SIM_BACKEND=spike`) |
 
-Benchmark methodology and reproducibility: both pipelines are Rust, the same
-release profile, measured by criterion; the speedup is the O(N) vs O(V)
-enumeration-strategy gain, not a language effect. Reproduce with
-`cargo bench -- cva6_full` on the committed fixtures.
+Benchmark methodology and reproducibility: the structural pipeline is the
+CLI default; the raw total is computed from the field domains without
+enumeration, and only structurally valid combinations are generated and
+evaluated. Reproduce with `cargo bench -- cva6_full` on the committed
+fixtures.
 
 ## Architecture
 
@@ -205,8 +207,8 @@ src/
   main.rs           CLI (clap: verify, simulate, synth)
   spec/             VerificationSpec, FieldSpec, ConstraintSpec, ProjectorSpec
   verify/
-    compose.rs      Domain expansion + structural enumeration
-    evaluate.rs     Constraint evaluation + projection + CoordSpace validation
+    compose.rs      Domain expansion + structural enumeration + raw total
+    evaluate.rs     Constraint evaluation + projection + structural pipeline
     registry.rs     ConstraintRegistry + ProjectorRegistry (pluggable builder)
   report/
     reporter.rs     ReporterCapable trait + TextReporter + CsvReporter

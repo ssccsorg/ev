@@ -3,7 +3,9 @@
 //! Uses pluggable checks resolved from registries.
 
 use crate::spec::{ConstraintSpec, VerificationSpec};
-use crate::verify::compose::{coords_to_coord_vec, Combination, StructuralEnum};
+use crate::verify::compose::{
+    coords_to_coord_vec, raw_total_combinations, Combination, StructuralEnum,
+};
 use crate::verify::registry::{Check, ConstraintRegistry, ProjectorRegistry};
 
 /// Result of evaluating a single constraint combination.
@@ -96,6 +98,30 @@ pub fn evaluate_all(
             }
         })
         .collect()
+}
+
+/// Evaluate only the structurally valid combinations, using `StructuralEnum`
+/// instead of the full cartesian expansion. Returns the raw total (the
+/// cartesian product size, never enumerated) and the evaluations of the
+/// structurally valid subset.
+///
+/// For specs with only runtime constraints the subset is the full space and
+/// the result matches `expand_all` + `evaluate_all` exactly. For specs with
+/// structural constraints (oneof, cross, bitmask) the invalid combinations
+/// are absent from the evaluation list; the returned total reconciles the
+/// reporter counts.
+pub fn evaluate_structural(
+    spec: &VerificationSpec,
+    constraint_registry: &ConstraintRegistry,
+    projector_registry: &ProjectorRegistry,
+) -> Result<(usize, Vec<Evaluation>), String> {
+    if spec.fields.is_empty() {
+        return Ok((0, Vec::new()));
+    }
+    let total = raw_total_combinations(spec)?;
+    let combinations: Vec<Combination> = StructuralEnum::new(spec).collect();
+    let evaluations = evaluate_all(spec, combinations, constraint_registry, projector_registry);
+    Ok((total, evaluations))
 }
 
 /// Validate all combinations into a DynCoordSpace.

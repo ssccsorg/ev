@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 
 use ev::spec::{ConstraintSpec, FieldSpec, ProjectorSpec, VerificationSpec};
 use ev::verify::compose::{expand_all, StructuralEnum};
-use ev::verify::evaluate::{evaluate_all, validate_into_space};
+use ev::verify::evaluate::{evaluate_all, evaluate_structural, validate_into_space};
 use ev::verify::registry::{Check, ConstraintRegistry, ProjectorRegistry};
 
 fn evaluate_valid_count(spec: &VerificationSpec) -> usize {
@@ -210,4 +210,46 @@ fn validate_into_space_matches_evaluate_cva6_fixtures() {
             "validate_into_space path count must match the distinct valid paths for {path}"
         );
     }
+}
+
+/// The structural CLI pipeline must report the same counts as the full
+/// expansion. For a runtime-only fixture (sample: eq constraint) the
+/// structural subset is the full space, so the evaluation lists are
+/// identical.
+#[test]
+fn evaluate_structural_matches_evaluate_all_for_runtime_only() {
+    let regs = (ConstraintRegistry::default(), ProjectorRegistry::default());
+    let spec = load_fixture("tests/fixtures/common/sample.xif.yaml");
+    let (total, evals) = evaluate_structural(&spec, &regs.0, &regs.1).expect("structural eval");
+    let full = evaluate_all(&spec, expand_all(&spec).expect("expand"), &regs.0, &regs.1);
+
+    assert_eq!(total, full.len(), "raw total must equal the expanded space");
+    assert_eq!(
+        evals.len(),
+        full.len(),
+        "no structural constraints: identical evaluation lists"
+    );
+    assert_eq!(
+        evals.iter().filter(|e| e.passed).count(),
+        12,
+        "sample fixture: 12 valid combinations"
+    );
+}
+
+/// For a structurally constrained fixture the raw total and the valid count
+/// must match the committed numbers, and the evaluation list holds only the
+/// structurally valid subset.
+#[test]
+fn evaluate_structural_reports_raw_total_with_valid_subset() {
+    let regs = (ConstraintRegistry::default(), ProjectorRegistry::default());
+    let spec = load_fixture("tests/fixtures/cva6/xif_ref_r4.xif.yaml");
+    let (total, evals) = evaluate_structural(&spec, &regs.0, &regs.1).expect("structural eval");
+
+    assert_eq!(total, 16_384, "raw R4 space");
+    assert_eq!(
+        evals.len(),
+        2_560,
+        "structural subset holds only valid encodings"
+    );
+    assert_eq!(evals.iter().filter(|e| e.passed).count(), 2_560);
 }
