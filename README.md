@@ -192,7 +192,7 @@ Valid counts below are the `evaluate_all` results on the committed fixtures
 | Speedup (same-language baseline, this machine) | ~550x |
 | Spike backend | C/Rust recheck: 196,608 / 196,608 agree |
 | Constraint types | 13 (range, even, eq, neq, lt, gt, le, ge, oneof, cross, bitmask, enable_mask, enable_set) |
-| Tests | 94 (73 lib + 16 CLI + 5 structural), all passing |
+| Tests | 96 (73 lib + 16 CLI + 2 tagma + 5 structural), all passing |
 | Simulation backends | Mock (default), Spike (`EV_SIM_BACKEND=spike`) |
 
 Benchmark methodology and reproducibility: both pipelines are Rust, the same

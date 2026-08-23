@@ -30,8 +30,8 @@ all valid. The demo top validity LED uses the same predicate as the decoder
 domain, and its registered outputs are the same decoder function, so this
 fixture documents the codomain rather than adding a new predicate.
 
-Both fixtures are wired into `run.sh` fixture assertions and
-`tests/cli_test.rs`.
+Both fixtures are wired into `run.sh` fixture assertions,
+`tests/cli_test.rs`, and `tests/tagma_fixture.rs`.
 
 ## Feasibility boundary
 
