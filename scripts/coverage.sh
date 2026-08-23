@@ -15,9 +15,11 @@ set -euo pipefail
 # them. The merge glob is target/llvm-cov-target/*.profraw, so external
 # runs must write there (LLVM_PROFILE_FILE below).
 #
-# The instrumented bin is removed before the suite so a stale build from
-# before a source edit cannot leak old signatures into the merge, which
-# produces mismatched-data warnings and distorted coverage.
+# The whole instrumented build directory is removed before the suite. A
+# stale incremental build after a source change leaks old binary signatures
+# into the merge, producing mismatched-data warnings and distorted coverage
+# (observed after the PR #49 conflict resolution, which dropped the report
+# to ~51% before a full clean restored it).
 #
 # Usage: bash scripts/coverage.sh
 #
@@ -38,8 +40,7 @@ PROFRAW_DIR=target/llvm-cov-target
 COVERAGE_MIN="${COVERAGE_MIN:-80}"
 
 echo "=== coverage: instrumented test suite ==="
-cargo llvm-cov clean --profraw-only
-rm -f "$EV_COV"
+rm -rf "$PROFRAW_DIR"
 cargo llvm-cov --release --no-report
 
 echo "=== coverage: external backend runs (instrumented binary) ==="
