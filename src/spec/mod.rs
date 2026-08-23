@@ -196,4 +196,23 @@ pub enum ProjectorSpec {
     /// Classify parity of a single axis.
     #[serde(rename = "parity")]
     Parity { field: String },
+    /// Tagma 3-axis decoder projection.
+    ///
+    /// Packs the Hangul decomposition of the field value into the
+    /// golden-anchor layout offset[28:15] i[14:10] m[9:5] f[4:0], with
+    /// offset = code - base, i = offset / 588, m = (offset % 588) / 28,
+    /// f = offset % 28. Returns None for code points outside the valid
+    /// Hangul syllable block, matching the tagma_decoder domain.
+    #[serde(rename = "tagma_decode")]
+    TagmaDecode {
+        /// Field holding the 16-bit Hangul code point.
+        field: String,
+        /// Base of the Hangul syllable block; defaults to 0xAC00.
+        #[serde(default = "default_tagma_base")]
+        base: i64,
+    },
+}
+
+fn default_tagma_base() -> i64 {
+    0xAC00
 }

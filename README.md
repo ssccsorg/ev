@@ -152,12 +152,22 @@ Conditional field assignment — set fields to specified values on trigger:
       - { field: "rs1", value: 5 }
 ```
 
+The tagma_decode projector packs the Tagma Hangul decomposition of a
+field into the golden-anchor layout offset[28:15] i[14:10] m[9:5] f[4:0]:
+
+```yaml
+projector:
+  type: tagma_decode
+  field: "code"
+  base: 0xAC00
+```
+
 ### Built-in types
 
 **Constraints**: `range`, `even`, `eq`, `neq`, `lt`, `gt`, `le`, `ge`,
 `oneof`, `cross`, `bitmask`, `enable_mask`, `enable_set`.
 
-**Projectors**: `sum`, `identity`, `parity`.
+**Projectors**: `sum`, `identity`, `parity`, `tagma_decode`.
 
 All types are extensible via `ConstraintRegistry` and `ProjectorRegistry`.
 
@@ -193,7 +203,8 @@ Valid counts below are the `evaluate_all` results on the committed fixtures
 | Speedup (same-language baseline, this machine) | ~550x |
 | Spike backend | C/Rust recheck: 196,608 / 196,608 agree |
 | Constraint types | 13 (range, even, eq, neq, lt, gt, le, ge, oneof, cross, bitmask, enable_mask, enable_set) |
-| Tests | 96 (73 lib + 16 CLI + 2 tagma + 5 structural), all passing |
+| Projector types | 4 (sum, identity, parity, tagma_decode) |
+| Tests | 100 (73 lib + 17 CLI + 5 tagma + 5 structural), all passing |
 | Coverage gate | 80% lines / 80% regions (llvm-cov, all modules incl. Spike/Yosys backends) |
 | Simulation backends | Mock (default), Spike (`EV_SIM_BACKEND=spike`) |
 

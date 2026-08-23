@@ -602,6 +602,14 @@ impl Default for ProjectorRegistry {
                 panic!("parity builder called on non-parity spec")
             }
         });
+        reg.register("tagma_decode", |spec, axis_of| {
+            if let ProjectorSpec::TagmaDecode { field, base } = spec {
+                let axis = axis_of[field];
+                Box::new(TagmaDecodeEval { axis, base: *base })
+            } else {
+                panic!("tagma_decode builder called on non-tagma_decode spec")
+            }
+        });
         reg
     }
 }
@@ -611,6 +619,7 @@ fn spec_projector_name(spec: &ProjectorSpec) -> &str {
         ProjectorSpec::Sum => "sum",
         ProjectorSpec::Identity { .. } => "identity",
         ProjectorSpec::Parity { .. } => "parity",
+        ProjectorSpec::TagmaDecode { .. } => "tagma_decode",
     }
 }
 
@@ -642,5 +651,39 @@ struct ParityEval {
 impl Evaluator for ParityEval {
     fn evaluate(&self, point: &Point) -> Option<i64> {
         point.coordinates().get_axis(self.axis).map(|v| v & 1)
+    }
+}
+
+/// Tagma decoder constants: the Hangul syllable block U+AC00..U+D7A3
+/// decomposes as offset = code - 0xAC00, i = offset / 588, m = (offset %
+/// 588) / 28, f = offset % 28 (588 = 21 * 28).
+const TAGMA_STRIDE_INIT: i64 = 588;
+const TAGMA_STRIDE_MED: i64 = 28;
+const TAGMA_N_INIT: i64 = 19;
+const TAGMA_N_MED: i64 = 21;
+const TAGMA_N_FIN: i64 = 28;
+
+/// Tagma 3-axis decoder evaluator: packs the decomposition into the
+/// golden-anchor layout offset[28:15] i[14:10] m[9:5] f[4:0].
+#[derive(Debug, Clone)]
+struct TagmaDecodeEval {
+    axis: usize,
+    base: i64,
+}
+
+impl Evaluator for TagmaDecodeEval {
+    fn evaluate(&self, point: &Point) -> Option<i64> {
+        let code = point.coordinates().get_axis(self.axis)?;
+        let offset = code - self.base;
+        if offset < 0 {
+            return None;
+        }
+        let i = offset / TAGMA_STRIDE_INIT;
+        let m = (offset % TAGMA_STRIDE_INIT) / TAGMA_STRIDE_MED;
+        let f = offset % TAGMA_STRIDE_MED;
+        if i >= TAGMA_N_INIT || m >= TAGMA_N_MED || f >= TAGMA_N_FIN {
+            return None;
+        }
+        Some((offset << 15) | (i << 10) | (m << 5) | f)
     }
 }

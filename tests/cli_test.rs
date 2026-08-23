@@ -260,6 +260,23 @@ fn synth_json_with_mock_backend() {
 }
 
 #[test]
+fn synth_tagma_decoder_with_mock_backend() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("synth")
+        .arg("--target")
+        .arg("tests/fixtures/tagma/tagma_decoder.xif.yaml")
+        .env("EV_SYNTH_BACKEND", "mock")
+        .output()
+        .expect("failed to run ev synth on tagma fixture");
+    assert!(
+        output.status.success(),
+        "ev synth should exit 0 on the tagma fixture"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("[ok]"), "synthesis should show ok status");
+}
+
+#[test]
 #[ignore = "33M combos via CLI (old pipeline). struct_enum does it in ~200ms; pending CLI integration."]
 fn verify_cva6_xif_ref_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))

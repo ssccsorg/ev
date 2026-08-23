@@ -16,10 +16,11 @@
 # verification devlog: the last valid syllable is U+D7A3, not U+D7AF
 # (0xAC00 + 11171 = 0xD7A3).
 #
-# The axis decomposition itself requires integer division and modulo by
-# constants, which the current constraint set cannot express. The plan
-# devlog 2026-08-23-tagma-hw-fixtures.md records the extension proposal
-# under ev issue #46.
+# The tagma_decode projector (issue #46, milestone 2) packs the axis
+# decomposition of every passing code point into the golden-anchor layout
+# offset[28:15] i[14:10] m[9:5] f[4:0], so the projection of code k equals
+# line k of syntagma/hw/rtl/golden_anchors.hex. Pass/fail itself remains a
+# domain check: the decomposition is a projection, not a constraint.
 #
 # Verification space: 65,536 raw combinations
 # Valid: 11,172 (the Hangul syllable block), Failed: 54,364
@@ -36,5 +37,6 @@ constraints:
     field: "code"
     value: 0xD7A3
 projector:
-  type: identity
+  type: tagma_decode
   field: "code"
+  base: 0xAC00
