@@ -25,15 +25,20 @@
 //! |------------|-------------------------------------|-----------:|-------------:|--------:|---------:|------------:|--------:|
 //! | Small      | synthetic, 3 fields x 3            | 27         | 27           | 100%    | 4.87 µs  | 2.86 µs      | 1.7x    |
 //! | Medium     | synthetic, ibex-like cross         | 32,768     | 20,480       | 62.5%   | 5.99 ms  | 3.02 ms      | 2.0x    |
-//! | Tagma      | tests/fixtures/tagma/tagma_decoder | 65,536     | 11,172       | 17.0%   | 9.74 ms  | 5.94 ms      | 1.6x    |
+//! | Tagma      | tests/fixtures/tagma/tagma_decoder | 65,536     | 11,172       | 17.0%   | 9.74 ms  | 5.94 ms      | N/A (excluded) |
 //! | Ibex R-type| tests/fixtures/ibex/rv32imcb...    | 524,288    | 92,160       | 17.6%   | 297 ms   | 9.89 ms      | 30x     |
 //! | CVA6 R4    | tests/fixtures/cva6/xif_ref_r4...   | 16,384     | 2,560        | 15.6%   | 4.13 ms  | 274 µs       | 15x     |
 //! | CVA6 full  | tests/fixtures/cva6/xif_ref...      | 33,554,432 | 196,608      | 0.6%    | 13.1 s   | 18.8 ms      | ~700x   |
 //!
-//! The Tagma decoder's ge/le constraints are runtime-only, so its structural
-//! density is 100% and the 1.6x gain is the enumeration overhead difference,
-//! not a sparse-space effect; its table density (17%) is the valid/raw
-//! ratio, not the structural filter ratio.
+//! The Tagma row is excluded from the speedup comparison. The fixture is
+//! the Tagma hardware contract itself (the input domain of the syntagma
+//! 3-axis decoder), and the structural enumeration is the Tagma engine, so
+//! comparing the two on this fixture is not a demonstration of the
+//! enumeration-strategy gain. Its ge/le constraints are runtime-only, its
+//! structural density is 100%, and the evaluate vs struct_enum ratio is the
+//! enumeration overhead floor, not a sparse-space effect; the table density
+//! (17%) is the valid/raw ratio, not a structural filter ratio. The rows
+//! remain as reference measurements only.
 //!
 //! The CLI verify path (`evaluate_structural`: raw total + structural
 //! subset + evaluate_all on the valid rows) measures 36.3 ms on the CVA6
@@ -47,8 +52,7 @@
 //! The speedup follows approximately `k / D`, where D = V/N is the valid
 //! density and k is a fixture-dependent constant (about 1.3-5.5 in the
 //! measured set). Sparse spaces gain the most; dense spaces gain little.
-//! The Tagma row is the exception: its structural density is 100%, so the
-//! model does not apply to it.
+//! The Tagma row is excluded from this model for the reason above.
 //!
 //! Correctness guarantee
 //! ---------------------
@@ -666,6 +670,10 @@ fn bench_structural_enum_validity_cva6_full(c: &mut Criterion) {
 // ===========================================================================
 // Tagma decoder fixture (65,536 raw / 11,172 valid, 17.0% density)
 // ===========================================================================
+//
+// Reference measurements only. The fixture is the Tagma hardware contract
+// and the structural enumeration is the Tagma engine, so these rows are
+// excluded from the speedup comparison (see the header table).
 
 /// struct_enum on the Tagma decoder fixture: the 11,172 valid syllables of
 /// the 65,536 code point space, ~5.9 ms.
