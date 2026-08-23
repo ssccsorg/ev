@@ -38,6 +38,22 @@ pub trait ReporterCapable: Send + Sync {
 }
 
 // ============================================================================
+// Count helpers
+// ============================================================================
+
+/// Split an evaluation list into passed/failed counts against the raw total.
+/// The invariant passed <= total is enforced loudly: a silent usize wrap in
+/// release would corrupt verification counts.
+fn split_counts(total: usize, evaluations: &[Evaluation]) -> (usize, usize) {
+    let passed = evaluations.iter().filter(|e| e.passed).count();
+    assert!(
+        passed <= total,
+        "reporter invariant violated: passed ({passed}) exceeds raw total ({total})"
+    );
+    (passed, total - passed)
+}
+
+// ============================================================================
 // CSV Reporter
 // ============================================================================
 
@@ -52,8 +68,7 @@ impl ReporterCapable for CsvReporter {
         total: usize,
         evaluations: &[Evaluation],
     ) -> bool {
-        let passed_count = evaluations.iter().filter(|e| e.passed).count();
-        let failed_count = total - passed_count;
+        let (passed_count, failed_count) = split_counts(total, evaluations);
 
         // Print metadata as comments
         println!("# target: {}", target);
@@ -110,8 +125,7 @@ impl ReporterCapable for TraceReporter {
         total: usize,
         evaluations: &[Evaluation],
     ) -> bool {
-        let passed_count = evaluations.iter().filter(|e| e.passed).count();
-        let failed_count = total - passed_count;
+        let (passed_count, failed_count) = split_counts(total, evaluations);
         let started_at = chrono::Utc::now();
 
         println!(
@@ -192,8 +206,7 @@ impl ReporterCapable for TextReporter {
         total: usize,
         evaluations: &[Evaluation],
     ) -> bool {
-        let passed_count = evaluations.iter().filter(|e| e.passed).count();
-        let failed_count = total - passed_count;
+        let (passed_count, failed_count) = split_counts(total, evaluations);
 
         println!("target: {}", target);
         println!("total:  {}", total);
@@ -202,21 +215,26 @@ impl ReporterCapable for TextReporter {
         println!();
 
         if failed_count > 0 {
-            println!("Failures:");
-            // Cap the detail listing: the full list can be gigabytes for
-            // sparse spaces (e.g. 432K invalid rv32imcb encodings each
-            // carrying the cross-mapping description). The summary lines
-            // above remain authoritative; the cap keeps the log usable.
+            // The summary lines above are authoritative; the detail listing
+            // is capped (the full list can be gigabytes for sparse spaces).
             const MAX_PRINTED_FAILURES: usize = 25;
-            for (i, e) in evaluations.iter().filter(|e| !e.passed).enumerate() {
-                if i == MAX_PRINTED_FAILURES {
-                    println!(
-                        "  ... and {} more failures",
-                        failed_count - MAX_PRINTED_FAILURES
-                    );
-                    break;
+            let failed_rows: Vec<&Evaluation> =
+                evaluations.iter().filter(|e| !e.passed).collect();
+            if !failed_rows.is_empty() {
+                println!("Failures:");
+                for (i, e) in failed_rows.iter().enumerate() {
+                    if i == MAX_PRINTED_FAILURES {
+                        // failed_count includes structurally absent combinations
+                        // in the structural pipeline; the remaining present
+                        // rows are the accurate unprinted detail.
+                        println!(
+                            "  ... and {} more failures",
+                            failed_rows.len() - MAX_PRINTED_FAILURES
+                        );
+                        break;
+                    }
+                    println!("  [FAIL] {:?} — {}", e.combination.values, e.reason);
                 }
-                println!("  [FAIL] {:?} — {}", e.combination.values, e.reason);
             }
         }
 
@@ -275,8 +293,7 @@ impl ReporterCapable for JsonReporter {
         total: usize,
         evaluations: &[Evaluation],
     ) -> bool {
-        let passed_count = evaluations.iter().filter(|e| e.passed).count();
-        let failed_count = total - passed_count;
+        let (passed_count, failed_count) = split_counts(total, evaluations);
         let origin = format!("ev/{}", env!("CARGO_PKG_VERSION"));
         let timestamp = chrono::Utc::now().to_rfc3339();
         let spec_hash = spec_hash.to_string();
