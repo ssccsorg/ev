@@ -153,6 +153,47 @@ fn verify_cva6_xif_mac_fixture() {
 }
 
 #[test]
+fn verify_tagma_decoder_domain_fixture() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("verify")
+        .arg("--target")
+        .arg("tests/fixtures/tagma/tagma_decoder.xif.yaml")
+        .output()
+        .expect("failed to run ev verify on tagma_decoder fixture");
+    // The decoder domain has 54,364 invalid code points, so the exit code is non-zero.
+    assert!(
+        !output.status.success(),
+        "tagma_decoder fixture should exit non-zero"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("passed: 11172") && stdout.contains("failed: 54364"),
+        "should report the 11,172 valid syllables: {}",
+        stdout
+    );
+}
+
+#[test]
+fn verify_tagma_demo_top_fixture() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("verify")
+        .arg("--target")
+        .arg("tests/fixtures/tagma/tagma_demo_top.xif.yaml")
+        .output()
+        .expect("failed to run ev verify on tagma_demo_top fixture");
+    assert!(
+        output.status.success(),
+        "tagma_demo_top fixture should pass"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("All combinations passed"),
+        "demo top output space should pass entirely: {}",
+        stdout
+    );
+}
+
+#[test]
 #[ignore = "medium: 16K combos via CLI. Use release build or struct_enum for speed."]
 fn verify_cva6_xif_ref_r4_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))

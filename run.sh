@@ -182,6 +182,8 @@ verify_large_fixtures() {
     _timed "ibex custom alu fixture (524k combos)" $EV verify --target "tests/fixtures/ibex/alu_ext.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
     _verify_check "ibex rv32imcb encoding"      92160  432128 "tests/fixtures/ibex/rv32imcb.xif.yaml"
     _verify_check "ibex rv32imcb imm ops"       55616   9920  "tests/fixtures/ibex/rv32imcb_imm.xif.yaml"
+    _verify_check "tagma decoder domain"        11172   54364 "tests/fixtures/tagma/tagma_decoder.xif.yaml"
+    _verify_check "tagma demo top outputs"      11172   0     "tests/fixtures/tagma/tagma_demo_top.xif.yaml"
     echo "=== structural enumeration bench ==="
     cargo bench --bench bench -- "struct_enum/ibex|struct_enum/cva6" 2>&1 | grep -E 'struct_enum|time:' | head -6
 }

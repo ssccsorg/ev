@@ -176,6 +176,8 @@ Valid counts below are the `evaluate_all` results on the committed fixtures
 | `ibex/csr_access.xif.yaml` | Ibex-like CSR encoding | 49,152 | 49,152 |
 | `ibex/rv32imcb.xif.yaml` | Ibex RV32IMCB (ibex_decoder.sv) | 524,288 | 92,160 |
 | `ibex/rv32imcb_imm.xif.yaml` | Ibex RV32IMCB I-type encoding | 65,536 | 55,616 |
+| `tagma/tagma_decoder.xif.yaml` | Syntagma Tagma decoder valid input domain | 65,536 | 11,172 |
+| `tagma/tagma_demo_top.xif.yaml` | Syntagma Tagma FPGA demo output space | 11,172 | 11,172 |
 | `common/all_pass.xif.yaml` | Simple ALU (no constraints) | 1,024 | 1,024 |
 | `common/sample.xif.yaml` | Mixed pass/fail demo | 96 | 12 |
 
@@ -190,7 +192,7 @@ Valid counts below are the `evaluate_all` results on the committed fixtures
 | Speedup (same-language baseline, this machine) | ~550x |
 | Spike backend | C/Rust recheck: 196,608 / 196,608 agree |
 | Constraint types | 13 (range, even, eq, neq, lt, gt, le, ge, oneof, cross, bitmask, enable_mask, enable_set) |
-| Tests | 92 (73 lib + 14 CLI + 5 structural), all passing |
+| Tests | 94 (73 lib + 16 CLI + 5 structural), all passing |
 | Simulation backends | Mock (default), Spike (`EV_SIM_BACKEND=spike`) |
 
 Benchmark methodology and reproducibility: both pipelines are Rust, the same
