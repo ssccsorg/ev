@@ -20,10 +20,18 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+if ! command -v cargo-llvm-cov >/dev/null 2>&1; then
+    echo "ERROR: cargo-llvm-cov not found. Install it with:"
+    echo "  rustup component add llvm-tools-preview"
+    echo "  cargo install cargo-llvm-cov --locked"
+    exit 1
+fi
+
 EV_IMAGE="${EV_IMAGE:-ghcr.io/ssccsorg/ev:latest}"
 EV_COV=./target/llvm-cov-target/release/ev
 ALL_PASS=tests/fixtures/common/all_pass.xif.yaml
 PROFRAW_DIR=target/llvm-cov-target
+COVERAGE_MIN="${COVERAGE_MIN:-80}"
 
 echo "=== coverage: instrumented test suite ==="
 rm -f "$PROFRAW_DIR"/*.profraw
@@ -63,5 +71,5 @@ else
 fi
 
 echo "=== coverage: merged report and thresholds ==="
-cargo llvm-cov report --release --fail-under-lines 80 --fail-under-regions 80
+cargo llvm-cov report --release --fail-under-lines "$COVERAGE_MIN" --fail-under-regions "$COVERAGE_MIN"
 echo "fixture coverage: tagma decoder 11,172/11,172, tagma demo top 11,172/11,172, cva6 ref 196,608, ibex rv32imcb 92,160"

@@ -246,6 +246,7 @@ Backends are pluggable via environment variables:
 ## Prerequisites
 
 - Rust 1.85+ ([rustup](https://rustup.rs/))
+- cargo-llvm-cov (optional, for `--coverage`; needs the `llvm-tools-preview` rustup component)
 - Python 3 (for channel demo)
 - Yosys (optional, for synthesis)
 - Spike, riscv64-unknown-elf-gcc, riscv-pk (optional, for simulation)
