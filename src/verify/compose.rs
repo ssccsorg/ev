@@ -52,6 +52,35 @@ pub struct Combination {
 /// while preventing OOM from accidentally large specifications.
 pub const MAX_COMBINATIONS: usize = 1_000_000_000; // 1B — CoordSpace removes Vec allocation
 
+/// Total size of the raw cartesian product of all field domains, computed
+/// without enumerating the space. Returns an error when the product
+/// overflows `usize` or exceeds `MAX_COMBINATIONS`.
+pub fn raw_total_combinations(spec: &VerificationSpec) -> Result<usize, String> {
+    if spec.fields.is_empty() {
+        // Matches expand_all, which returns an empty space for empty fields.
+        return Ok(0);
+    }
+    let mut total: usize = 1;
+    for name in spec.fields.keys() {
+        let def = spec.fields.get(name).expect("field must exist");
+        let len = def.expand().len();
+        total = total.checked_mul(len).ok_or_else(|| {
+            format!(
+                "domain expansion overflow: total combinations exceed usize (field domain size {})",
+                len
+            )
+        })?;
+        if total > MAX_COMBINATIONS {
+            return Err(format!(
+                "domain expansion too large: {} combinations exceed limit of {}. \
+                 Reduce field domain sizes or increase MAX_COMBINATIONS.",
+                total, MAX_COMBINATIONS
+            ));
+        }
+    }
+    Ok(total)
+}
+
 /// Expand all field domains into the full cartesian product.
 ///
 /// Returns an error if the total number of combinations exceeds `MAX_COMBINATIONS` or
@@ -71,24 +100,7 @@ pub fn expand_all(spec: &VerificationSpec) -> Result<Vec<Combination>, String> {
         return Ok(Vec::new());
     }
 
-    // Check for overflow and upper bound before allocating.
-    let mut total: usize = 1;
-    for d in &domains {
-        let len = d.len();
-        total = total.checked_mul(len).ok_or_else(|| {
-            format!(
-                "domain expansion overflow: total combinations exceed usize (field domain size {})",
-                len
-            )
-        })?;
-        if total > MAX_COMBINATIONS {
-            return Err(format!(
-                "domain expansion too large: {} combinations exceed limit of {}. \
-                 Reduce field domain sizes or increase MAX_COMBINATIONS.",
-                total, MAX_COMBINATIONS
-            ));
-        }
-    }
+    let total = raw_total_combinations(spec)?;
 
     let mut combinations = Vec::with_capacity(total);
 

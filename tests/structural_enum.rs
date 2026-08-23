@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 
 use ev::spec::{ConstraintSpec, FieldSpec, ProjectorSpec, VerificationSpec};
 use ev::verify::compose::{expand_all, StructuralEnum};
-use ev::verify::evaluate::{evaluate_all, validate_into_space};
+use ev::verify::evaluate::{evaluate_all, evaluate_structural, validate_into_space};
 use ev::verify::registry::{Check, ConstraintRegistry, ProjectorRegistry};
 
 fn evaluate_valid_count(spec: &VerificationSpec) -> usize {
@@ -210,4 +210,99 @@ fn validate_into_space_matches_evaluate_cva6_fixtures() {
             "validate_into_space path count must match the distinct valid paths for {path}"
         );
     }
+}
+
+/// The structural CLI pipeline must report the same counts as the full
+/// expansion. For a runtime-only fixture (sample: eq constraint) the
+/// structural subset is the full space, so the evaluation lists are
+/// identical.
+#[test]
+fn evaluate_structural_matches_evaluate_all_for_runtime_only() {
+    let regs = (ConstraintRegistry::default(), ProjectorRegistry::default());
+    let spec = load_fixture("tests/fixtures/common/sample.xif.yaml");
+    let (total, evals) = evaluate_structural(&spec, &regs.0, &regs.1).expect("structural eval");
+    let full = evaluate_all(&spec, expand_all(&spec).expect("expand"), &regs.0, &regs.1);
+
+    assert_eq!(total, full.len(), "raw total must equal the expanded space");
+    assert_eq!(
+        evals.len(),
+        full.len(),
+        "no structural constraints: identical evaluation lists"
+    );
+    assert_eq!(
+        evals.iter().filter(|e| e.passed).count(),
+        12,
+        "sample fixture: 12 valid combinations"
+    );
+}
+
+/// For a structurally constrained fixture the raw total and the valid count
+/// must match the committed numbers, and the evaluation list holds only the
+/// structurally valid subset.
+#[test]
+fn evaluate_structural_reports_raw_total_with_valid_subset() {
+    let regs = (ConstraintRegistry::default(), ProjectorRegistry::default());
+    let spec = load_fixture("tests/fixtures/cva6/xif_ref_r4.xif.yaml");
+    let (total, evals) = evaluate_structural(&spec, &regs.0, &regs.1).expect("structural eval");
+
+    assert_eq!(total, 16_384, "raw R4 space");
+    assert_eq!(
+        evals.len(),
+        2_560,
+        "structural subset holds only valid encodings"
+    );
+    assert_eq!(evals.iter().filter(|e| e.passed).count(), 2_560);
+}
+
+/// Differential check for a fixture with enable_mask (oneof + cross +
+/// enable_mask). The structural pipeline must emit exactly the same passing
+/// set as the naive expansion, and the raw total must match. This pins the
+/// enable_mask parity that the cva6 fixtures do not cover: the mask must be
+/// applied identically by StructuralEnum and expand_all.
+#[test]
+fn evaluate_structural_matches_evaluate_all_with_enable_mask() {
+    let regs = (ConstraintRegistry::default(), ProjectorRegistry::default());
+    let spec = load_fixture("tests/fixtures/ibex/alu_ext.xif.yaml");
+    let (total, evals) = evaluate_structural(&spec, &regs.0, &regs.1).expect("structural eval");
+    let full = evaluate_all(&spec, expand_all(&spec).expect("expand"), &regs.0, &regs.1);
+
+    assert_eq!(total, full.len(), "raw total must equal the expanded space");
+    assert_eq!(total, 524_288, "alu_ext raw space");
+
+    // With multiplicity the valid count matches the committed number on
+    // both pipelines.
+    assert_eq!(
+        evals.iter().filter(|e| e.passed).count(),
+        4_096,
+        "structural valid count"
+    );
+    assert_eq!(
+        full.iter().filter(|e| e.passed).count(),
+        4_096,
+        "naive valid count"
+    );
+
+    // enable_mask collapses the funct7=0 combos (rd forced to 0), so the
+    // distinct passing set is smaller than the counted one. The structural
+    // pipeline must emit exactly the same distinct set as the naive path;
+    // this is the enable_mask parity invariant.
+    let passed_structural: std::collections::HashSet<Vec<i64>> = evals
+        .iter()
+        .filter(|e| e.passed)
+        .map(|e| e.combination.values.clone())
+        .collect();
+    let passed_full: std::collections::HashSet<Vec<i64>> = full
+        .iter()
+        .filter(|e| e.passed)
+        .map(|e| e.combination.values.clone())
+        .collect();
+
+    assert_eq!(passed_structural.len(), 3_648, "distinct passing vectors");
+    assert_eq!(
+        passed_structural, passed_full,
+        "the structural pipeline must emit exactly the naive passing set"
+    );
+
+    let failed = total - 4_096;
+    assert_eq!(failed, 520_192, "alu_ext failed count");
 }

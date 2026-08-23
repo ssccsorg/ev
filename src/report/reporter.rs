@@ -22,12 +22,17 @@ pub trait ReporterCapable: Send + Sync {
     /// * `spec_hash` — content-addressable hash of the spec (empty string if
     ///   not available / not needed, e.g. text reporter).
     /// * `field_order` — ordered field names matching evaluation values.
+    /// * `total` — size of the raw combination space. With the structural
+    ///   pipeline the evaluation list holds only the structurally valid
+    ///   subset, so the reporters derive failed = total - passed instead of
+    ///   evaluations.len() - passed.
     /// * `evaluations` — individual evaluation results.
     fn report(
         &self,
         target: &str,
         spec_hash: &str,
         field_order: &[String],
+        total: usize,
         evaluations: &[Evaluation],
     ) -> bool;
 }
@@ -44,14 +49,15 @@ impl ReporterCapable for CsvReporter {
         target: &str,
         _spec_hash: &str,
         field_order: &[String],
+        total: usize,
         evaluations: &[Evaluation],
     ) -> bool {
         let passed_count = evaluations.iter().filter(|e| e.passed).count();
-        let failed_count = evaluations.len() - passed_count;
+        let failed_count = total - passed_count;
 
         // Print metadata as comments
         println!("# target: {}", target);
-        println!("# total:  {}", evaluations.len());
+        println!("# total:  {}", total);
         println!("# passed: {}", passed_count);
         println!("# failed: {}", failed_count);
         println!();
@@ -101,10 +107,11 @@ impl ReporterCapable for TraceReporter {
         target: &str,
         _spec_hash: &str,
         field_order: &[String],
+        total: usize,
         evaluations: &[Evaluation],
     ) -> bool {
         let passed_count = evaluations.iter().filter(|e| e.passed).count();
-        let failed_count = evaluations.len() - passed_count;
+        let failed_count = total - passed_count;
         let started_at = chrono::Utc::now();
 
         println!(
@@ -115,7 +122,7 @@ impl ReporterCapable for TraceReporter {
         println!(
             "[{}] INFO   total_combinations={}",
             started_at.to_rfc3339(),
-            evaluations.len()
+            total
         );
         println!();
 
@@ -182,13 +189,14 @@ impl ReporterCapable for TextReporter {
         target: &str,
         _spec_hash: &str,
         _field_order: &[String],
+        total: usize,
         evaluations: &[Evaluation],
     ) -> bool {
         let passed_count = evaluations.iter().filter(|e| e.passed).count();
-        let failed_count = evaluations.len() - passed_count;
+        let failed_count = total - passed_count;
 
         println!("target: {}", target);
-        println!("total:  {}", evaluations.len());
+        println!("total:  {}", total);
         println!("passed: {}", passed_count);
         println!("failed: {}", failed_count);
         println!();
@@ -264,10 +272,11 @@ impl ReporterCapable for JsonReporter {
         target: &str,
         spec_hash: &str,
         field_order: &[String],
+        total: usize,
         evaluations: &[Evaluation],
     ) -> bool {
         let passed_count = evaluations.iter().filter(|e| e.passed).count();
-        let failed_count = evaluations.len() - passed_count;
+        let failed_count = total - passed_count;
         let origin = format!("ev/{}", env!("CARGO_PKG_VERSION"));
         let timestamp = chrono::Utc::now().to_rfc3339();
         let spec_hash = spec_hash.to_string();
@@ -277,7 +286,7 @@ impl ReporterCapable for JsonReporter {
             target: target.to_string(),
             timestamp,
             spec_hash: spec_hash.clone(),
-            total: evaluations.len(),
+            total,
             passed: passed_count,
             failed: failed_count,
             field_order: field_order.to_vec(),

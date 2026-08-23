@@ -6,7 +6,7 @@ use ev::spec::VerificationSpec;
 use ev::synth::backends::yosys::YosysBackend;
 use ev::synth::sim::{MockSimBackend, RunSimulation, SimulationResult};
 use ev::synth::{GenerateRtl, MockSynthesisBackend, RunSynthesis, SvGenerator, SynthesisMetrics};
-use ev::verify::{evaluate_all, expand_all};
+use ev::verify::{evaluate_all, evaluate_structural, expand_all};
 use ev::verify::{ConstraintRegistry, ProjectorRegistry};
 use std::path::PathBuf;
 
@@ -154,14 +154,12 @@ fn main() -> anyhow::Result<()> {
             let constraint_registry = ConstraintRegistry::default();
             let projector_registry = ProjectorRegistry::default();
 
-            let combinations =
-                expand_all(&spec).map_err(|e| anyhow::anyhow!("domain expansion failed: {}", e))?;
-            let evaluations = evaluate_all(
-                &spec,
-                combinations,
-                &constraint_registry,
-                &projector_registry,
-            );
+            // Structural pipeline: enumerate only the structurally valid
+            // combinations (O(V) instead of O(N)); the raw total is computed
+            // without expanding the space and reconciles the counts.
+            let (total, evaluations) =
+                evaluate_structural(&spec, &constraint_registry, &projector_registry)
+                    .map_err(|e| anyhow::anyhow!("structural evaluation failed: {}", e))?;
 
             if json {
                 eprintln!("warning: --json is deprecated, use --format json instead");
@@ -180,7 +178,8 @@ fn main() -> anyhow::Result<()> {
 
             let field_order: Vec<String> = spec.fields.keys().cloned().collect();
             let spec_hash = hash_spec(&spec);
-            let all_passed = reporter.report(&spec.target, &spec_hash, &field_order, &evaluations);
+            let all_passed =
+                reporter.report(&spec.target, &spec_hash, &field_order, total, &evaluations);
 
             if !all_passed {
                 std::process::exit(1);
@@ -218,11 +217,23 @@ fn main() -> anyhow::Result<()> {
                 }
                 OutputFormat::Csv => {
                     let reporter = CsvReporter;
-                    reporter.report(&result.tool, "", &field_order, &result.evaluations);
+                    reporter.report(
+                        &result.tool,
+                        "",
+                        &field_order,
+                        result.evaluations.len(),
+                        &result.evaluations,
+                    );
                 }
                 OutputFormat::Trace => {
                     let reporter = TraceReporter;
-                    reporter.report(&result.tool, "", &field_order, &result.evaluations);
+                    reporter.report(
+                        &result.tool,
+                        "",
+                        &field_order,
+                        result.evaluations.len(),
+                        &result.evaluations,
+                    );
                 }
                 OutputFormat::Text => {
                     println!("target: simulation ({} backend)", result.tool);
