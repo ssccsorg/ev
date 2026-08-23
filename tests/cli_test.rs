@@ -194,7 +194,6 @@ fn verify_tagma_demo_top_fixture() {
 }
 
 #[test]
-#[ignore = "medium: 16K combos via CLI. Use release build or struct_enum for speed."]
 fn verify_cva6_xif_ref_r4_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("verify")

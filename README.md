@@ -204,7 +204,7 @@ Valid counts below are the `evaluate_all` results on the committed fixtures
 | Spike backend | C/Rust recheck: 196,608 / 196,608 agree |
 | Constraint types | 13 (range, even, eq, neq, lt, gt, le, ge, oneof, cross, bitmask, enable_mask, enable_set) |
 | Projector types | 4 (sum, identity, parity, tagma_decode) |
-| Tests | 100 (73 lib + 17 CLI + 5 tagma + 5 structural), all passing |
+| Tests | 101 (73 lib + 18 CLI + 5 tagma + 5 structural), all passing |
 | Coverage gate | 80% lines / 80% regions (llvm-cov, all modules incl. Spike/Yosys backends) |
 | Simulation backends | Mock (default), Spike (`EV_SIM_BACKEND=spike`) |
 
