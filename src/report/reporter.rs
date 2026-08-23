@@ -224,9 +224,12 @@ impl ReporterCapable for TextReporter {
                 println!("Failures:");
                 for (i, e) in failed_rows.iter().enumerate() {
                     if i == MAX_PRINTED_FAILURES {
+                        // failed_count includes structurally absent combinations
+                        // in the structural pipeline; the remaining present
+                        // rows are the accurate unprinted detail.
                         println!(
                             "  ... and {} more failures",
-                            failed_count - MAX_PRINTED_FAILURES
+                            failed_rows.len() - MAX_PRINTED_FAILURES
                         );
                         break;
                     }
