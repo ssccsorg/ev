@@ -41,10 +41,18 @@ full space, so the evaluation lists are identical to the old pipeline.
 
 The two ignored CLI tests now run in the default suite and assert the
 summary counts from text output (16,384 / 2,560 / 13,824 for the R4 fixture
-and 33,554,432 / 196,608 / 33,357,824 for the full fixture). Two lib-level
+and 33,554,432 / 196,608 / 33,357,824 for the full fixture). Three lib-level
 tests in `tests/structural_enum.rs` pin `evaluate_structural` against
-`expand_all` + `evaluate_all` for a runtime-only fixture and against the
-committed raw total for a structurally constrained fixture.
+`expand_all` + `evaluate_all`: a runtime-only fixture, a structurally
+constrained fixture, and an enable_mask fixture (alu_ext). The enable_mask
+differential test compares the distinct passing sets; it also documents
+that the mask collapses the funct7=0 combos (rd forced to 0), so the
+counted valid total (4,096) exceeds the distinct vector count (3,648).
+
+`evaluate_structural` carries an invariant guard: it returns an error when
+the emitted combination count exceeds the raw total, so a misclassified
+structural filter or an over-emitting generator fails loudly instead of
+silently corrupting the failed = total - passed counts.
 
 ## run.sh
 

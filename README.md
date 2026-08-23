@@ -191,7 +191,7 @@ Valid counts below are the `evaluate_all` results on the committed fixtures
 | struct_enum benchmark (same machine, release) | 19.0 ms |
 | Spike backend | C/Rust recheck: 196,608 / 196,608 agree |
 | Constraint types | 13 (range, even, eq, neq, lt, gt, le, ge, oneof, cross, bitmask, enable_mask, enable_set) |
-| Tests | 96 (73 lib + 16 CLI + 7 structural), all passing, none ignored |
+| Tests | 97 (73 lib + 16 CLI + 8 structural), all passing, none ignored |
 | Simulation backends | Mock (default), Spike (`EV_SIM_BACKEND=spike`) |
 
 Benchmark methodology and reproducibility: the structural pipeline is the

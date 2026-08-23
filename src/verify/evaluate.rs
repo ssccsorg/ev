@@ -121,6 +121,19 @@ pub fn evaluate_structural(
     let total = raw_total_combinations(spec)?;
     let combinations: Vec<Combination> = StructuralEnum::new(spec).collect();
     let evaluations = evaluate_all(spec, combinations, constraint_registry, projector_registry);
+
+    // Invariant guard: the structural generator must never emit more
+    // combinations than the raw cartesian product. A violation means a
+    // structural filter is misclassified or the generator over-emits, and
+    // would silently corrupt the failed = total - passed counts.
+    if evaluations.len() > total {
+        return Err(format!(
+            "structural invariant violated: {} emitted combinations exceed raw total {}",
+            evaluations.len(),
+            total
+        ));
+    }
+
     Ok((total, evaluations))
 }
 
