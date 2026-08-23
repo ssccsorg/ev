@@ -26,8 +26,8 @@
 //! | Small      | synthetic, 3 fields x 3            | 27         | 27           | 100%    | 4.87 µs  | 2.86 µs      | 1.7x    |
 //! | Medium     | synthetic, ibex-like cross         | 32,768     | 20,480       | 62.5%   | 5.99 ms  | 3.02 ms      | 2.0x    |
 //! | Tagma      | tests/fixtures/tagma/tagma_decoder | 65,536     | 11,172       | 17.0%   | 9.74 ms  | 5.94 ms      | N/A (excluded) |
-//! | Ibex R-type| tests/fixtures/ibex/rv32imcb...    | 524,288    | 92,160       | 17.6%   | 297 ms   | 9.89 ms      | 30x     |
-//! | CVA6 R4    | tests/fixtures/cva6/xif_ref_r4...   | 16,384     | 2,560        | 15.6%   | 4.13 ms  | 274 µs       | 15x     |
+//! | Ibex R-type| tests/fixtures/ibex/rv32imcb...    | 524,288    | 92,160       | 17.6%   | 291 ms   | 9.10 ms      | 32x     |
+//! | CVA6 R4    | tests/fixtures/cva6/xif_ref_r4...   | 16,384     | 2,560        | 15.6%   | 3.14 ms  | 250 µs       | 13x     |
 //! | CVA6 full  | tests/fixtures/cva6/xif_ref...      | 33,554,432 | 196,608      | 0.6%    | 13.1 s   | 18.8 ms      | ~700x   |
 //!
 //! The Tagma row is excluded from the speedup comparison. The fixture is
@@ -434,13 +434,30 @@ fn bench_evaluate_ibex(c: &mut Criterion) {
     });
 }
 
-/// struct_enum on the Ibex fixture: 92,160 valid combos (30x).
+/// struct_enum on the Ibex fixture: 92,160 valid combos (32x).
 fn bench_structural_enum_ibex(c: &mut Criterion) {
     let spec = ibex_spec();
     c.bench_function("struct_enum/ibex_524k", |b| {
         b.iter(|| {
             let count = StructuralEnum::new(black_box(&spec)).count();
             black_box(count);
+        })
+    });
+}
+
+/// evaluate_structural on the Ibex fixture: the CLI verify path, ~16.2 ms.
+fn bench_evaluate_structural_ibex(c: &mut Criterion) {
+    let spec = ibex_spec();
+    c.bench_function("evaluate_structural/ibex_524k", |b| {
+        b.iter(|| {
+            let (total, results) = evaluate_structural(
+                black_box(&spec),
+                &ConstraintRegistry::default(),
+                &ProjectorRegistry::default(),
+            )
+            .expect("structural evaluation");
+            let passed = results.iter().filter(|r| r.passed).count();
+            black_box((total, passed));
         })
     });
 }
@@ -541,7 +558,7 @@ fn bench_evaluate_cva6_r4(c: &mut Criterion) {
     });
 }
 
-/// struct_enum on the CVA6 R4 fixture: 2,560 valid combos, ~274 µs (15x).
+/// struct_enum on the CVA6 R4 fixture: 2,560 valid combos, ~250 µs (13x).
 fn bench_structural_enum_cva6_r4(c: &mut Criterion) {
     let spec = cva6_r4_spec();
     c.bench_function("struct_enum/cva6_r4_16K", |b| {
@@ -793,7 +810,7 @@ criterion_group!(
 criterion_group!(
     name = eval_heavy;
     config = Criterion::default().sample_size(10);
-    targets = bench_evaluate_ibex, bench_structural_enum_ibex, bench_validate_ibex,
+    targets = bench_evaluate_ibex, bench_structural_enum_ibex, bench_evaluate_structural_ibex, bench_validate_ibex,
               bench_evaluate_cva6_r4, bench_structural_enum_cva6_r4, bench_validate_cva6_r4
 );
 
