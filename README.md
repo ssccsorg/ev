@@ -59,6 +59,7 @@ them), so Spike never executes them.
 ./run.sh --demo           # Channel demo: cross-verify golden anchors
 ./run.sh --code           # fmt -> clippy -> build -> test (strict)
 ./run.sh --verify         # Full verification including 33M combo fixture
+./run.sh --coverage       # Code coverage gate (cargo-llvm-cov, 80% thresholds)
 ```
 
 Or step-by-step:
@@ -152,12 +153,22 @@ Conditional field assignment — set fields to specified values on trigger:
       - { field: "rs1", value: 5 }
 ```
 
+The tagma_decode projector packs the Tagma Hangul decomposition of a
+field into the golden-anchor layout offset[28:15] i[14:10] m[9:5] f[4:0]:
+
+```yaml
+projector:
+  type: tagma_decode
+  field: "code"
+  base: 0xAC00
+```
+
 ### Built-in types
 
 **Constraints**: `range`, `even`, `eq`, `neq`, `lt`, `gt`, `le`, `ge`,
 `oneof`, `cross`, `bitmask`, `enable_mask`, `enable_set`.
 
-**Projectors**: `sum`, `identity`, `parity`.
+**Projectors**: `sum`, `identity`, `parity`, `tagma_decode`.
 
 All types are extensible via `ConstraintRegistry` and `ProjectorRegistry`.
 
@@ -177,6 +188,8 @@ Valid counts below are the `evaluate_all` results on the committed fixtures
 | `ibex/csr_access.xif.yaml` | Ibex-like CSR encoding | 49,152 | 49,152 |
 | `ibex/rv32imcb.xif.yaml` | Ibex RV32IMCB (ibex_decoder.sv) | 524,288 | 92,160 |
 | `ibex/rv32imcb_imm.xif.yaml` | Ibex RV32IMCB I-type encoding | 65,536 | 55,616 |
+| `tagma/tagma_decoder.xif.yaml` | Syntagma Tagma decoder valid input domain | 65,536 | 11,172 |
+| `tagma/tagma_demo_top.xif.yaml` | Syntagma Tagma FPGA demo output space | 11,172 | 11,172 |
 | `common/all_pass.xif.yaml` | Simple ALU (no constraints) | 1,024 | 1,024 |
 | `common/sample.xif.yaml` | Mixed pass/fail demo | 96 | 12 |
 
@@ -191,7 +204,9 @@ Valid counts below are the `evaluate_all` results on the committed fixtures
 | struct_enum benchmark (same machine, release) | 19.0 ms |
 | Spike backend | C/Rust recheck: 196,608 / 196,608 agree |
 | Constraint types | 13 (range, even, eq, neq, lt, gt, le, ge, oneof, cross, bitmask, enable_mask, enable_set) |
-| Tests | 97 (73 lib + 16 CLI + 8 structural), all passing, none ignored |
+| Projector types | 4 (sum, identity, parity, tagma_decode) |
+| Tests | 105 (73 lib + 19 CLI + 5 tagma + 8 structural), all passing, none ignored |
+| Coverage gate | 80% lines / 80% regions (llvm-cov, all modules incl. Spike/Yosys backends) |
 | Simulation backends | Mock (default), Spike (`EV_SIM_BACKEND=spike`) |
 
 Benchmark methodology and reproducibility: the structural pipeline is the
@@ -244,6 +259,7 @@ Backends are pluggable via environment variables:
 ## Prerequisites
 
 - Rust 1.85+ ([rustup](https://rustup.rs/))
+- cargo-llvm-cov (optional, for `--coverage`; needs the `llvm-tools-preview` rustup component)
 - Python 3 (for channel demo)
 - Yosys (optional, for synthesis)
 - Spike, riscv64-unknown-elf-gcc, riscv-pk (optional, for simulation)

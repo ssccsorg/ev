@@ -199,6 +199,18 @@ fn sv_projector(proj: &crate::spec::ProjectorSpec, field_names: &[&String]) -> S
         crate::spec::ProjectorSpec::Parity { field } => {
             format!("{}[0]", field)
         }
+        crate::spec::ProjectorSpec::TagmaDecode { field, base } => {
+            // Golden-anchor packed layout: offset[28:15] i[14:10] m[9:5] f[4:0].
+            // offset = code - base, i = offset / 588, m = (offset % 588) / 28, f = offset % 28.
+            // The expression is only meaningful for code >= base. SystemVerilog
+            // division and modulo on negative operands are tool-dependent, and
+            // the generated assertion module is exercised on the valid domain.
+            format!(
+                "(({f} - {base}) << 15) | ((({f} - {base}) / 588) << 10) | (((({f} - {base}) % 588) / 28) << 5) | (({f} - {base}) % 28)",
+                f = field,
+                base = base
+            )
+        }
     }
 }
 

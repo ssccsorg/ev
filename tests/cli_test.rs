@@ -153,6 +153,47 @@ fn verify_cva6_xif_mac_fixture() {
 }
 
 #[test]
+fn verify_tagma_decoder_domain_fixture() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("verify")
+        .arg("--target")
+        .arg("tests/fixtures/tagma/tagma_decoder.xif.yaml")
+        .output()
+        .expect("failed to run ev verify on tagma_decoder fixture");
+    // The decoder domain has 54,364 invalid code points, so the exit code is non-zero.
+    assert!(
+        !output.status.success(),
+        "tagma_decoder fixture should exit non-zero"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("passed: 11172") && stdout.contains("failed: 54364"),
+        "should report the 11,172 valid syllables: {}",
+        stdout
+    );
+}
+
+#[test]
+fn verify_tagma_demo_top_fixture() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("verify")
+        .arg("--target")
+        .arg("tests/fixtures/tagma/tagma_demo_top.xif.yaml")
+        .output()
+        .expect("failed to run ev verify on tagma_demo_top fixture");
+    assert!(
+        output.status.success(),
+        "tagma_demo_top fixture should pass"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("All combinations passed"),
+        "demo top output space should pass entirely: {}",
+        stdout
+    );
+}
+
+#[test]
 fn verify_cva6_xif_ref_r4_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("verify")
@@ -218,6 +259,23 @@ fn synth_json_with_mock_backend() {
         stdout.contains("payload"),
         "json output should include payload"
     );
+}
+
+#[test]
+fn synth_tagma_decoder_with_mock_backend() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("synth")
+        .arg("--target")
+        .arg("tests/fixtures/tagma/tagma_decoder.xif.yaml")
+        .env("EV_SYNTH_BACKEND", "mock")
+        .output()
+        .expect("failed to run ev synth on tagma fixture");
+    assert!(
+        output.status.success(),
+        "ev synth should exit 0 on the tagma fixture"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("[ok]"), "synthesis should show ok status");
 }
 
 #[test]

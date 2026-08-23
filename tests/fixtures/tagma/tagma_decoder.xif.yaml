@@ -1,0 +1,42 @@
+# Tagma 3-axis decoder input domain contract.
+#
+# Models the valid input domain of the combinational decoder in
+# syntagma/hw/rtl/tagma_decoder.v: a 16-bit Hangul syllable code point is
+# valid exactly when it falls in [0xAC00, 0xD7A3].
+#
+# Decoder contract (Tagma whitepaper, https://doi.org/10.5281/zenodo.21302508):
+#   code in [0xAC00, 0xD7A3]  (11,172 valid syllables)
+#   offset = code - 0xAC00
+#   i = offset / 588           (initial, 0..18)
+#   m = (offset % 588) / 28    (medial, 0..20)
+#   f = offset % 28            (final, 0..27)
+#
+# ev verifies the domain boundary: exactly 11,172 of the 65,536 16-bit
+# values pass. This pins the boundary correction recorded in the syntagma
+# verification devlog: the last valid syllable is U+D7A3, not U+D7AF
+# (0xAC00 + 11171 = 0xD7A3).
+#
+# The tagma_decode projector (issue #46, milestone 2) packs the axis
+# decomposition of every passing code point into the golden-anchor layout
+# offset[28:15] i[14:10] m[9:5] f[4:0], so the projection of code k equals
+# line k of syntagma/hw/rtl/golden_anchors.hex. Pass/fail itself remains a
+# domain check: the decomposition is a projection, not a constraint.
+#
+# Verification space: 65,536 raw combinations
+# Valid: 11,172 (the Hangul syllable block), Failed: 54,364
+
+target: tagma_decoder
+fields:
+  code:
+    range: [0, 65535]
+constraints:
+  - type: ge
+    field: "code"
+    value: 0xAC00
+  - type: le
+    field: "code"
+    value: 0xD7A3
+projector:
+  type: tagma_decode
+  field: "code"
+  base: 0xAC00

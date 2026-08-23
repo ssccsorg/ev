@@ -1,0 +1,26 @@
+# Tagma FPGA demo top output space contract.
+#
+# Models the registered output space of syntagma/hw/rtl/tagma_demo_top.v:
+# the three decoder axes i, m, f. The demo top registers the combinational
+# decoder outputs on the board clock; the axis codomain is exactly the
+# product of the axis ranges, so every valid axis triple is produced by
+# exactly one code point.
+#
+# The validity LED predicate ((code >= 0xAC00) && (code <= 0xD7A3)) is the
+# same boolean condition verified by the tagma_decoder fixture. Sequential
+# behavior (registered outputs, one-cycle latency) is outside the ev
+# verification domain, which evaluates combinational encoding spaces only.
+#
+# Verification space: 19 x 21 x 28 = 11,172 raw combinations
+# Valid: 11,172 (every axis triple is reachable)
+
+target: tagma_demo_top
+fields:
+  i:
+    range: [0, 18]
+  m:
+    range: [0, 20]
+  f:
+    range: [0, 27]
+projector:
+  type: sum

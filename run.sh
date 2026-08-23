@@ -8,6 +8,7 @@ set -euo pipefail
 #   ./run.sh --code       # fmt → clippy → build → test (strict)
 #   ./run.sh --fix        # auto-fix → build → test
 #   ./run.sh --verify     # Yosys synthesis + fixtures (binary must exist)
+#   ./run.sh --coverage   # Code coverage gate (cargo-llvm-cov, 80% thresholds)
 #   ./run.sh --demo       # Channel demo: ev ↔ SSCCS POC golden anchors
 #   ./run.sh --help
 #
@@ -21,7 +22,7 @@ EV_IMAGE="${EV_IMAGE:-ghcr.io/ssccsorg/ev:latest}"
 VERIFY_FAILED=0
 
 # Pre-process: auto-fmt for all build modes except --help and --demo.
-if [[ "${1:-}" != "--help" && "${1:-}" != "-h" && "${1:-}" != "--demo" ]]; then
+if [[ "${1:-}" != "--help" && "${1:-}" != "-h" && "${1:-}" != "--demo" && "${1:-}" != "--coverage" ]]; then
     cargo fmt --all
     cargo clippy --fix --allow-dirty 2>&1 || true
     cargo fix --allow-dirty 2>&1 || true
@@ -181,6 +182,8 @@ verify_large_fixtures() {
     _timed "ibex custom alu fixture (524k combos)" $EV verify --target "tests/fixtures/ibex/alu_ext.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
     _verify_check "ibex rv32imcb encoding"      92160  432128 "tests/fixtures/ibex/rv32imcb.xif.yaml"
     _verify_check "ibex rv32imcb imm ops"       55616   9920  "tests/fixtures/ibex/rv32imcb_imm.xif.yaml"
+    _verify_check "tagma decoder domain"        11172   54364 "tests/fixtures/tagma/tagma_decoder.xif.yaml"
+    _verify_check "tagma demo top outputs"      11172   0     "tests/fixtures/tagma/tagma_demo_top.xif.yaml"
     echo "=== structural enumeration bench ==="
     cargo bench --bench bench -- "struct_enum/ibex|struct_enum/cva6" 2>&1 | grep -E 'struct_enum|time:' | head -6
 }
@@ -235,6 +238,12 @@ case ${1:-} in
         echo "  Verification passed."
         echo "══════════════════════════════════════"
         ;;
+    --coverage)
+        echo "══════════════════════════════════════"
+        echo "  ev — code coverage gate"
+        echo "══════════════════════════════════════"
+        bash scripts/coverage.sh
+        ;;
     --demo)
         exec bash scripts/demo-ssccs-poc.sh
         ;;
@@ -243,8 +252,9 @@ case ${1:-} in
         echo "  (no arg)   Full pipeline: auto-fix → code → verify"
         echo "  --code     fmt → clippy → build → test (strict)"
         echo "  --fix      auto-fix → build → test"
-        echo "  --verify   Yosys + fixtures (binary needed)"
-        echo "  --demo     Channel demo: ev ↔ SSCCS POC (standalone)"
+        echo "  --verify     Yosys + fixtures (binary needed)"
+        echo "  --coverage   Code coverage gate (cargo-llvm-cov)"
+        echo "  --demo       Channel demo: ev ↔ SSCCS POC (standalone)"
         exit 0
         ;;
     *)

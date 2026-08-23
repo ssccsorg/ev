@@ -71,3 +71,31 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
             -c "cd /workspace && ./target/release/ev simulate --target tests/fixtures/common/all_pass.xif.yaml"
         shell: bash
+
+  coverage:
+    runs-on: ubuntu-latest
+    env:
+      EV_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt, llvm-tools-preview
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install cargo-llvm-cov
+        env:
+          RUSTFLAGS: ""
+        run: cargo install cargo-llvm-cov --locked
+
+      - name: Coverage gate
+        run: bash run.sh --coverage
