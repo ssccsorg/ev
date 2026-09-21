@@ -207,6 +207,7 @@ Valid counts below are the `evaluate_all` results on the committed fixtures
 | Spike backend | C/Rust recheck: 196,608 / 196,608 agree |
 | Tagma decoder cross-channel | 11,172 / 11,172 projections equal `tagma_core::Coord::to_axes`; the generated `golden_anchors.hex` matches line by line when `EV_TAGMA_ANCHORS` is set |
 | Synthesis channel | `--design` on the syntagma Tagma decoder reports 478 cells, the number the syntagma generic Yosys flow reports for the same RTL; `--target` on `all_pass` reports 28 |
+| SSCCS POC channel demo (`./run.sh --demo`, needs an ssccs checkout) | 5 / 5 channels match the hand-written assembly golden anchors |
 | Constraint types | 13 (range, even, eq, neq, lt, gt, le, ge, oneof, cross, bitmask, enable_mask, enable_set) |
 | Projector types | 4 (sum, identity, parity, tagma_decode) |
 | Tests | 118 (77 lib + 26 CLI + 8 structural + 5 tagma + 2 golden anchor), all passing, none ignored |

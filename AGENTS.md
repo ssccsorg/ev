@@ -113,6 +113,7 @@ cargo bench -- cva6_full      # full-space CVA6 group
 cargo bench -- struct_enum_validity   # correctness guard, must stay green
 ./run.sh                      # fmt, clippy, build, test, verify
 ./run.sh --verify             # Yosys, fixtures, golden anchors, Spike
+./run.sh --demo               # channel demo: the ssccs POC assembly golden anchors
 ./run.sh --coverage           # coverage gate
 ```
 
