@@ -65,17 +65,17 @@ fn verify_text_mixed_fixture_exits_1() {
 }
 
 #[test]
-fn verify_rv32i_csr_access_fixture() {
+fn verify_ibex_csr_access_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("verify")
         .arg("--target")
         .arg("tests/fixtures/ibex/csr_access.xif.yaml")
         .arg("--json")
         .output()
-        .expect("failed to run ev verify on rv32i_csr_access fixture");
+        .expect("failed to run ev verify on the ibex_csr_access fixture");
     assert!(
         output.status.success(),
-        "rv32i_csr_access fixture should pass"
+        "ibex_csr_access fixture should pass"
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
@@ -121,18 +121,18 @@ fn verify_malformed_bad_constraint_type_exits_nonzero() {
 }
 
 #[test]
-fn verify_ibex_alu_ext_fixture() {
+fn verify_enable_mask_demo_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("verify")
         .arg("--target")
-        .arg("tests/fixtures/ibex/alu_ext.xif.yaml")
+        .arg("tests/fixtures/common/enable_mask_demo.xif.yaml")
         .arg("--json")
         .output()
-        .expect("failed to run ev verify on ibex_alu_ext fixture");
+        .expect("failed to run ev verify on the enable_mask_demo fixture");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
         stdout.contains("fact_type"),
-        "ibex_alu_ext should produce fact output"
+        "enable_mask_demo should produce fact output"
     );
 }
 

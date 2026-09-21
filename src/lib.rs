@@ -10,7 +10,7 @@
 //! lib.rs         ← public API re-exports
 //! spec/          ← VerificationSpec, FieldSpec, ConstraintSpec, ProjectorSpec
 //! verify/        ← compose, evaluate, registry (Check trait + registries)
-//! report/        ← ReporterCapable trait + Fact/Intent/Hint + implementations
+//! report/        ← ReporterCapable trait + Fact envelope + implementations
 //! format/        ← FormatCapable trait + XIF format parser
 //! synth/         ← synthesis traits (GenerateRtl, RunSynthesis), SV generation, backends
 //! ```

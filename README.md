@@ -184,14 +184,14 @@ Valid counts below are the `evaluate_all` results on the committed fixtures
 | `cva6/xif_mac.xif.yaml` | CVA6 XIF multiply-accumulate | 32,768 | 28,672 |
 | `cva6/xif_madd.xif.yaml` | CVA6 XIF madd/msub encoding | 32,768 | 4,096 |
 | `cva6/xif_encoding.xif.yaml` | CVA6 XIF encoding-only (register-reduced) | 8,192 | 48 |
-| `ibex/alu_ext.xif.yaml` | Ibex custom ALU extension | 524,288 | 4,096 |
-| `ibex/csr_access.xif.yaml` | Ibex-like CSR encoding | 49,152 | 49,152 |
+| `ibex/csr_access.xif.yaml` | Standard RISC-V Zicsr domain | 49,152 | 49,152 |
 | `ibex/rv32imcb.xif.yaml` | Ibex RV32IMCB (ibex_decoder.sv) | 524,288 | 92,160 |
 | `ibex/rv32imcb_imm.xif.yaml` | Ibex RV32IMCB I-type encoding | 65,536 | 55,616 |
 | `tagma/tagma_decoder.xif.yaml` | Syntagma Tagma decoder valid input domain | 65,536 | 11,172 |
 | `tagma/tagma_demo_top.xif.yaml` | Syntagma Tagma FPGA demo output space | 11,172 | 11,172 |
 | `common/all_pass.xif.yaml` | Simple ALU (no constraints) | 1,024 | 1,024 |
 | `common/sample.xif.yaml` | Mixed pass/fail demo | 96 | 12 |
+| `common/enable_mask_demo.xif.yaml` | Synthetic enable_mask coverage (oneof + cross + enable_mask) | 524,288 | 4,096 |
 
 ## Validation Results
 
@@ -220,31 +220,37 @@ fixtures.
 
 ```
 src/
-  main.rs           CLI (clap: verify, simulate, synth)
-  spec/             VerificationSpec, FieldSpec, ConstraintSpec, ProjectorSpec
+  main.rs           CLI (clap: verify, simulate, synth, fact decode)
+  spec/             VerificationSpec, FieldSpec, ConstraintSpec, ProjectorSpec,
+                    EncodingLayout, FieldBitMapping
   verify/
-    compose.rs      Domain expansion + structural enumeration + raw total
-    evaluate.rs     Constraint evaluation + projection + structural pipeline
-    registry.rs     ConstraintRegistry + ProjectorRegistry (pluggable builder)
+    compose.rs      Domain expansion, raw_total_combinations, StructuralEnum
+    evaluate.rs     evaluate_all, evaluate_structural, validate_into_space,
+                    build_runtime_checks
+    registry.rs     ConstraintRegistry, ProjectorRegistry, Check/Evaluator traits
   report/
-    reporter.rs     ReporterCapable trait + TextReporter + CsvReporter
-                    JsonReporter + TraceReporter
-    fih.rs          Fact envelope (typed, timestamped, content-addressed)
+    reporter.rs     ReporterCapable trait + Text/Csv/Json/Trace reporters
+    fih.rs          Fact envelope (fact_type, origin, target, payload,
+                    timestamp, parent_fact_id)
   format/
-    xif.rs          YamlFormat — XIF format parser
+    mod.rs          FormatCapable trait
+    xif.rs          YamlFormat, the XIF parser
   synth/
-    mod.rs          SvGenerator, MockSynthesisBackend, RunSynthesis
+    mod.rs          GenerateRtl, RunSynthesis, SvGenerator, MockSynthesisBackend
     sim.rs          RunSimulation trait + MockSimBackend
     backends/       SpikeBackend, YosysBackend
 benches/
   bench.rs          Performance reference (fixtures, methodology, groups)
 tests/
   fixtures/
-    common/         4 YAML fixture files
+    common/         5 YAML fixture files
     cva6/           5 YAML fixture files
-    ibex/           4 YAML fixture files
-  cli_test.rs       14 integration tests (+ 2 heavy CVA6 tests ignored by default)
-  structural_enum.rs 5 structural enumeration regression tests
+    ibex/           3 YAML fixture files
+    tagma/          2 YAML fixture files
+  cli_test.rs       19 integration tests
+  structural_enum.rs 8 structural enumeration regression tests
+  tagma_fixture.rs  5 Tagma fixture tests
+  golden_anchor.rs  2 tagma golden anchor cross-channel tests
 ```
 
 Backends are pluggable via environment variables:

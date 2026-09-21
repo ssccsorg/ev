@@ -256,18 +256,19 @@ fn evaluate_structural_reports_raw_total_with_valid_subset() {
 
 /// Differential check for a fixture with enable_mask (oneof + cross +
 /// enable_mask). The structural pipeline must emit exactly the same passing
-/// set as the naive expansion, and the raw total must match. This pins the
-/// enable_mask parity that the cva6 fixtures do not cover: the mask must be
-/// applied identically by StructuralEnum and expand_all.
+/// set as the naive expansion, and the raw total must match. `xif_encoding`
+/// uses the same three constraint types but is asserted by counts alone, so
+/// the set-level parity that matters, the mask applied identically by
+/// StructuralEnum and expand_all, is pinned here.
 #[test]
 fn evaluate_structural_matches_evaluate_all_with_enable_mask() {
     let regs = (ConstraintRegistry::default(), ProjectorRegistry::default());
-    let spec = load_fixture("tests/fixtures/ibex/alu_ext.xif.yaml");
+    let spec = load_fixture("tests/fixtures/common/enable_mask_demo.xif.yaml");
     let (total, evals) = evaluate_structural(&spec, &regs.0, &regs.1).expect("structural eval");
     let full = evaluate_all(&spec, expand_all(&spec).expect("expand"), &regs.0, &regs.1);
 
     assert_eq!(total, full.len(), "raw total must equal the expanded space");
-    assert_eq!(total, 524_288, "alu_ext raw space");
+    assert_eq!(total, 524_288, "enable_mask_demo raw space");
 
     // With multiplicity the valid count matches the committed number on
     // both pipelines.
@@ -304,5 +305,5 @@ fn evaluate_structural_matches_evaluate_all_with_enable_mask() {
     );
 
     let failed = total - 4_096;
-    assert_eq!(failed, 520_192, "alu_ext failed count");
+    assert_eq!(failed, 520_192, "enable_mask_demo failed count");
 }

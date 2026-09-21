@@ -181,7 +181,9 @@ verify_large_fixtures() {
     _verify_check "cva6 xif ref r4"         2560    13824    "tests/fixtures/cva6/xif_ref_r4.xif.yaml"
     _timed "cva6 xif madd fixture (32k combos)" $EV verify --target "tests/fixtures/cva6/xif_madd.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
     _timed "cva6 xif mac fixture (32k combos)" $EV verify --target "tests/fixtures/cva6/xif_mac.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
-    _timed "ibex custom alu fixture (524k combos)" $EV verify --target "tests/fixtures/ibex/alu_ext.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
+    _verify_check "cva6 xif mac"            28672   4096   "tests/fixtures/cva6/xif_mac.xif.yaml"
+    _timed "enable_mask demo fixture (524k combos)" $EV verify --target "tests/fixtures/common/enable_mask_demo.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
+    _verify_check "enable_mask demo"        4096    520192 "tests/fixtures/common/enable_mask_demo.xif.yaml"
     _verify_check "ibex rv32imcb encoding"      92160  432128 "tests/fixtures/ibex/rv32imcb.xif.yaml"
     _verify_check "ibex rv32imcb imm ops"       55616   9920  "tests/fixtures/ibex/rv32imcb_imm.xif.yaml"
     _verify_check "tagma decoder domain"        11172   54364 "tests/fixtures/tagma/tagma_decoder.xif.yaml"

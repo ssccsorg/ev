@@ -1,20 +1,27 @@
-# Realistic Ibex ALU extension: CSR-access-like instruction encoding.
+# Standard RISC-V CSR instruction domain (Zicsr).
 #
 # CSRRW / CSRRS / CSRRC:
 #   funct3 = {001, 010, 011} corresponding to {CSRRW, CSRRS, CSRRC}
 #   rs1    = source GPR (0..31)
 #   rd     = destination GPR (0..31)
-#   csr    = CSR address (0..4095)
+#   csr    = CSR address, sampled to [0, 15] to keep the space small
 #
-# Pipeline constraint: if rd == 0 then result is NOT written back.
-# Hazard constraint: if rs1 == rd then write-after-read hazard applies.
+# Every combination is a legal encoding: this fixture pins the domain
+# (3 × 32 × 32 × 16 = 49,152) instead of rejecting part of it. The two
+# `range` constraints restate the field ranges, so the structural range path
+# stays exercised on a fixture where nothing is invalid.
 #
-# Field domains reflect the actual RISC-V instruction encoding ranges.
-# Constraint space: 3 * 32 * 32 * 4096 = 12,582,912 combinations.
+# Behavior that is not an encoding constraint is outside the ev domain and is
+# deliberately unmodeled:
+#   rd == 0  : the write is discarded (x0), the encoding stays legal
+#   rs1 == rd: write-after-read hazard, an RTL pipeline property
 #
-# To verify a subset without exceeding MAX_COMBINATIONS, reduce csr to [0, 15].
+# The file sits under ibex/ because it was added with the Ibex fixture set.
+# Zicsr is standard RISC-V, so the target is named for the encoding, and the
+# core-specific Ibex decoder fixtures remain rv32imcb.xif.yaml and
+# rv32imcb_imm.xif.yaml.
 
-target: cv32e40p_alu_ext
+target: ibex_csr_access
 fields:
   funct3:
     values: [1, 2, 3]
@@ -25,12 +32,12 @@ fields:
   csr_addr:
     range: [0, 15]
 constraints:
-  # rs1 must be less than 32 (redundant with field range, explicit for synthesis)
+  # rs1 must be less than 32 (restates the field range)
   - type: range
     field: "rs1"
     min: 0
     max: 31
-  # rd must be less than 32 (redundant with field range)
+  # rd must be less than 32 (restates the field range)
   - type: range
     field: "rd"
     min: 0
