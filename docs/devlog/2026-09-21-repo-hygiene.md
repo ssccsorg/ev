@@ -58,10 +58,11 @@ only, so their counts were visible without being pinned. Both now carry
 
 The handoff described the May 2026 tree (commit `547e2a9`, 9 constraint
 types, 3 projectors, 69 tests, flat `src/*.rs`, "Spike backend not started").
-It now matches the current module layout, the 13 constraints and 4
-projectors with their structural and runtime split, the structured CLI default, the coverage gate, the test and fixture inventory, the backend
-environment variables, the docs scope, and the open work (#46 milestone 4,
-#44, #18, FIH alignment deferred).
+It now matches the current module layout, the 13 constraints and 4 projectors
+with their structural and runtime split, the structural CLI default, the
+coverage gate, the test and fixture inventory, the backend environment
+variables, the docs scope, and the open work (#44, #18, and FIH alignment
+deferred; milestone 4 of #46 was delivered later on this branch).
 
 ## Verification
 
@@ -77,7 +78,7 @@ The hygiene work and the golden anchor gate (issue #52) share one branch,
 on the documents they shared (the README fixture table, test tree, and
 Validation Results row, plus `AGENTS.md`) with no offsetting benefit.
 `AGENTS.md`, the README test tree, and the test count therefore describe the
-branch as it stands: 118 tests, including `tests/golden_anchor.rs`.
+branch as it stands: 120 tests, including `tests/golden_anchor.rs`.
 
 ## Consistency fixes
 

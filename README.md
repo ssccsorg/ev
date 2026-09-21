@@ -16,9 +16,9 @@ and evaluates every valid combination, reports exactly which encodings are valid
 and which are not — deterministically and exhaustively.
 
 Constraint types are split between structural constraints (oneof, range, bitmask,
-cross) that are encoded directly into the enumeration space, and runtime
-constraints (eq, neq, lt, gt, le, ge, even) that are checked per combination.
-Only structurally valid combinations are ever generated.
+cross, enable_mask, enable_set) that are encoded directly into the enumeration
+space, and runtime constraints (eq, neq, lt, gt, le, ge, even) that are checked
+per combination. Only structurally valid combinations are ever generated.
 
 A single command verifies the 33.5 million combination CVA6 CV-X-IF encoding
 space derived from the hardware decoder mask table
@@ -206,11 +206,11 @@ Valid counts below are the `evaluate_all` results on the committed fixtures
 | struct_enum benchmark (same machine, release) | 18.8 ms |
 | Spike backend | C/Rust recheck: 196,608 / 196,608 agree |
 | Tagma decoder cross-channel | 11,172 / 11,172 projections equal `tagma_core::Coord::to_axes`; the generated `golden_anchors.hex` matches line by line when `EV_TAGMA_ANCHORS` is set |
-| Synthesis channel | `--design` on the syntagma Tagma decoder reports 478 cells, the number the syntagma generic Yosys flow reports for the same RTL; `--target` on `all_pass` reports 28 |
+| Synthesis channel | `--design` on the syntagma Tagma decoder reports 478 cells, the number the syntagma generic Yosys flow reports for the same RTL; `--target` on `all_pass` reports 28 (both with Yosys 0.65) |
 | SSCCS POC channel demo (`./run.sh --demo`, needs an ssccs checkout) | 5 / 5 channels match the hand-written assembly golden anchors |
 | Constraint types | 13 (range, even, eq, neq, lt, gt, le, ge, oneof, cross, bitmask, enable_mask, enable_set) |
 | Projector types | 4 (sum, identity, parity, tagma_decode) |
-| Tests | 118 (77 lib + 26 CLI + 8 structural + 5 tagma + 2 golden anchor), all passing, none ignored |
+| Tests | 120 (78 lib + 27 CLI + 8 structural + 5 tagma + 2 golden anchor), all passing, none ignored |
 | Coverage gate | 80% lines / 80% regions (llvm-cov, all modules incl. Spike/Yosys backends) |
 | Simulation backends | Mock (default), Spike (`EV_SIM_BACKEND=spike`) |
 
@@ -252,7 +252,8 @@ tests/
     ibex/           3 YAML fixture files
     tagma/          2 YAML fixture files
     rtl/            1 Verilog design fixture
-  cli_test.rs       26 integration tests
+    yosys/          1 captured Yosys stat report
+  cli_test.rs       27 integration tests
   structural_enum.rs 8 structural enumeration regression tests
   tagma_fixture.rs  5 Tagma fixture tests
   golden_anchor.rs  2 tagma golden anchor cross-channel tests

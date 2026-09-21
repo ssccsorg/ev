@@ -100,14 +100,14 @@ when the layout changes.
   `proc`, `synth`, then `tee -o <file> stat -json`. The report is read from
   `design` (aggregate) with `modules[\<top>]` as the fallback and the source
   of the per-cell-type breakdown. `--design` on
-  `syntagma/hw/rtl/tagma_decoder.v` reports 478 cells, the number the
-  syntagma generic flow reports for the same RTL; a design input that
-  yields no gate count fails `run.sh --verify`.
+  `syntagma/hw/rtl/tagma_decoder.v` reports 478 cells with Yosys 0.65, the
+  number the syntagma generic flow reports for the same RTL; a design input
+  that yields no gate count fails `run.sh --verify`.
 
 ### Tests and fixtures
 
 ```bash
-cargo test --release          # 118 tests: 77 lib, 26 CLI, 8 structural,
+cargo test --release          # 120 tests: 78 lib, 27 CLI, 8 structural,
                               # 5 tagma, 2 golden anchor. None ignored.
 cargo bench -- cva6_full      # full-space CVA6 group
 cargo bench -- struct_enum_validity   # correctness guard, must stay green
@@ -179,8 +179,8 @@ decoder fixtures are the `ibex/rv32imcb*.xif.yaml` pair (issue #36).
 
 Public documentation of record lives in the ssccs corpus,
 `ssccs/docs/projects/ev/`, published as https://docs.ssccs.org/projects/ev/.
-`ev/docs` holds private development notes only; see `docs/README.md`. Report
-numbers in the corpus, not here.
+`ev/docs` holds private development notes only; see `docs/README.md`.
+Published numbers live in the corpus, not here.
 
 ## Dependency Note
 

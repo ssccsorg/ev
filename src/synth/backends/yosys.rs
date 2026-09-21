@@ -211,17 +211,19 @@ struct StatSummary {
 /// Read the gate count, cell area, and cell types out of a `stat -json`
 /// report.
 ///
-/// yosys emits aggregate counts under `design` and per-module counts under
-/// `modules`, keyed by the escaped module name (`\top`). The aggregate is
-/// preferred because it is the number the synthesis scripts in syntagma
-/// report for the same RTL; the module entry is the fallback and the only
-/// source of the per-cell-type breakdown.
+/// Yosys writes aggregate counts under `design` and per-module counts under
+/// `modules`, keyed by the module name in plain or escaped form (`top` or
+/// `\top`). The aggregate is preferred for the gate count, because it is the
+/// number the syntagma synthesis scripts report for the same RTL. The module
+/// entry is the fallback, and it is the source of the cell types, so
+/// `gate_count` covers the design including cells inside submodules while
+/// `cell_types` lists the top module's own cells.
 fn parse_stat(stat: Option<&serde_json::Value>, top_module: &str) -> StatSummary {
     let Some(stat) = stat else {
         return StatSummary::default();
     };
 
-    let aggregate = stat.get("design").or_else(|| stat.get("top_module"));
+    let aggregate = stat.get("design");
     let module = stat.get("modules").and_then(|modules| {
         modules
             .get(top_module)
@@ -310,5 +312,29 @@ mod tests {
         let summary = parse_stat(Some(&report), "other_module");
         assert_eq!(summary.gate_count, None);
         assert_eq!(summary.cell_types, None);
+    }
+
+    /// The parse against a report Yosys actually wrote, so the pinned shape
+    /// is not only the hand-written one above.
+    ///
+    /// Captured verbatim with Yosys 0.65 from
+    /// `tests/fixtures/rtl/decode_demo.v`: read_verilog, hierarchy, proc,
+    /// synth, `tee -o <file> stat -json`.
+    #[test]
+    fn parse_stat_reads_a_captured_report() {
+        let raw = std::fs::read_to_string("tests/fixtures/yosys/stat_decode_demo.json")
+            .expect("captured stat report fixture must be readable");
+        let report: serde_json::Value =
+            serde_json::from_str(&raw).expect("the captured report must be JSON");
+
+        let summary = parse_stat(Some(&report), "decode_demo");
+
+        assert_eq!(summary.gate_count, Some(16));
+        assert_eq!(summary.cell_area, None, "area needs -liberty");
+        let types = summary.cell_types.expect("cell types are reported");
+        assert_eq!(types.get("$_AND_"), Some(&serde_json::json!(5)));
+        assert_eq!(types.get("$_NAND_"), Some(&serde_json::json!(1)));
+        assert_eq!(types.get("$_XNOR_"), Some(&serde_json::json!(7)));
+        assert_eq!(types.get("$_XOR_"), Some(&serde_json::json!(3)));
     }
 }

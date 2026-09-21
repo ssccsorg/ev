@@ -66,6 +66,34 @@ Yosys 0.65, single machine.
   default, `--top` override, JSON envelope naming the design source, missing
   file, no input, `--top` with `--target`, `--target` with `--design`).
 
+## Review follow-ups
+
+A review of the pull request raised four points, all addressed here:
+
+- Argument carriage. `--design` and `--top` are interpolated into the Yosys
+  `-p` script string, which splits on whitespace and treats `;` as a command
+  separator. A path or module name containing either was misread by Yosys,
+  and the error named a path that exists. Both are now rejected with the
+  value in the message, before the file check.
+- Container version. CI runs `bash run.sh` and therefore the Yosys from the
+  `Dockerfile` (`ubuntu:24.04`, which ships yosys 0.33), not the 0.65 used for
+  the measurements above. 0.33 supports `tee -o` and writes the `design`
+  aggregate, and the run.sh assertions require a non-null count rather than a
+  value, so version drift cannot fail them spuriously. The residual is that
+  the Dockerfile pins no Yosys version, so the JSON key names remain an
+  assumption about the base image.
+- Cell-type scope. `gate_count` comes from the design aggregate, which
+  includes cells inside submodules, while `cell_types` comes from the top
+  module entry and lists that module's own cells. On a single-module design
+  such as the Tagma decoder the two agree; the parse comment now states the
+  distinction instead of implying one scope.
+- Test coverage of the parse. A captured report, `yosys -p "...; tee -o
+  <file> stat -json"` on `tests/fixtures/rtl/decode_demo.v` under Yosys 0.65,
+  is committed as `tests/fixtures/yosys/stat_decode_demo.json` and pinned by
+  `parse_stat_reads_a_captured_report`, so the parse is asserted against what
+  Yosys writes and not only against a hand-written shape. `scripts/coverage.sh`
+  now also runs `--design`, so the new CLI branch is instrumented.
+
 ## References
 
 - ev issue #46 (milestone 4), issue #52 (the golden anchor gate on the same branch)

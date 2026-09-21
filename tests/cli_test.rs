@@ -444,6 +444,44 @@ fn synth_rejects_target_with_design() {
 }
 
 #[test]
+fn synth_design_rejects_an_argument_yosys_cannot_carry() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("synth")
+        .arg("--design")
+        .arg("tests/fixtures/rtl/decode demo.v")
+        .env("EV_SYNTH_BACKEND", "mock")
+        .output()
+        .expect("failed to run ev synth --design with whitespace in the path");
+    assert!(
+        !output.status.success(),
+        "a design path with whitespace should fail"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("must not contain whitespace"),
+        "the error should name the restriction: {}",
+        stderr
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("synth")
+        .arg("--design")
+        .arg("tests/fixtures/rtl/decode_demo.v")
+        .arg("--top")
+        .arg("decode;demo")
+        .env("EV_SYNTH_BACKEND", "mock")
+        .output()
+        .expect("failed to run ev synth --top with a command separator");
+    assert!(!output.status.success(), "a top name with ';' should fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("must not contain whitespace"),
+        "the error should name the restriction: {}",
+        stderr
+    );
+}
+
+#[test]
 fn verify_cva6_xif_ref_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("verify")

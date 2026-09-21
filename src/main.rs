@@ -155,17 +155,31 @@ fn run_synth(input: SynthInput) -> anyhow::Result<SynthesisMetrics> {
             (SvGenerator.generate(&spec)?, spec.target)
         }
         SynthInput::Design { rtl, top } => {
-            if !rtl.is_file() {
-                anyhow::bail!("design file not found: {}", rtl.display());
-            }
             let top_module = match top {
                 Some(top) => top,
                 None => design_top_module(&rtl)?,
             };
+            // Yosys receives both values inside a `-p` script string, which
+            // splits on whitespace and treats `;` as a command separator, so
+            // such a value cannot be passed through faithfully. Report it
+            // instead of letting Yosys misread the path.
+            check_yosys_argument(&rtl.to_string_lossy(), "the design path")?;
+            check_yosys_argument(&top_module, "the top module name")?;
+            if !rtl.is_file() {
+                anyhow::bail!("design file not found: {}", rtl.display());
+            }
             (rtl, top_module)
         }
     };
     resolve_synth_backend().run(&rtl_path, &top_module)
+}
+
+/// Reject a value that the Yosys `-p` script cannot carry verbatim.
+fn check_yosys_argument(value: &str, what: &str) -> anyhow::Result<()> {
+    if value.chars().any(|c| c.is_whitespace() || c == ';') {
+        anyhow::bail!("{what} must not contain whitespace or ';': {value}");
+    }
+    Ok(())
 }
 
 /// Top module default for a design-only input: the RTL file stem.
