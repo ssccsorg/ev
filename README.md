@@ -155,14 +155,20 @@ Conditional field assignment — set fields to specified values on trigger:
       - { field: "rs1", value: 5 }
 ```
 
-The tagma_decode projector packs the Tagma Hangul decomposition of a
-field into the golden-anchor layout offset[28:15] i[14:10] m[9:5] f[4:0]:
+The decompose projector splits one field into packed mixed-radix axes, each
+at its own bit range. The syntagma anchor layout
+`offset[28:15] i[14:10] m[9:5] f[4:0]` is one instance:
 
 ```yaml
 projector:
-  type: tagma_decode
+  type: decompose
   field: "code"
   base: 0xAC00
+  offset_shift: 15
+  axes:
+    - { radix: 28, width: 5, shift: 0 }   # f = offset % 28
+    - { radix: 21, width: 5, shift: 5 }   # m = (offset / 28) % 21
+    - { width: 5, shift: 10 }             # i = offset / 588
 ```
 
 ### Built-in types
@@ -170,7 +176,7 @@ projector:
 **Constraints**: `range`, `even`, `eq`, `neq`, `lt`, `gt`, `le`, `ge`,
 `oneof`, `cross`, `bitmask`, `enable_mask`, `enable_set`.
 
-**Projectors**: `sum`, `identity`, `parity`, `tagma_decode`.
+**Projectors**: `sum`, `identity`, `parity`, `decompose`.
 
 All types are extensible via `ConstraintRegistry` and `ProjectorRegistry`.
 
@@ -209,8 +215,8 @@ Valid counts below are the `evaluate_all` results on the committed fixtures
 | Synthesis channel | `--design` on the syntagma Tagma decoder reports 478 cells, the number the syntagma generic Yosys flow reports for the same RTL; `--target` on `all_pass` reports 28 (both with Yosys 0.65) |
 | SSCCS POC channel demo (`./run.sh --demo`, needs an ssccs checkout) | 5 / 5 channels match the hand-written assembly golden anchors |
 | Constraint types | 13 (range, even, eq, neq, lt, gt, le, ge, oneof, cross, bitmask, enable_mask, enable_set) |
-| Projector types | 4 (sum, identity, parity, tagma_decode) |
-| Tests | 120 (78 lib + 27 CLI + 8 structural + 5 tagma + 2 golden anchor), all passing, none ignored |
+| Projector types | 4 (sum, identity, parity, decompose) |
+| Tests | 126 (83 lib + 28 CLI + 8 structural + 5 tagma + 2 golden anchor), all passing, none ignored |
 | Coverage gate | 80% lines / 80% regions (llvm-cov, all modules incl. Spike/Yosys backends) |
 | Simulation backends | Mock (default), Spike (`EV_SIM_BACKEND=spike`) |
 
@@ -247,13 +253,13 @@ benches/
   bench.rs          Performance reference (fixtures, methodology, groups)
 tests/
   fixtures/
-    common/         5 YAML fixture files
+    common/         6 YAML fixture files
     cva6/           5 YAML fixture files
     ibex/           3 YAML fixture files
     tagma/          2 YAML fixture files
     rtl/            1 Verilog design fixture
     yosys/          1 captured Yosys stat report
-  cli_test.rs       27 integration tests
+  cli_test.rs       28 integration tests
   structural_enum.rs 8 structural enumeration regression tests
   tagma_fixture.rs  5 Tagma fixture tests
   golden_anchor.rs  2 tagma golden anchor cross-channel tests

@@ -1,0 +1,17 @@
+# Malformed decompose projector: the second axis overlaps the first, so the
+# parameters cannot be interpreted. The parser must reject the spec and name
+# the axis rather than evaluate a silently merged digit.
+#
+# Expected: nonzero exit, "invalid projector: decompose: axis 1 overlaps
+# another axis".
+
+target: malformed_decompose
+fields:
+  code:
+    range: [0, 255]
+projector:
+  type: decompose
+  field: "code"
+  axes:
+    - { radix: 4, width: 2, shift: 0 }
+    - { radix: 4, width: 2, shift: 1 }

@@ -602,12 +602,23 @@ impl Default for ProjectorRegistry {
                 panic!("parity builder called on non-parity spec")
             }
         });
-        reg.register("tagma_decode", |spec, axis_of| {
-            if let ProjectorSpec::TagmaDecode { field, base } = spec {
+        reg.register("decompose", |spec, axis_of| {
+            if let ProjectorSpec::Decompose {
+                field,
+                base,
+                offset_shift,
+                axes,
+            } = spec
+            {
                 let axis = axis_of[field];
-                Box::new(TagmaDecodeEval { axis, base: *base })
+                Box::new(DecomposeEval {
+                    axis,
+                    base: *base,
+                    offset_shift: *offset_shift,
+                    axes: axes.clone(),
+                })
             } else {
-                panic!("tagma_decode builder called on non-tagma_decode spec")
+                panic!("decompose builder called on a non-decompose spec")
             }
         });
         reg
@@ -619,7 +630,7 @@ fn spec_projector_name(spec: &ProjectorSpec) -> &str {
         ProjectorSpec::Sum => "sum",
         ProjectorSpec::Identity { .. } => "identity",
         ProjectorSpec::Parity { .. } => "parity",
-        ProjectorSpec::TagmaDecode { .. } => "tagma_decode",
+        ProjectorSpec::Decompose { .. } => "decompose",
     }
 }
 
@@ -654,36 +665,226 @@ impl Evaluator for ParityEval {
     }
 }
 
-/// Tagma decoder constants: the Hangul syllable block U+AC00..U+D7A3
-/// decomposes as offset = code - 0xAC00, i = offset / 588, m = (offset %
-/// 588) / 28, f = offset % 28 (588 = 21 * 28).
-const TAGMA_STRIDE_INIT: i64 = 588;
-const TAGMA_STRIDE_MED: i64 = 28;
-const TAGMA_N_INIT: i64 = 19;
-const TAGMA_N_MED: i64 = 21;
-const TAGMA_N_FIN: i64 = 28;
-
-/// Tagma 3-axis decoder evaluator: packs the decomposition into the
-/// golden-anchor layout offset[28:15] i[14:10] m[9:5] f[4:0].
+/// Mixed-radix decomposition evaluator: splits the reduced field value along
+/// the axis list and packs the reduced offset and the axis digits at their
+/// shift positions.
 #[derive(Debug, Clone)]
-struct TagmaDecodeEval {
+struct DecomposeEval {
     axis: usize,
     base: i64,
+    offset_shift: Option<u32>,
+    axes: Vec<crate::spec::AxisSpec>,
 }
 
-impl Evaluator for TagmaDecodeEval {
+impl Evaluator for DecomposeEval {
     fn evaluate(&self, point: &Point) -> Option<i64> {
-        let code = point.coordinates().get_axis(self.axis)?;
-        let offset = code - self.base;
-        if offset < 0 {
+        let value = point.coordinates().get_axis(self.axis)?;
+        let reduced = value - self.base;
+        if reduced < 0 {
             return None;
         }
-        let i = offset / TAGMA_STRIDE_INIT;
-        let m = (offset % TAGMA_STRIDE_INIT) / TAGMA_STRIDE_MED;
-        let f = offset % TAGMA_STRIDE_MED;
-        if i >= TAGMA_N_INIT || m >= TAGMA_N_MED || f >= TAGMA_N_FIN {
-            return None;
+        let reduced = i128::from(reduced);
+
+        let mut packed: i128 = match self.offset_shift {
+            Some(shift) => reduced << shift,
+            None => 0,
+        };
+        let mut divisor: i128 = 1;
+        for axis in &self.axes {
+            let digit = match axis.radix {
+                Some(radix) => (reduced / divisor) % i128::from(radix),
+                None => reduced / divisor,
+            };
+            if digit >= (1i128 << axis.width) {
+                return None;
+            }
+            packed |= digit << axis.shift;
+            if let Some(radix) = axis.radix {
+                divisor *= i128::from(radix);
+            }
         }
-        Some((offset << 15) | (i << 10) | (m << 5) | f)
+
+        i64::try_from(packed).ok()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::spec::{AxisSpec, FieldSpec, ProjectorSpec, VerificationSpec};
+    use crate::verify::compose::Point;
+
+    fn spec_with(projector: ProjectorSpec) -> VerificationSpec {
+        let mut fields = std::collections::BTreeMap::new();
+        fields.insert(
+            "code".to_string(),
+            FieldSpec {
+                range: Some((0, 65535)),
+                alignment: None,
+                values: None,
+            },
+        );
+        VerificationSpec {
+            target: "t".into(),
+            fields,
+            encoding: None,
+            constraints: Vec::new(),
+            projector,
+        }
+    }
+
+    fn point(value: i64) -> Point {
+        Point::new(crate::verify::compose::Coordinates::new(vec![value]))
+    }
+
+    fn anchor_axes() -> Vec<AxisSpec> {
+        vec![
+            AxisSpec {
+                radix: Some(28),
+                width: 5,
+                shift: 0,
+            },
+            AxisSpec {
+                radix: Some(21),
+                width: 5,
+                shift: 5,
+            },
+            AxisSpec {
+                radix: None,
+                width: 5,
+                shift: 10,
+            },
+        ]
+    }
+
+    fn evaluator(
+        axes: Vec<AxisSpec>,
+        offset_shift: Option<u32>,
+        base: i64,
+    ) -> Box<dyn ErasedEvaluator> {
+        let spec = spec_with(ProjectorSpec::Decompose {
+            field: "code".into(),
+            base,
+            offset_shift,
+            axes,
+        });
+        ProjectorRegistry::default()
+            .resolve(&spec.projector, &spec.fields)
+            .expect("decompose is registered")
+    }
+
+    /// The general projector reproduces the syntagma anchor layout when given
+    /// that layout's parameters.
+    #[test]
+    fn decompose_reproduces_the_anchor_layout() {
+        let eval = evaluator(anchor_axes(), Some(15), 0xAC00);
+
+        assert_eq!(eval.evaluate(&point(0xAC00)), Some(0));
+        assert_eq!(
+            eval.evaluate(&point(0xAC00 + 587)),
+            Some((587 << 15) | (20 << 5) | 27)
+        );
+        assert_eq!(
+            eval.evaluate(&point(0xD7A3)),
+            Some((11_171 << 15) | (18 << 10) | (20 << 5) | 27)
+        );
+    }
+
+    #[test]
+    fn decompose_without_an_offset_term_packs_only_the_axes() {
+        let eval = evaluator(anchor_axes(), None, 0xAC00);
+        assert_eq!(eval.evaluate(&point(0xAC00 + 587)), Some((20 << 5) | 27));
+    }
+
+    #[test]
+    fn decompose_returns_none_below_the_base() {
+        let eval = evaluator(anchor_axes(), Some(15), 0xAC00);
+        assert_eq!(eval.evaluate(&point(0xABFF)), None);
+    }
+
+    /// The axis width is the only bound the projector enforces. The Tagma
+    /// domain lives in the fixture's constraints, which is why a code point
+    /// above U+D7A3 still projects here.
+    #[test]
+    fn decompose_bounds_axes_by_width_only() {
+        let eval = evaluator(
+            vec![
+                AxisSpec {
+                    radix: Some(4),
+                    width: 2,
+                    shift: 0,
+                },
+                AxisSpec {
+                    radix: None,
+                    width: 2,
+                    shift: 4,
+                },
+            ],
+            None,
+            0,
+        );
+
+        assert_eq!(eval.evaluate(&point(7)), Some(3 | (1 << 4)));
+        assert_eq!(eval.evaluate(&point(16)), None, "residual 4 does not fit");
+    }
+
+    #[test]
+    fn decompose_rejects_malformed_axes() {
+        let cases = vec![
+            (vec![], "empty"),
+            (
+                vec![AxisSpec {
+                    radix: Some(1),
+                    width: 4,
+                    shift: 0,
+                }],
+                "radix",
+            ),
+            (
+                vec![AxisSpec {
+                    radix: Some(28),
+                    width: 4,
+                    shift: 0,
+                }],
+                "cannot hold radix",
+            ),
+            (
+                vec![
+                    AxisSpec {
+                        radix: Some(4),
+                        width: 2,
+                        shift: 0,
+                    },
+                    AxisSpec {
+                        radix: Some(4),
+                        width: 2,
+                        shift: 1,
+                    },
+                ],
+                "overlaps",
+            ),
+        ];
+
+        for (axes, needle) in cases {
+            let spec = ProjectorSpec::Decompose {
+                field: "code".into(),
+                base: 0,
+                offset_shift: None,
+                axes,
+            };
+            let message = spec.validate().expect_err("must be rejected");
+            assert!(message.contains(needle), "message: {message}");
+        }
+
+        let overlapping_offset = ProjectorSpec::Decompose {
+            field: "code".into(),
+            base: 0,
+            offset_shift: Some(3),
+            axes: anchor_axes(),
+        };
+        assert!(overlapping_offset
+            .validate()
+            .expect_err("offset overlaps the axes")
+            .contains("offset_shift"));
     }
 }

@@ -19,7 +19,11 @@ impl FormatCapable for YamlFormat {
     fn parse(&self, path: &Path) -> anyhow::Result<VerificationSpec> {
         let content = std::fs::read_to_string(path).context("Failed to read YAML file")?;
         let raw: RawXif = serde_yaml::from_str(&content).context("Failed to parse YAML")?;
-        Ok(raw.into_spec())
+        let spec = raw.into_spec();
+        spec.projector
+            .validate()
+            .map_err(|message| anyhow::anyhow!("invalid projector: {message}"))?;
+        Ok(spec)
     }
 }
 

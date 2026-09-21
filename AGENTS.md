@@ -53,9 +53,10 @@ when the layout changes.
   invalid combinations are never generated. Runtime constraints (`eq`,
   `neq`, `lt`, `gt`, `le`, `ge`, `even`) are checked per emitted combination
   by `build_runtime_checks`.
-- Projector types (4): `sum`, `identity`, `parity`, `tagma_decode`. The last
-  one packs the Tagma Hangul decomposition into the syntagma anchor layout
-  `offset[28:15] i[14:10] m[9:5] f[4:0]`.
+- Projector types (4): `sum`, `identity`, `parity`, `decompose`. The last
+  one splits one field into packed mixed-radix axes; the syntagma anchor
+  layout `offset[28:15] i[14:10] m[9:5] f[4:0]` is the tagma fixture's
+  instance of it, so no target name lives in the engine.
 
 ### CLI and pipelines
 
@@ -81,9 +82,10 @@ when the layout changes.
   `StructuralEnum` against `expand_all` per fixture, including the cross
   constraint wrap regression and the enable_mask parity invariant.
 - Tagma decoder cross-channel: `tests/golden_anchor.rs` compares the
-  `tagma_decode` projections with the `tagma_core::Coord::to_axes` reference
-  engine over all 11,172 offsets, and with a generated
-  `hw/rtl/golden_anchors.hex` when `EV_TAGMA_ANCHORS` points at one.
+  `decompose` projections of the tagma fixture with the
+  `tagma_core::Coord::to_axes` reference engine over all 11,172 offsets, and
+  with a generated `hw/rtl/golden_anchors.hex` when `EV_TAGMA_ANCHORS` points
+  at one.
   `run.sh --verify` reports the artifact channel as checked or unavailable.
 - Spike backend: `src/synth/backends/spike.rs` generates a C program that
   re-implements the constraint model and the instruction-word assembly,
@@ -107,7 +109,7 @@ when the layout changes.
 ### Tests and fixtures
 
 ```bash
-cargo test --release          # 120 tests: 78 lib, 27 CLI, 8 structural,
+cargo test --release          # 126 tests: 83 lib, 28 CLI, 8 structural,
                               # 5 tagma, 2 golden anchor. None ignored.
 cargo bench -- cva6_full      # full-space CVA6 group
 cargo bench -- struct_enum_validity   # correctness guard, must stay green

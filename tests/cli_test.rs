@@ -121,6 +121,26 @@ fn verify_malformed_bad_constraint_type_exits_nonzero() {
 }
 
 #[test]
+fn verify_malformed_decompose_projector_exits_nonzero() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("verify")
+        .arg("--target")
+        .arg("tests/fixtures/common/malformed_decompose.xif.yaml")
+        .output()
+        .expect("failed to run ev verify on the malformed decompose fixture");
+    assert!(
+        !output.status.success(),
+        "a malformed projector should exit non-zero"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("invalid projector") && stderr.contains("overlaps"),
+        "stderr should name the projector and the reason: {}",
+        stderr
+    );
+}
+
+#[test]
 fn verify_enable_mask_demo_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("verify")
