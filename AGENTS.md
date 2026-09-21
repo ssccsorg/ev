@@ -67,6 +67,11 @@ when the layout changes.
   the valid subset.
 - `ev simulate` keeps `expand_all` and passes `evaluations.len()` as the
   total, so its behavior is unchanged.
+- `ev synth --target <yaml>` generates RTL from a spec and synthesizes it;
+  `ev synth --design <rtl> [--top <module>]` synthesizes an RTL file
+  directly, with the top module defaulting to the file stem (issue #46,
+  milestone 4). The two inputs are mutually exclusive, and `--top` applies
+  to `--design` only.
 - The naive path (`expand_all` + `evaluate_all`) remains for equivalence
   tests and benchmarks.
 
@@ -91,11 +96,18 @@ when the layout changes.
 - Coverage gate: `scripts/coverage.sh` (cargo-llvm-cov, 80% lines and 80%
   regions) exercises the Spike, Yosys, and simulation backends with the
   instrumented binary.
+- Synthesis channel: `YosysBackend` runs `read_verilog -sv`, `hierarchy`,
+  `proc`, `synth`, then `tee -o <file> stat -json`. The report is read from
+  `design` (aggregate) with `modules[\<top>]` as the fallback and the source
+  of the per-cell-type breakdown. `--design` on
+  `syntagma/hw/rtl/tagma_decoder.v` reports 478 cells, the number the
+  syntagma generic flow reports for the same RTL; a design input that
+  yields no gate count fails `run.sh --verify`.
 
 ### Tests and fixtures
 
 ```bash
-cargo test --release          # 107 tests: 73 lib, 19 CLI, 8 structural,
+cargo test --release          # 118 tests: 77 lib, 26 CLI, 8 structural,
                               # 5 tagma, 2 golden anchor. None ignored.
 cargo bench -- cva6_full      # full-space CVA6 group
 cargo bench -- struct_enum_validity   # correctness guard, must stay green
@@ -188,8 +200,6 @@ become a version.
 
 ## Open Work
 
-- `ev synth --design` for an RTL-only synthesis input, so the Tagma decoder
-  report comes from the ev Yosys backend (issue #46, milestone 4).
 - Issue #44: execute the accepted CVA6 custom-3 encodings through the
   standard CVA6 tandem flow, which needs the external CVA6 repository.
 - Issue #18: `--interpret` for failure explanation, re-scoped to an

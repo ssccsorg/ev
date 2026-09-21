@@ -64,7 +64,7 @@ impl RunSynthesis for YosysBackend {
         // string quoting the same way. So keep module names unquoted.
         let script = format!(
             "read_verilog -sv {sv}; hierarchy -top {top}; proc; synth -top {top}; \
-             stat -json > {stat}; write_json {netlist}; \
+             tee -o {stat} stat -json; write_json {netlist}; \
              show -format dot -prefix {prefix} {top};",
             sv = sv_path_str,
             top = top_module,
@@ -115,33 +115,13 @@ impl RunSynthesis for YosysBackend {
             None
         };
 
-        let mut gate_count: Option<u64> = None;
-        let mut cell_area: Option<f64> = None;
+        let summary = parse_stat(stat_data.as_ref(), top_module);
+        let gate_count = summary.gate_count;
+        let cell_area = summary.cell_area;
         let mut extra = serde_json::json!({});
 
-        if let Some(ref data) = stat_data {
-            let top = data.get("top_module").or_else(|| data.get("design"));
-            gate_count = top
-                .and_then(|t| t.get("num_cells"))
-                .and_then(|v| v.as_u64());
-            cell_area = top.and_then(|t| t.get("area")).and_then(|v| v.as_f64());
-            let cell_types = data
-                .get("modules")
-                .and_then(|m| m.get(top_module))
-                .and_then(|m| m.get("cells"))
-                .and_then(|c| c.as_object())
-                .map(|obj| {
-                    obj.iter()
-                        .filter(|(_, v)| v.as_u64().is_some_and(|n| n > 0))
-                        .map(|(k, v)| (k.clone(), v.clone()))
-                        .collect::<serde_json::Map<_, _>>()
-                })
-                .filter(|m| !m.is_empty())
-                .map(serde_json::Value::Object);
-
-            if let Some(ct) = cell_types {
-                extra["cell_types"] = ct;
-            }
+        if let Some(cell_types) = summary.cell_types {
+            extra["cell_types"] = serde_json::Value::Object(cell_types);
         }
 
         // ── DOT output ────────────────────────────────────────────────
@@ -218,4 +198,117 @@ fn find_yosys() -> anyhow::Result<std::path::PathBuf> {
         .ok_or_else(|| {
             anyhow::anyhow!("yosys not found in PATH. Install yosys or set PATH accordingly.")
         })
+}
+
+/// Metrics read out of a yosys `stat -json` report.
+#[derive(Debug, Default, PartialEq)]
+struct StatSummary {
+    gate_count: Option<u64>,
+    cell_area: Option<f64>,
+    cell_types: Option<serde_json::Map<String, serde_json::Value>>,
+}
+
+/// Read the gate count, cell area, and cell types out of a `stat -json`
+/// report.
+///
+/// yosys emits aggregate counts under `design` and per-module counts under
+/// `modules`, keyed by the escaped module name (`\top`). The aggregate is
+/// preferred because it is the number the synthesis scripts in syntagma
+/// report for the same RTL; the module entry is the fallback and the only
+/// source of the per-cell-type breakdown.
+fn parse_stat(stat: Option<&serde_json::Value>, top_module: &str) -> StatSummary {
+    let Some(stat) = stat else {
+        return StatSummary::default();
+    };
+
+    let aggregate = stat.get("design").or_else(|| stat.get("top_module"));
+    let module = stat.get("modules").and_then(|modules| {
+        modules
+            .get(top_module)
+            .or_else(|| modules.get(format!("\\{top_module}")))
+    });
+
+    let value = |key: &str| {
+        aggregate
+            .and_then(|stats| stats.get(key))
+            .or_else(|| module.and_then(|stats| stats.get(key)))
+    };
+
+    StatSummary {
+        gate_count: value("num_cells").and_then(|v| v.as_u64()),
+        cell_area: value("area").and_then(|v| v.as_f64()),
+        cell_types: module
+            .and_then(|stats| stats.get("num_cells_by_type"))
+            .and_then(|types| types.as_object())
+            .map(|types| {
+                types
+                    .iter()
+                    .filter(|(_, count)| count.as_u64().is_some_and(|n| n > 0))
+                    .map(|(name, count)| (name.clone(), count.clone()))
+                    .collect::<serde_json::Map<_, _>>()
+            })
+            .filter(|types| !types.is_empty()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Shaped like `yosys -p "...; stat -json"` on yosys 0.65: aggregate
+    /// counts under `design`, per-module counts under the escaped name.
+    fn yosys_stat_report() -> serde_json::Value {
+        serde_json::json!({
+            "creator": "Yosys 0.65",
+            "design": {
+                "num_cells": 478,
+                "num_wires": 480,
+                "num_cells_by_type": { "$_AND_": 82, "$_XOR_": 71 },
+            },
+            "modules": {
+                "\\tagma_decoder": {
+                    "num_cells": 478,
+                    "num_cells_by_type": { "$_AND_": 82, "$_XOR_": 71 },
+                },
+            },
+        })
+    }
+
+    #[test]
+    fn parse_stat_reads_the_aggregate_and_the_cell_types() {
+        let report = yosys_stat_report();
+        let summary = parse_stat(Some(&report), "tagma_decoder");
+
+        assert_eq!(summary.gate_count, Some(478));
+        assert_eq!(summary.cell_area, None, "area needs -liberty");
+        let types = summary.cell_types.expect("cell types are reported");
+        assert_eq!(types.len(), 2);
+        assert_eq!(types.get("$_AND_"), Some(&serde_json::json!(82)));
+    }
+
+    #[test]
+    fn parse_stat_falls_back_to_the_module_entry() {
+        let mut report = yosys_stat_report();
+        report.as_object_mut().expect("object").remove("design");
+
+        let summary = parse_stat(Some(&report), "tagma_decoder");
+        assert_eq!(summary.gate_count, Some(478));
+    }
+
+    #[test]
+    fn parse_stat_handles_a_missing_report() {
+        let summary = parse_stat(None, "tagma_decoder");
+        assert_eq!(summary, StatSummary::default());
+    }
+
+    #[test]
+    fn parse_stat_ignores_a_module_that_is_not_in_the_report() {
+        let report = yosys_stat_report();
+        let mut report = report.clone();
+        report.as_object_mut().expect("object").remove("design");
+
+        let summary = parse_stat(Some(&report), "other_module");
+        assert_eq!(summary.gate_count, None);
+        assert_eq!(summary.cell_types, None);
+    }
 }

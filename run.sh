@@ -81,9 +81,26 @@ verify_synth() {
     # Fact envelope must contain fact_type; status is inside payload
     grep -q '"fact_type": "synthesis_result"' "$tmpf" || { cat "$tmpe"; echo "FAILED: missing fact_type"; exit 1; }
     # Check that payload is non-empty and contains status='ok'
-    python3 -c "import json,sys; d=json.load(open('$tmpf')); p=json.loads(bytes(d['payload']).decode()); assert p['status']=='ok', f'status: {p[\"status\"]}'" || { cat "$tmpe"; echo "FAILED: synthesis status not ok"; exit 1; }
+    python3 -c "import json,sys; d=json.load(open('$tmpf')); p=json.loads(bytes(d['payload']).decode()); assert p['status']=='ok', f'status: {p[\"status\"]}'; assert p['gate_count'] is not None, 'gate_count is null (stat -json parsing)'" || { cat "$tmpe"; echo "FAILED: synthesis payload incomplete"; exit 1; }
     echo "  ok"
     rm -f "$tmpf" "$tmpe"
+
+    # Design-only input: the RTL is synthesized as committed, and the
+    # metrics must come back populated. A null gate count means the stat
+    # report was not written or not parsed.
+    echo "=== synthesis (design-only) ==="
+    local design_out design_ec=0
+    design_out=$(_yosys "$EV" synth --design tests/fixtures/rtl/decode_demo.v --top decode_demo 2>&1) || design_ec=$?
+    echo "$design_out"
+    if [ "$design_ec" -ne 0 ] || ! echo "$design_out" | grep -q "\[ok\]"; then
+        echo "  FAILED: design-only synthesis did not report ok"
+        VERIFY_FAILED=1
+    elif ! echo "$design_out" | grep -q "gate count: Some("; then
+        echo "  FAILED: design-only synthesis reported no gate count"
+        VERIFY_FAILED=1
+    else
+        echo "  ok"
+    fi
 }
 
 check_spike() {

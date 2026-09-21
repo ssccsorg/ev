@@ -69,6 +69,7 @@ cargo build --release
 ev verify --target tests/fixtures/common/all_pass.xif.yaml
 ev verify --target tests/fixtures/common/sample.xif.yaml --json
 ev synth --target tests/fixtures/common/all_pass.xif.yaml
+ev synth --design tests/fixtures/rtl/decode_demo.v --top decode_demo
 ev simulate --target tests/fixtures/common/all_pass.xif.yaml
 cargo test --release
 ```
@@ -78,7 +79,8 @@ cargo test --release
 ```
 ev verify    --target <file> [--format <fmt>]  # Static constraint verification
 ev simulate  --target <file> [--format <fmt>]  # C/Rust recheck under Spike/mock
-ev synth     --target <file> [--json]          # SystemVerilog + Yosys synthesis
+ev synth     --target <file> [--json]          # Generate RTL from a spec, then synthesize it
+ev synth     --design <file> [--top <mod>]     # Synthesize an RTL file directly
 ev fact decode                                  # Decode Fact JSON from stdin
 ```
 
@@ -204,9 +206,10 @@ Valid counts below are the `evaluate_all` results on the committed fixtures
 | struct_enum benchmark (same machine, release) | 18.8 ms |
 | Spike backend | C/Rust recheck: 196,608 / 196,608 agree |
 | Tagma decoder cross-channel | 11,172 / 11,172 projections equal `tagma_core::Coord::to_axes`; the generated `golden_anchors.hex` matches line by line when `EV_TAGMA_ANCHORS` is set |
+| Synthesis channel | `--design` on the syntagma Tagma decoder reports 478 cells, the number the syntagma generic Yosys flow reports for the same RTL; `--target` on `all_pass` reports 28 |
 | Constraint types | 13 (range, even, eq, neq, lt, gt, le, ge, oneof, cross, bitmask, enable_mask, enable_set) |
 | Projector types | 4 (sum, identity, parity, tagma_decode) |
-| Tests | 107 (73 lib + 19 CLI + 8 structural + 5 tagma + 2 golden anchor), all passing, none ignored |
+| Tests | 118 (77 lib + 26 CLI + 8 structural + 5 tagma + 2 golden anchor), all passing, none ignored |
 | Coverage gate | 80% lines / 80% regions (llvm-cov, all modules incl. Spike/Yosys backends) |
 | Simulation backends | Mock (default), Spike (`EV_SIM_BACKEND=spike`) |
 
@@ -247,7 +250,8 @@ tests/
     cva6/           5 YAML fixture files
     ibex/           3 YAML fixture files
     tagma/          2 YAML fixture files
-  cli_test.rs       19 integration tests
+    rtl/            1 Verilog design fixture
+  cli_test.rs       26 integration tests
   structural_enum.rs 8 structural enumeration regression tests
   tagma_fixture.rs  5 Tagma fixture tests
   golden_anchor.rs  2 tagma golden anchor cross-channel tests

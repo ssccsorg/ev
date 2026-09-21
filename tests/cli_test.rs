@@ -279,6 +279,171 @@ fn synth_tagma_decoder_with_mock_backend() {
 }
 
 #[test]
+fn synth_design_uses_the_file_stem_as_top() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("synth")
+        .arg("--design")
+        .arg("tests/fixtures/rtl/decode_demo.v")
+        .env("EV_SYNTH_BACKEND", "mock")
+        .output()
+        .expect("failed to run ev synth --design");
+    assert!(output.status.success(), "ev synth --design should exit 0");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Synthesis: decode_demo [ok]"),
+        "--design without --top should resolve the file stem: {}",
+        stdout
+    );
+}
+
+#[test]
+fn synth_design_honours_the_top_override() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("synth")
+        .arg("--design")
+        .arg("tests/fixtures/rtl/decode_demo.v")
+        .arg("--top")
+        .arg("decode_demo_helper")
+        .env("EV_SYNTH_BACKEND", "mock")
+        .output()
+        .expect("failed to run ev synth --design --top");
+    assert!(
+        output.status.success(),
+        "ev synth --design --top should exit 0"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Synthesis: decode_demo_helper [ok]"),
+        "--top should select the module: {}",
+        stdout
+    );
+}
+
+#[test]
+fn synth_design_json_names_the_design_source() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("synth")
+        .arg("--design")
+        .arg("tests/fixtures/rtl/decode_demo.v")
+        .arg("--json")
+        .env("EV_SYNTH_BACKEND", "mock")
+        .output()
+        .expect("failed to run ev synth --design --json");
+    assert!(
+        output.status.success(),
+        "ev synth --design --json should exit 0"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let fact: serde_json::Value =
+        serde_json::from_str(&stdout).expect("ev synth --json should emit a Fact envelope");
+    assert_eq!(fact["fact_type"], "synthesis_result", "fact type");
+    assert_eq!(
+        fact["target"], "decode_demo",
+        "the fact target is the resolved top module"
+    );
+
+    // The payload is an opaque byte vector in the envelope, so decode it the
+    // way a consumer would and check that it names the design file rather
+    // than RTL generated from a spec.
+    let payload_bytes = fact["payload"]
+        .as_array()
+        .expect("the payload should be a byte array")
+        .iter()
+        .map(|byte| byte.as_u64().expect("payload bytes are numbers") as u8)
+        .collect::<Vec<u8>>();
+    let payload: serde_json::Value =
+        serde_json::from_slice(&payload_bytes).expect("the payload should be JSON");
+    let source = payload["source"].as_str().expect("payload source");
+    assert!(
+        source.contains("decode_demo.v") && !source.contains("tmp"),
+        "the source should be the design file: {source}"
+    );
+}
+
+#[test]
+fn synth_design_missing_file_fails() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("synth")
+        .arg("--design")
+        .arg("tests/fixtures/rtl/absent.v")
+        .env("EV_SYNTH_BACKEND", "mock")
+        .output()
+        .expect("failed to run ev synth --design on a missing file");
+    assert!(
+        !output.status.success(),
+        "a missing design file should fail"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("design file not found"),
+        "the error should name the cause: {}",
+        stderr
+    );
+}
+
+#[test]
+fn synth_requires_target_or_design() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("synth")
+        .output()
+        .expect("failed to run bare ev synth");
+    assert!(
+        !output.status.success(),
+        "ev synth without an input should fail"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("--design"),
+        "the error should name the required argument: {}",
+        stderr
+    );
+}
+
+#[test]
+fn synth_rejects_target_with_top() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("synth")
+        .arg("--target")
+        .arg("tests/fixtures/common/all_pass.xif.yaml")
+        .arg("--top")
+        .arg("decode_demo")
+        .output()
+        .expect("failed to run ev synth --target --top");
+    assert!(
+        !output.status.success(),
+        "--top is a --design-only option and should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("cannot be used with"),
+        "the error should explain the conflict: {}",
+        stderr
+    );
+}
+
+#[test]
+fn synth_rejects_target_with_design() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("synth")
+        .arg("--target")
+        .arg("tests/fixtures/common/all_pass.xif.yaml")
+        .arg("--design")
+        .arg("tests/fixtures/rtl/decode_demo.v")
+        .output()
+        .expect("failed to run ev synth --target --design");
+    assert!(
+        !output.status.success(),
+        "--target and --design are mutually exclusive"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("cannot be used with"),
+        "the error should explain the conflict: {}",
+        stderr
+    );
+}
+
+#[test]
 fn verify_cva6_xif_ref_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("verify")
