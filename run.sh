@@ -32,6 +32,8 @@ fi
 EV=./target/release/ev
 ALL_PASS=tests/fixtures/common/all_pass.xif.yaml
 MIXED=tests/fixtures/common/sample.xif.yaml
+# Sibling syntagma checkout, used for the golden anchor artifact channel.
+SYNTAGMA_DIR="${SYNTAGMA_DIR:-../syntagma}"
 
 # ── Helpers ───────────────────────────────────────────────────────────
 
@@ -188,6 +190,42 @@ verify_large_fixtures() {
     cargo bench --bench bench -- "struct_enum/ibex|struct_enum/cva6" 2>&1 | grep -E 'struct_enum|time:' | head -6
 }
 
+# Cross-channel check of the tagma_decode projector. The reference engine
+# (tagma_core::Coord::to_axes) is always available; a generated
+# golden_anchors.hex adds the line-by-line artifact channel when one is at
+# hand. An unavailable artifact is reported, never passed over silently.
+verify_golden_anchors() {
+    echo "=== tagma golden anchor cross-channel check ==="
+    echo "  reference engine: tagma_core::Coord::to_axes (11,172 offsets)"
+
+    # A supplied path that is not a readable file is a misconfiguration rather
+    # than a missing artifact: report that reason and stop.
+    if [ -n "${EV_TAGMA_ANCHORS:-}" ] && [ ! -f "${EV_TAGMA_ANCHORS}" ]; then
+        echo "  FAILED: EV_TAGMA_ANCHORS is not a readable file: ${EV_TAGMA_ANCHORS}"
+        VERIFY_FAILED=1
+        return 1
+    fi
+
+    local anchors="${EV_TAGMA_ANCHORS:-}"
+    if [ -z "$anchors" ] && [ -f "${SYNTAGMA_DIR}/hw/rtl/golden_anchors.hex" ]; then
+        anchors="${SYNTAGMA_DIR}/hw/rtl/golden_anchors.hex"
+    fi
+
+    local ec=0
+    if [ -n "$anchors" ]; then
+        echo "  anchor file: ${anchors}"
+        EV_TAGMA_ANCHORS="$anchors" cargo test --release --test golden_anchor || ec=$?
+    else
+        echo "  anchor file: unavailable (set EV_TAGMA_ANCHORS, or SYNTAGMA_DIR with hw/rtl/golden_anchors.hex)"
+        env -u EV_TAGMA_ANCHORS cargo test --release --test golden_anchor || ec=$?
+    fi
+    if [ "$ec" -ne 0 ]; then
+        echo "  FAILED: the tagma cross-channel check did not pass (see the test output above)"
+        VERIFY_FAILED=1
+    fi
+    return "$ec"
+}
+
 # ── Modes ─────────────────────────────────────────────────────────────
 
 case ${1:-} in
@@ -229,6 +267,7 @@ case ${1:-} in
         verify_synth || true
         verify_fixtures || true
         verify_large_fixtures || true
+        verify_golden_anchors || true
         verify_sim || true
         echo ""
         if [ "$VERIFY_FAILED" -ne 0 ]; then
@@ -272,6 +311,7 @@ case ${1:-} in
         verify_synth || true
         verify_fixtures || true
         verify_large_fixtures || true
+        verify_golden_anchors || true
         verify_sim || true
         echo ""
         if [ "$VERIFY_FAILED" -ne 0 ]; then

@@ -203,9 +203,10 @@ Valid counts below are the `evaluate_all` results on the committed fixtures
 | Previous CLI time (expand_all, release) | 13.1 s (benched evaluate) |
 | struct_enum benchmark (same machine, release) | 18.8 ms |
 | Spike backend | C/Rust recheck: 196,608 / 196,608 agree |
+| Tagma decoder cross-channel | 11,172 / 11,172 projections equal `tagma_core::Coord::to_axes`; the generated `golden_anchors.hex` matches line by line when `EV_TAGMA_ANCHORS` is set |
 | Constraint types | 13 (range, even, eq, neq, lt, gt, le, ge, oneof, cross, bitmask, enable_mask, enable_set) |
 | Projector types | 4 (sum, identity, parity, tagma_decode) |
-| Tests | 105 (73 lib + 19 CLI + 5 tagma + 8 structural), all passing, none ignored |
+| Tests | 107 (73 lib + 19 CLI + 8 structural + 5 tagma + 2 golden anchor), all passing, none ignored |
 | Coverage gate | 80% lines / 80% regions (llvm-cov, all modules incl. Spike/Yosys backends) |
 | Simulation backends | Mock (default), Spike (`EV_SIM_BACKEND=spike`) |
 
@@ -255,6 +256,8 @@ Backends are pluggable via environment variables:
 | `EV_SPIKE_BIN` | path | Spike binary location |
 | `EV_PK_PATH` | path | Proxy kernel for Spike |
 | `EV_RISCV_CC` | command | RISC-V cross-compiler |
+| `EV_TAGMA_ANCHORS` | path | Generated `hw/rtl/golden_anchors.hex` for the tagma artifact channel |
+| `SYNTAGMA_DIR` | path | Sibling syntagma checkout (default `../syntagma`), the artifact-channel fallback |
 
 ## Prerequisites
 
