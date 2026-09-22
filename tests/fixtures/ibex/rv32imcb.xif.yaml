@@ -1,11 +1,19 @@
 # Ibex RV32IMCB ALU encoding space.
 #
-# Models the OPCODE_OP (0x33) register-register ALU operation decoding
-# of the Ibex RISC-V core, verified against ibex/rtl/ibex_decoder.sv
-# OPCODE_OP case statement.
+# Models the OPCODE_OP (0x33) register-register ALU operation decoding of the
+# Ibex RISC-V core. The mapping is transcribed from ibex/rtl/ibex_decoder.sv
+# at commit f4540774 (master, 2026-05-27), the file digest and the assumed
+# configuration are pinned in tests/fixtures/ibex/decoder_pin.json.
 #
-# Assumes RV32BFull and RV32MFast are enabled. funct7[6:0] + funct3[2:0]
-# select the ALU operation per the RISC-V specification and Ibex decoder.
+# The transcription is not compared with the decoder by a gate. The decoder
+# states legality as behavioural casez code rather than as a table, so
+# deriving the accepted pairs from it is its own subject (issue #62). The pin
+# detects a decoder change; it does not by itself confirm the pairs below.
+# tests/ibex_source_pin.rs checks the pin when a checkout is at hand.
+#
+# Assumes RV32BFull and RV32MFast are enabled (LV_A == LV_B == 0).
+# funct7[6:0] + funct3[2:0] select the ALU operation per the RISC-V
+# specification and the Ibex decoder.
 #
 # Verification space: 128 x 8 x 8 x 8 x 8 = 524,288 raw combinations
 # Valid (after constraints): 180 funct7/funct3 pairs x 512 register combos

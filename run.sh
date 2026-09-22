@@ -273,6 +273,29 @@ verify_cva6_derivation() {
     return "$ec"
 }
 
+# Ibex source pin: the two RV32IMCB fixtures state the decoder file they were
+# transcribed from. A checkout at hand (IBEX_DIR, default ../ibex) is compared
+# with the pin, digest first. An unavailable checkout is reported, never passed
+# over silently, and the pin's coverage of the fixture files is checked
+# wherever the tests run.
+verify_ibex_source() {
+    echo "=== ibex source pin ==="
+    local dir="${IBEX_DIR:-../ibex}"
+    if [ -f "${dir}/rtl/ibex_decoder.sv" ]; then
+        echo "  source checkout: ${dir} (the pin is compared)"
+    else
+        echo "  source checkout: unavailable (set IBEX_DIR to an Ibex checkout)"
+    fi
+
+    local ec=0
+    cargo test --release --test ibex_source_pin -- --nocapture || ec=$?
+    if [ "$ec" -ne 0 ]; then
+        echo "  FAILED: the ibex source pin did not match (see the test output above)"
+        VERIFY_FAILED=1
+    fi
+    return "$ec"
+}
+
 # ── Modes ─────────────────────────────────────────────────────────────
 
 case ${1:-} in
@@ -316,6 +339,7 @@ case ${1:-} in
         verify_large_fixtures || true
         verify_golden_anchors || true
         verify_cva6_derivation || true
+        verify_ibex_source || true
         verify_sim || true
         echo ""
         if [ "$VERIFY_FAILED" -ne 0 ]; then
@@ -361,6 +385,7 @@ case ${1:-} in
         verify_large_fixtures || true
         verify_golden_anchors || true
         verify_cva6_derivation || true
+        verify_ibex_source || true
         verify_sim || true
         echo ""
         if [ "$VERIFY_FAILED" -ne 0 ]; then

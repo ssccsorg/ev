@@ -104,6 +104,15 @@ when the layout changes.
   `../cva6`) it re-extracts the table and checks the commit and the file
   digests; `run.sh --verify` reports the source channel as checked or
   unavailable.
+- Ibex source pin: `tests/ibex_source_pin.rs` compares a checkout with
+  `tests/fixtures/ibex/decoder_pin.json`, which pins `rtl/ibex_decoder.sv` at
+  `f4540774` (the digest, the assumed configuration, and the two `rv32imcb*`
+  fixture files it covers). The digest is the hard check and the revision is
+  reported, so a checkout at another commit describing the same decoder passes
+  with a note. The fixture digests are checked wherever the tests run, so a
+  fixture edit has to restate the pin. No gate compares the fixtures'
+  `(funct7, funct3)` mapping with the decoder yet, which is why issue #62
+  exists and why the fixture headers say `transcribed from`.
 - Coverage gate: `scripts/coverage.sh` (cargo-llvm-cov, 80% lines and 80%
   regions) exercises the Spike, Yosys, and simulation backends with the
   instrumented binary.
@@ -118,12 +127,13 @@ when the layout changes.
 ### Tests and fixtures
 
 ```bash
-cargo test --release          # 130 tests: 83 lib, 28 CLI, 8 structural,
-                              # 5 tagma, 2 golden anchor, 4 derivation. None ignored.
+cargo test --release          # 132 tests: 83 lib, 28 CLI, 8 structural,
+                              # 5 tagma, 2 golden anchor, 4 derivation, 2 source pin.
+                              # None ignored.
 cargo bench -- cva6_full      # full-space CVA6 group
 cargo bench -- struct_enum_validity   # correctness guard, must stay green
 ./run.sh                      # fmt, clippy, build, test, verify
-./run.sh --verify             # Yosys, fixtures, golden anchors, derivation gate, Spike
+./run.sh --verify             # Yosys, fixtures, golden anchors, derivation gate, source pin, Spike
 ./run.sh --demo               # channel demo: the ssccs POC assembly golden anchors
 ./run.sh --coverage           # coverage gate
 ```
@@ -166,6 +176,7 @@ Fixture Provenance table; keep the counts in step between the two.
 | `SYNTAGMA_DIR` | path | Sibling syntagma checkout (default `../syntagma`), the artifact-channel fallback |
 | `CVA6_DIR` | path | Sibling CVA6 checkout (default `../cva6`) for the derivation gate's source channel |
 | `EV_UPDATE_MASK_TABLE` | `1` | Rewrite `tests/fixtures/cva6/mask_table.json` from a checkout at the pinned commit |
+| `IBEX_DIR` | path | Sibling Ibex checkout (default `../ibex`) for the source pin's checkout channel |
 
 ## Key Design Decisions
 
@@ -226,8 +237,11 @@ become a version.
 
 ## Open Work
 
-- Issue #58: pin the Ibex source revision for the `rv32imcb*` fixtures and add
-  the source channel that mirrors the CVA6 derivation gate.
+- Issue #62: derive the Ibex fixture mapping from the decoder's `case`
+  statement. The decoder is behavioural code rather than a table, so this is a
+  reader for an RTL subset and a capability decision, not fixture hygiene. The
+  alternative, if the reader is not wanted, is to restate what the fixtures'
+  claim actually rests on.
 - Issue #44: execute the accepted CVA6 custom-3 encodings through the
   standard CVA6 tandem flow, which needs the external CVA6 repository. A
   sample's DV environment stays a sample concern: the encoding contract is
