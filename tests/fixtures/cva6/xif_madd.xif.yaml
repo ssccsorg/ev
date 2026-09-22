@@ -1,8 +1,8 @@
 # CVA6 CV-X-IF MADD/MSUB opcode space.
 #
-# Hardware decoder mask table (cvxif_instr_pkg.sv) entries using
-# MADD opcode (0x43), MSUB opcode (0x47), NMSUB opcode (0x4B),
-# and NMADD opcode (0x4F) — NOT custom3 (0x7B).
+# Hardware decoder mask table (cvxif_instr_pkg.sv at commit 6544a714c) entries
+# using MADD opcode (0x43), MSUB opcode (0x47), NMSUB opcode (0x4B),
+# and NMADD opcode (0x4F), NOT custom3 (0x7B).
 #
 # These are R4-format multiply-accumulate instructions with rs3 (3 register reads):
 #   MADD_RS3_R4  opcode 0x43, funct3=000: result = rs1 + rs2 + rs3

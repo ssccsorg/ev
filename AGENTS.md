@@ -149,6 +149,10 @@ cross + enable_mask, identity projector). It is not an Ibex hardware model:
 Ibex exposes standard extensions through compile-time parameters, and its
 decoder fixtures are the `ibex/rv32imcb*.xif.yaml` pair (issue #36).
 
+The table above is the count reference. The fixture inventory, with each
+fixture's source, revision, derivation, and covering gate, is the README's
+Fixture Provenance table; keep the counts in step between the two.
+
 ### Backends and environment
 
 | Variable | Values | Effect |
@@ -177,6 +181,14 @@ decoder fixtures are the `ibex/rv32imcb*.xif.yaml` pair (issue #36).
 5. The structural pipeline is the default and the naive pipeline is the
    reference it is tested against; keep both, and keep the count invariants
    pinned per fixture.
+6. Target-specific knowledge lives in the fixture and the spec, never in the
+   engine. The engine knows fields, bit positions, constraints, and
+   projectors; a sample's name, its constants, and its sub-decoding belong to
+   the fixture that states them. Two incidents created the rule: a projector
+   carried a sample's name and base inside the engine (#55), and fixtures left
+   a field free that the decoder pins (#56). A projector or engine path that
+   names a core is a regression, and `tests/cva6_derivation.rs` is the guard
+   on the fixture side.
 
 ## How to Extend
 
@@ -214,8 +226,14 @@ become a version.
 
 ## Open Work
 
+- Issue #58: pin the Ibex source revision for the `rv32imcb*` fixtures and add
+  the source channel that mirrors the CVA6 derivation gate.
+- Issue #59: assert the four counts that are documented but not checked
+  (`xif_encoding`, `csr_access`, `all_pass`, `sample`).
 - Issue #44: execute the accepted CVA6 custom-3 encodings through the
-  standard CVA6 tandem flow, which needs the external CVA6 repository.
+  standard CVA6 tandem flow, which needs the external CVA6 repository. A
+  sample's DV environment stays a sample concern: the encoding contract is
+  checked by the derivation gate, without the external repository.
 - Issue #18: `--interpret` for failure explanation, re-scoped to an
   OpenAI-compatible endpoint instead of a bespoke provider client.
 - Fact ingestion: ev's `Fact` (blob payload with `fact_type`) is not the
