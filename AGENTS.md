@@ -26,6 +26,16 @@ issues #64, #65, and #68 are about, and to keep its engine one implementation
 behind a capability interface (#67) so a more specialized verifier can be
 routed in without changing what ev emits.
 
+The engine is a vessel rather than the differentiator. The classification
+behind the capability seam (#67) may be imported: an engine with different
+performance, different accuracy, or coverage of another chip family can be
+routed in without changing what ev emits, so breadth of targets is not ev's to
+grow. The samples under `tests/fixtures/` exercise the vessel and its
+channels, and what is ev's own is the machinery that makes an imported spec
+trustworthy: a spec states its source, the derivation from that source is
+checked where it can be mechanical, and the source is pinned where it cannot
+(#56, #58, #62).
+
 ## Architecture
 
 ```text
