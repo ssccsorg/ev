@@ -46,19 +46,22 @@ byte-identical. Text and CSV matched byte for byte with no normalisation.
 `verify_common_enable_mask_demo.json` differed in `spec_hash` and in every
 entry `id` derived from it. The refactor did not touch `hash_spec`; the fixture
 had already been hashing nondeterministically. Confirmed by running the same
-binary repeatedly:
+binary repeatedly, eight runs per fixture over all sixteen committed specs:
 
 ```
-common/enable_mask_demo      NONDETERMINISTIC distinct=4
-cva6/xif_ref_r4              NONDETERMINISTIC distinct=2
-cva6/xif_ref                 NONDETERMINISTIC distinct=2
-cva6/xif_encoding            NONDETERMINISTIC distinct=5
-ibex/rv32imcb                NONDETERMINISTIC distinct=6
+fixtures tested: 16
+nondeterministic: 6
+  common/enable_mask_demo        distinct=3/8
+  cva6/xif_encoding              distinct=5/8
+  cva6/xif_ref                   distinct=2/8
+  cva6/xif_ref_r4                distinct=2/8
+  ibex/rv32imcb                  distinct=8/8
+  ibex/rv32imcb_imm              distinct=2/8
 ```
 
-Six runs per fixture. Five of the twelve committed fixtures produce a different
-`spec_hash` on identical input, and they are exactly the fixtures with a
-multi-entry `cross` constraint. `ConstraintSpec::Cross` holds
+Six of the thirteen parseable fixtures produce a different `spec_hash` on
+identical input, and they are exactly the six with a `cross` constraint, so the
+correlation is complete in both directions. `ConstraintSpec::Cross` holds
 `mapping: HashMap<i64, Vec<i64>>`, and `hash_spec` formats the constraint with
 `{:?}`. `Debug` for a `HashMap` iterates in `RandomState` order, which is
 seeded per process, so the address of the space moves between runs.
