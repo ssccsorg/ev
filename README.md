@@ -5,8 +5,10 @@ Apache 2.0.
 
 ev verifies instruction encoding spaces, and a target is described by its
 spec alone: the fields, their bit positions in the word, and the constraints
-between them. No constraint type or projector carries a target's name or
-constant. The cores and designs that appear here, CVA6, Ibex, and the Tagma
+between them. A run classifies every point of that space and nothing else, and
+identical runs produce identical records; there is no sampling and no
+probabilistic claim. No constraint type or projector carries a target's name
+or constant. The cores and designs that appear here, CVA6, Ibex, and the Tagma
 decoder, are samples that exercise the engine and its channels, and each one
 is derived from that project's own source rather than restated from memory.
 

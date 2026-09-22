@@ -200,6 +200,13 @@ Fixture Provenance table; keep the counts in step between the two.
    a field free that the decoder pins (#56). A projector or engine path that
    names a core is a regression, and `tests/cva6_derivation.rs` is the guard
    on the fixture side.
+7. ev makes no probabilistic claim. A run classifies every point of the
+   declared space and nothing else, and identical runs produce identical
+   records. Sampling, coverage percentages, and confidence bounds are outside
+   the concept: a claim that rests on a sample belongs to a different tool, and
+   comparing against such a tool measures that tool. The one percentage here is
+   the code-coverage gate, which measures this repository's test suite and
+   never a verification claim.
 
 ## How to Extend
 
