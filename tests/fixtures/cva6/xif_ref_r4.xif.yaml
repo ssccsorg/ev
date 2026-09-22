@@ -14,8 +14,13 @@
 #
 # The NOP entry mask checks all funct7 bits, which in R4 terms are func2
 # (bits[26:25]) plus rs3 (bits[31:27]); funct3=000 therefore accepts func2=00
-# with rs3=0 only. rs3 is not a modeled field and is fixed to 0, so ADD_RS3_R
-# (rs3[0]=1) is not representable and passes through as ADD.
+# with rs3=0 only. `rs3` is declared and fixed to 0, matching the table:
+# ADD_RS3_R requires rs3[0]=1, so its restriction to this fixture's field
+# domains is empty and the entry accepts no word here.
+#
+# `opcode` is declared and fixed to 0x7B for the same reason as in
+# `xif_ref.xif.yaml`: the table's MADD-family entries belong to another opcode
+# space. `tests/cva6_derivation.rs` re-derives both fixtures from the table.
 #
 # The DV class (cvxif_custom_instr.sv) additionally generates encodings that
 # the reference coprocessor decoder does NOT accept (CUS_U_ADD, CUS_S_ADD,
@@ -28,6 +33,8 @@
 target: cva6_xif_ref_r4
 encoding: r4
 fields:
+  opcode:
+    values: [0x7B]
   funct3:
     range: [0, 7]
   func2:
@@ -36,6 +43,8 @@ fields:
     range: [0, 3]
   rs2:
     range: [0, 31]
+  rs3:
+    values: [0]
   rd:
     range: [0, 3]
 constraints:

@@ -6,8 +6,9 @@ Apache 2.0.
 33.5 million combinations verified deterministically in about 0.2 s (release)
 through the structural enumeration pipeline, which is the CLI default since
 issue #42. The CVA6 fixtures are derived from the hardware decoder mask
-table (commit `6544a714c`); the Spike backend cross-checks the constraint
-model and instruction-word assembly in C.
+table (`6544a714c`), and `tests/cva6_derivation.rs` re-derives the three of
+them that cite the table against a committed extraction of it; the Spike
+backend cross-checks the constraint model and instruction-word assembly in C.
 
 ## What It Does
 
@@ -190,7 +191,7 @@ Valid counts below are the `evaluate_all` results on the committed fixtures
 | `cva6/xif_ref.xif.yaml` | CVA6 CV-X-IF hardware decoder mask table (commit 6544a714c) | 33,554,432 | 196,608 |
 | `cva6/xif_ref_r4.xif.yaml` | CVA6 CV-X-IF R4 format (func2 + rs3) | 16,384 | 2,560 |
 | `cva6/xif_mac.xif.yaml` | CVA6 XIF multiply-accumulate | 32,768 | 28,672 |
-| `cva6/xif_madd.xif.yaml` | CVA6 XIF madd/msub encoding | 32,768 | 4,096 |
+| `cva6/xif_madd.xif.yaml` | CVA6 XIF madd/msub encoding | 32,768 | 1,024 |
 | `cva6/xif_encoding.xif.yaml` | CVA6 XIF encoding-only (register-reduced) | 8,192 | 48 |
 | `ibex/csr_access.xif.yaml` | Standard RISC-V Zicsr domain | 49,152 | 49,152 |
 | `ibex/rv32imcb.xif.yaml` | Ibex RV32IMCB (ibex_decoder.sv) | 524,288 | 92,160 |
@@ -210,13 +211,14 @@ Valid counts below are the `evaluate_all` results on the committed fixtures
 | CLI verify time (CVA6 full, structural pipeline, release) | ~0.2 s end-to-end (core pipeline 36 ms benched) |
 | Previous CLI time (expand_all, release) | 13.1 s (benched evaluate) |
 | struct_enum benchmark (same machine, release) | 18.8 ms |
+| CVA6 fixture derivation | the three decoder-derived fixtures match a re-extraction of the mask table at `6544a714c`: 6 `(funct3, funct7)` pairs for `xif_ref`, 5 `(funct3, func2)` pairs for `xif_ref_r4`, 1 for `xif_madd` |
 | Spike backend | C/Rust recheck: 196,608 / 196,608 agree |
 | Tagma decoder cross-channel | 11,172 / 11,172 projections equal `tagma_core::Coord::to_axes`; the generated `golden_anchors.hex` matches line by line when `EV_TAGMA_ANCHORS` is set |
 | Synthesis channel | `--design` on the syntagma Tagma decoder reports 478 cells, the number the syntagma generic Yosys flow reports for the same RTL; `--target` on `all_pass` reports 28 (both with Yosys 0.65) |
 | SSCCS POC channel demo (`./run.sh --demo`, needs an ssccs checkout) | 5 / 5 channels match the hand-written assembly golden anchors |
 | Constraint types | 13 (range, even, eq, neq, lt, gt, le, ge, oneof, cross, bitmask, enable_mask, enable_set) |
 | Projector types | 4 (sum, identity, parity, decompose) |
-| Tests | 126 (83 lib + 28 CLI + 8 structural + 5 tagma + 2 golden anchor), all passing, none ignored |
+| Tests | 130 (83 lib + 28 CLI + 8 structural + 5 tagma + 2 golden anchor + 4 derivation), all passing, none ignored |
 | Coverage gate | 80% lines / 80% regions (llvm-cov, all modules incl. Spike/Yosys backends) |
 | Simulation backends | Mock (default), Spike (`EV_SIM_BACKEND=spike`) |
 
@@ -254,7 +256,7 @@ benches/
 tests/
   fixtures/
     common/         6 YAML fixture files
-    cva6/           5 YAML fixture files
+    cva6/           5 YAML fixture files, `mask_table.json` (the committed decoder extraction)
     ibex/           3 YAML fixture files
     tagma/          2 YAML fixture files
     rtl/            1 Verilog design fixture
@@ -263,6 +265,7 @@ tests/
   structural_enum.rs 8 structural enumeration regression tests
   tagma_fixture.rs  5 Tagma fixture tests
   golden_anchor.rs  2 tagma golden anchor cross-channel tests
+  cva6_derivation.rs 4 CVA6 fixture derivation gate tests
 ```
 
 Backends are pluggable via environment variables:
@@ -276,6 +279,8 @@ Backends are pluggable via environment variables:
 | `EV_RISCV_CC` | command | RISC-V cross-compiler |
 | `EV_TAGMA_ANCHORS` | path | Generated `hw/rtl/golden_anchors.hex` for the tagma artifact channel |
 | `SYNTAGMA_DIR` | path | Sibling syntagma checkout (default `../syntagma`), the artifact-channel fallback |
+| `CVA6_DIR` | path | Sibling CVA6 checkout (default `../cva6`) for the fixture derivation gate's source channel |
+| `EV_UPDATE_MASK_TABLE` | `1` | Rewrite `tests/fixtures/cva6/mask_table.json` from a checkout at the pinned commit |
 
 ## Prerequisites
 

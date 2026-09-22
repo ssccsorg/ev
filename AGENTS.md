@@ -93,8 +93,17 @@ when the layout changes.
   checked against Rust-computed reference words. This is not ISA-level
   execution: custom-3 opcodes are illegal in the base RISC-V ISA, so Spike
   never executes the custom words.
-- CVA6 fixtures derive from the hardware decoder mask table
-  (`cvxif_instr_pkg.sv`, `instr_decoder.sv`) at commit `6544a714c`.
+- CVA6 fixture derivation gate: `tests/cva6_derivation.rs` re-derives
+  `cva6/xif_ref.xif.yaml`, `cva6/xif_ref_r4.xif.yaml`, and
+  `cva6/xif_madd.xif.yaml` from `tests/fixtures/cva6/mask_table.json`, the
+  committed extraction of the hardware decoder mask table (`cvxif_instr_pkg.sv`,
+  `instr_decoder.sv`) at commit `6544a714c`. Per fixture it requires the
+  table's accepted words and the fixture's accepted set to agree on the
+  fixture's decision axes, and fails naming the entry when an entry masks a bit
+  no declared field covers. With a checkout at hand (`CVA6_DIR`, default
+  `../cva6`) it re-extracts the table and checks the commit and the file
+  digests; `run.sh --verify` reports the source channel as checked or
+  unavailable.
 - Coverage gate: `scripts/coverage.sh` (cargo-llvm-cov, 80% lines and 80%
   regions) exercises the Spike, Yosys, and simulation backends with the
   instrumented binary.
@@ -109,12 +118,12 @@ when the layout changes.
 ### Tests and fixtures
 
 ```bash
-cargo test --release          # 126 tests: 83 lib, 28 CLI, 8 structural,
-                              # 5 tagma, 2 golden anchor. None ignored.
+cargo test --release          # 130 tests: 83 lib, 28 CLI, 8 structural,
+                              # 5 tagma, 2 golden anchor, 4 derivation. None ignored.
 cargo bench -- cva6_full      # full-space CVA6 group
 cargo bench -- struct_enum_validity   # correctness guard, must stay green
 ./run.sh                      # fmt, clippy, build, test, verify
-./run.sh --verify             # Yosys, fixtures, golden anchors, Spike
+./run.sh --verify             # Yosys, fixtures, golden anchors, derivation gate, Spike
 ./run.sh --demo               # channel demo: the ssccs POC assembly golden anchors
 ./run.sh --coverage           # coverage gate
 ```
@@ -124,7 +133,7 @@ cargo bench -- struct_enum_validity   # correctness guard, must stay green
 | `cva6/xif_ref.xif.yaml` | 33,554,432 | 196,608 |
 | `cva6/xif_ref_r4.xif.yaml` | 16,384 | 2,560 |
 | `cva6/xif_mac.xif.yaml` | 32,768 | 28,672 |
-| `cva6/xif_madd.xif.yaml` | 32,768 | 4,096 |
+| `cva6/xif_madd.xif.yaml` | 32,768 | 1,024 |
 | `cva6/xif_encoding.xif.yaml` | 8,192 | 48 |
 | `ibex/rv32imcb.xif.yaml` | 524,288 | 92,160 |
 | `ibex/rv32imcb_imm.xif.yaml` | 65,536 | 55,616 |
@@ -151,6 +160,10 @@ decoder fixtures are the `ibex/rv32imcb*.xif.yaml` pair (issue #36).
 | `EV_RISCV_CC` | command | RISC-V cross-compiler |
 | `EV_TAGMA_ANCHORS` | path | Generated `golden_anchors.hex` for the tagma artifact channel |
 | `SYNTAGMA_DIR` | path | Sibling syntagma checkout (default `../syntagma`), the artifact-channel fallback |
+| `CVA6_DIR` | path | Sibling CVA6 checkout (default `../cva6`) for the derivation gate's source channel |
+| `EV_UPDATE_MASK_TABLE` | `1` | Rewrite `tests/fixtures/cva6/mask_table.json` from a checkout at the pinned commit |
+| `CVA6_DIR` | path | Sibling CVA6 checkout (default `../cva6`) for the derivation gate's source channel |
+| `EV_UPDATE_MASK_TABLE` | `1` | Rewrite `tests/fixtures/cva6/mask_table.json` from a checkout at the pinned commit |
 
 ## Key Design Decisions
 

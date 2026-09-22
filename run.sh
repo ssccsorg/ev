@@ -197,6 +197,7 @@ verify_large_fixtures() {
     _timed "cva6 xif ref r4 fixture (16K combos)" $EV verify --target "tests/fixtures/cva6/xif_ref_r4.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
     _verify_check "cva6 xif ref r4"         2560    13824    "tests/fixtures/cva6/xif_ref_r4.xif.yaml"
     _timed "cva6 xif madd fixture (32k combos)" $EV verify --target "tests/fixtures/cva6/xif_madd.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
+    _verify_check "cva6 xif madd"          1024    31744    "tests/fixtures/cva6/xif_madd.xif.yaml"
     _timed "cva6 xif mac fixture (32k combos)" $EV verify --target "tests/fixtures/cva6/xif_mac.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
     _verify_check "cva6 xif mac"            28672   4096   "tests/fixtures/cva6/xif_mac.xif.yaml"
     _timed "enable_mask demo fixture (524k combos)" $EV verify --target "tests/fixtures/common/enable_mask_demo.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
@@ -245,6 +246,29 @@ verify_golden_anchors() {
     return "$ec"
 }
 
+# Fixture derivation gate: re-derive the CVA6 fixtures from the committed
+# extraction of the hardware decoder mask table. A checkout at the pinned
+# commit (CVA6_DIR, default ../cva6) adds the source channel, which
+# re-extracts the table and checks the commit and the file digests. An
+# unavailable checkout is reported, never passed over silently.
+verify_cva6_derivation() {
+    echo "=== cva6 fixture derivation gate ==="
+    local dir="${CVA6_DIR:-../cva6}"
+    if [ -f "${dir}/core/cvxif_example/include/cvxif_instr_pkg.sv" ]; then
+        echo "  source checkout: ${dir} (the re-extraction channel runs)"
+    else
+        echo "  source checkout: unavailable (set CVA6_DIR to a CVA6 checkout at the pinned commit)"
+    fi
+
+    local ec=0
+    cargo test --release --test cva6_derivation -- --nocapture || ec=$?
+    if [ "$ec" -ne 0 ]; then
+        echo "  FAILED: the cva6 fixture derivation gate did not pass (see the test output above)"
+        VERIFY_FAILED=1
+    fi
+    return "$ec"
+}
+
 # ── Modes ─────────────────────────────────────────────────────────────
 
 case ${1:-} in
@@ -287,6 +311,7 @@ case ${1:-} in
         verify_fixtures || true
         verify_large_fixtures || true
         verify_golden_anchors || true
+        verify_cva6_derivation || true
         verify_sim || true
         echo ""
         if [ "$VERIFY_FAILED" -ne 0 ]; then
@@ -331,6 +356,7 @@ case ${1:-} in
         verify_fixtures || true
         verify_large_fixtures || true
         verify_golden_anchors || true
+        verify_cva6_derivation || true
         verify_sim || true
         echo ""
         if [ "$VERIFY_FAILED" -ne 0 ]; then
