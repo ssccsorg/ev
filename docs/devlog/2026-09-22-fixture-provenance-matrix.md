@@ -61,11 +61,29 @@ RISC-V encoding spaces, that its only knowledge of a target is the spec it is
 given, and that the named cores and designs are samples verified from their own
 sources.
 
-The claim is checkable rather than aspirational: `ConstraintRegistry` and
-`ProjectorRegistry` hold no target names, the engine's constraint and projector
-types are declared in `spec/mod.rs` without any fixture in mind, and
-`tests/cva6_derivation.rs` re-derives the CVA6 fixtures from the decoder's own
-table rather than from anything the engine asserts.
+The claim was checked rather than asserted, and the check changed its wording.
+Grepping `src/` for the target names leaves the `tagma-core` imports in
+`src/verify/compose.rs` and `src/verify/evaluate.rs`, doc comments in
+`src/verify/registry.rs` and `src/spec/mod.rs` that cite the anchor layout as
+the instance of the general projector, two doc comments in
+`src/synth/backends/spike.rs`, and a unit-test constant naming a captured
+report's module in `src/synth/backends/yosys.rs`. No constraint type or
+projector carries a target's name or constant, which is the form the claim now
+takes. The first draft, "nothing in the engine names a core", did not survive
+the check.
+
+The `tagma-core` dependency is the remaining target coupling at the engine
+level. It is neither new nor hidden: the Dependency Note in `AGENTS.md` records
+it, the API it supplies (`Coord`, `CoordPath`, `DynCoordSpace`) is generic, and
+syntagma plans to publish it, at which point it becomes a version dependency.
+Generalizing it out of the coordinate plumbing is its own subject and is not
+part of this change.
+
+The claim is otherwise checkable: `ConstraintRegistry` and `ProjectorRegistry`
+hold no target names, the constraint and projector types are declared in
+`spec/mod.rs` without any fixture in mind, and `tests/cva6_derivation.rs`
+re-derives the CVA6 fixtures from the decoder's own table rather than from
+anything the engine asserts.
 
 ## The principle behind it
 
@@ -86,11 +104,16 @@ Documentation and fixture-header comments only; no engine, test, or fixture
 semantics changed.
 
 ```bash
-cargo test --release   # 130 passed, 0 ignored
-cargo fmt --all --check
-cargo clippy --all-targets
-bash run.sh --verify
+cargo test --release          # 130 passed, 0 ignored
+cargo fmt --all --check       # clean
+cargo clippy --all-targets    # clean under -D warnings
 ```
+
+Every count in the matrix was checked against `ev verify` on each of the
+sixteen fixtures, and the `AGENTS.md` count table was checked against the
+matrix. All sixteen agree with the CLI, including the two parser negatives that
+fail at parse. The positioning claim was checked by grepping `src/` for the
+target names, and that check is what changed the wording of the claim.
 
 `cargo test --release` runs the derivation gate, which re-reads the two edited
 fixture headers and confirms the fixtures still match the committed mask table.
