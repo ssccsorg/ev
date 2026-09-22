@@ -1,0 +1,77 @@
+# Synthetic enable_mask coverage fixture.
+#
+# Role: exercise `oneof`, `cross`, and `enable_mask` together, with an
+# `identity` projector, and pin the structural-vs-naive parity invariant on
+# the distinct passing set rather than on counts alone. The CVA6 fixtures pin
+# counts for their own spaces; `cva6/xif_encoding.xif.yaml` uses the same
+# three constraint types on a register-reduced space, and this fixture is
+# where the set comparison runs: 524,288 raw combinations, 4,096 valid,
+# 3,648 distinct passing vectors, 520,192 failed.
+#
+# This is not an Ibex hardware model. Ibex exposes standard extensions
+# through compile-time parameters instead of a custom instruction
+# interface, so no custom ALU extension exists to model. The real Ibex
+# decoder fixtures are tests/fixtures/ibex/rv32imcb.xif.yaml
+# (ibex_decoder.sv, RV32BFull) and tests/fixtures/ibex/rv32imcb_imm.xif.yaml
+# (I-type). Issue #36 recorded that the file previously at
+# tests/fixtures/ibex/alu_ext.xif.yaml corresponded to no actual Ibex
+# configuration; this fixture states its coverage role instead.
+# Encoding (synthetic R-type layout, funct7/funct3 sub-decoding):
+#   funct7=0x00, funct3=0: CUSTOM_NOP   (no operation, rd=0, no writeback)
+#   funct7=0x10, funct3=0: CUSTOM_ADD   (rd = rs1 + rs2)
+#   funct7=0x10, funct3=1: CUSTOM_SUB   (rd = rs1 - rs2)
+#   funct7=0x10, funct3=2: CUSTOM_AND   (rd = rs1 & rs2)
+#   funct7=0x10, funct3=3: CUSTOM_OR    (rd = rs1 | rs2)
+#   funct7=0x10, funct3=4: CUSTOM_XOR   (rd = rs1 ^ rs2)
+#   funct7=0x20, funct3=0: CUSTOM_SLT   (rd = (rs1 < rs2) ? 1 : 0)
+#   funct7=0x20, funct3=1: CUSTOM_SLTU  (rd = (rs1 < rs2 unsigned) ? 1 : 0)
+#
+# Register range sampled to keep the space small:
+#   rs1, rs2, rd ∈ [0, 7]
+#
+# Verification space: 128 × 8 × 8 × 8 × 8 = 524,288 raw combinations
+#   cross (funct7 → funct3): funct7=0x00 → funct3=0 only
+#                            funct7=0x10 → funct3 ∈ {0,1,2,3,4}
+#                            funct7=0x20 → funct3 ∈ {0,1}
+# Valid: 1×8×8×8×8 + 5×8×8×8×8 + 2×8×8×8×8 = 4,096 pass
+#
+# Constraints:
+#   enable_mask: funct7=0x00 (CUSTOM_NOP) forces rd=0, so the 512 raw NOP
+#   combinations collapse to 64 distinct passing vectors
+
+target: enable_mask_demo
+fields:
+  funct7:
+    range: [0, 127]
+  funct3:
+    range: [0, 7]
+  rs1:
+    range: [0, 7]
+  rs2:
+    range: [0, 7]
+  rd:
+    range: [0, 7]
+constraints:
+  # Only funct7=0x00, 0x10, 0x20 are valid.
+  - type: oneof
+    field: "funct7"
+    values: [0x00, 0x10, 0x20]
+
+  # funct7 → funct3 sub-decoding.
+  - type: cross
+    field_a: "funct7"
+    field_b: "funct3"
+    mapping:
+      0x00: [0]
+      0x10: [0, 1, 2, 3, 4]
+      0x20: [0, 1]
+
+  # CUSTOM_NOP (funct7=0x00): force rd=0, no writeback.
+  - type: enable_mask
+    field: "funct7"
+    value: 0x00
+    disable: ["rd"]
+
+projector:
+  type: identity
+  field: "rd"

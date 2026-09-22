@@ -6,8 +6,9 @@ Apache 2.0.
 33.5 million combinations verified deterministically in about 0.2 s (release)
 through the structural enumeration pipeline, which is the CLI default since
 issue #42. The CVA6 fixtures are derived from the hardware decoder mask
-table (commit `6544a714c`); the Spike backend cross-checks the constraint
-model and instruction-word assembly in C.
+table (`6544a714c`), and `tests/cva6_derivation.rs` re-derives the three of
+them that cite the table against a committed extraction of it; the Spike
+backend cross-checks the constraint model and instruction-word assembly in C.
 
 ## What It Does
 
@@ -16,9 +17,9 @@ and evaluates every valid combination, reports exactly which encodings are valid
 and which are not — deterministically and exhaustively.
 
 Constraint types are split between structural constraints (oneof, range, bitmask,
-cross) that are encoded directly into the enumeration space, and runtime
-constraints (eq, neq, lt, gt, le, ge, even) that are checked per combination.
-Only structurally valid combinations are ever generated.
+cross, enable_mask, enable_set) that are encoded directly into the enumeration
+space, and runtime constraints (eq, neq, lt, gt, le, ge, even) that are checked
+per combination. Only structurally valid combinations are ever generated.
 
 A single command verifies the 33.5 million combination CVA6 CV-X-IF encoding
 space derived from the hardware decoder mask table
@@ -69,6 +70,7 @@ cargo build --release
 ev verify --target tests/fixtures/common/all_pass.xif.yaml
 ev verify --target tests/fixtures/common/sample.xif.yaml --json
 ev synth --target tests/fixtures/common/all_pass.xif.yaml
+ev synth --design tests/fixtures/rtl/decode_demo.v --top decode_demo
 ev simulate --target tests/fixtures/common/all_pass.xif.yaml
 cargo test --release
 ```
@@ -78,7 +80,8 @@ cargo test --release
 ```
 ev verify    --target <file> [--format <fmt>]  # Static constraint verification
 ev simulate  --target <file> [--format <fmt>]  # C/Rust recheck under Spike/mock
-ev synth     --target <file> [--json]          # SystemVerilog + Yosys synthesis
+ev synth     --target <file> [--json]          # Generate RTL from a spec, then synthesize it
+ev synth     --design <file> [--top <mod>]     # Synthesize an RTL file directly
 ev fact decode                                  # Decode Fact JSON from stdin
 ```
 
@@ -153,14 +156,20 @@ Conditional field assignment — set fields to specified values on trigger:
       - { field: "rs1", value: 5 }
 ```
 
-The tagma_decode projector packs the Tagma Hangul decomposition of a
-field into the golden-anchor layout offset[28:15] i[14:10] m[9:5] f[4:0]:
+The decompose projector splits one field into packed mixed-radix axes, each
+at its own bit range. The syntagma anchor layout
+`offset[28:15] i[14:10] m[9:5] f[4:0]` is one instance:
 
 ```yaml
 projector:
-  type: tagma_decode
+  type: decompose
   field: "code"
   base: 0xAC00
+  offset_shift: 15
+  axes:
+    - { radix: 28, width: 5, shift: 0 }   # f = offset % 28
+    - { radix: 21, width: 5, shift: 5 }   # m = (offset / 28) % 21
+    - { width: 5, shift: 10 }             # i = offset / 588
 ```
 
 ### Built-in types
@@ -168,7 +177,7 @@ projector:
 **Constraints**: `range`, `even`, `eq`, `neq`, `lt`, `gt`, `le`, `ge`,
 `oneof`, `cross`, `bitmask`, `enable_mask`, `enable_set`.
 
-**Projectors**: `sum`, `identity`, `parity`, `tagma_decode`.
+**Projectors**: `sum`, `identity`, `parity`, `decompose`.
 
 All types are extensible via `ConstraintRegistry` and `ProjectorRegistry`.
 
@@ -182,16 +191,16 @@ Valid counts below are the `evaluate_all` results on the committed fixtures
 | `cva6/xif_ref.xif.yaml` | CVA6 CV-X-IF hardware decoder mask table (commit 6544a714c) | 33,554,432 | 196,608 |
 | `cva6/xif_ref_r4.xif.yaml` | CVA6 CV-X-IF R4 format (func2 + rs3) | 16,384 | 2,560 |
 | `cva6/xif_mac.xif.yaml` | CVA6 XIF multiply-accumulate | 32,768 | 28,672 |
-| `cva6/xif_madd.xif.yaml` | CVA6 XIF madd/msub encoding | 32,768 | 4,096 |
+| `cva6/xif_madd.xif.yaml` | CVA6 XIF madd/msub encoding | 32,768 | 1,024 |
 | `cva6/xif_encoding.xif.yaml` | CVA6 XIF encoding-only (register-reduced) | 8,192 | 48 |
-| `ibex/alu_ext.xif.yaml` | Ibex custom ALU extension | 524,288 | 4,096 |
-| `ibex/csr_access.xif.yaml` | Ibex-like CSR encoding | 49,152 | 49,152 |
+| `ibex/csr_access.xif.yaml` | Standard RISC-V Zicsr domain | 49,152 | 49,152 |
 | `ibex/rv32imcb.xif.yaml` | Ibex RV32IMCB (ibex_decoder.sv) | 524,288 | 92,160 |
 | `ibex/rv32imcb_imm.xif.yaml` | Ibex RV32IMCB I-type encoding | 65,536 | 55,616 |
 | `tagma/tagma_decoder.xif.yaml` | Syntagma Tagma decoder valid input domain | 65,536 | 11,172 |
 | `tagma/tagma_demo_top.xif.yaml` | Syntagma Tagma FPGA demo output space | 11,172 | 11,172 |
 | `common/all_pass.xif.yaml` | Simple ALU (no constraints) | 1,024 | 1,024 |
 | `common/sample.xif.yaml` | Mixed pass/fail demo | 96 | 12 |
+| `common/enable_mask_demo.xif.yaml` | Synthetic enable_mask coverage (oneof + cross + enable_mask) | 524,288 | 4,096 |
 
 ## Validation Results
 
@@ -202,10 +211,14 @@ Valid counts below are the `evaluate_all` results on the committed fixtures
 | CLI verify time (CVA6 full, structural pipeline, release) | ~0.2 s end-to-end (core pipeline 36 ms benched) |
 | Previous CLI time (expand_all, release) | 13.1 s (benched evaluate) |
 | struct_enum benchmark (same machine, release) | 18.8 ms |
+| CVA6 fixture derivation | the three decoder-derived fixtures match a re-extraction of the mask table at `6544a714c`: 6 `(funct3, funct7)` pairs for `xif_ref`, 5 `(funct3, func2)` pairs for `xif_ref_r4`, 1 for `xif_madd` |
 | Spike backend | C/Rust recheck: 196,608 / 196,608 agree |
+| Tagma decoder cross-channel | 11,172 / 11,172 projections equal `tagma_core::Coord::to_axes`; the generated `golden_anchors.hex` matches line by line when `EV_TAGMA_ANCHORS` is set |
+| Synthesis channel | `--design` on the syntagma Tagma decoder reports 478 cells, the number the syntagma generic Yosys flow reports for the same RTL; `--target` on `all_pass` reports 28 (both with Yosys 0.65) |
+| SSCCS POC channel demo (`./run.sh --demo`, needs an ssccs checkout) | 5 / 5 channels match the hand-written assembly golden anchors |
 | Constraint types | 13 (range, even, eq, neq, lt, gt, le, ge, oneof, cross, bitmask, enable_mask, enable_set) |
-| Projector types | 4 (sum, identity, parity, tagma_decode) |
-| Tests | 105 (73 lib + 19 CLI + 5 tagma + 8 structural), all passing, none ignored |
+| Projector types | 4 (sum, identity, parity, decompose) |
+| Tests | 130 (83 lib + 28 CLI + 8 structural + 5 tagma + 2 golden anchor + 4 derivation), all passing, none ignored |
 | Coverage gate | 80% lines / 80% regions (llvm-cov, all modules incl. Spike/Yosys backends) |
 | Simulation backends | Mock (default), Spike (`EV_SIM_BACKEND=spike`) |
 
@@ -219,31 +232,40 @@ fixtures.
 
 ```
 src/
-  main.rs           CLI (clap: verify, simulate, synth)
-  spec/             VerificationSpec, FieldSpec, ConstraintSpec, ProjectorSpec
+  main.rs           CLI (clap: verify, simulate, synth, fact decode)
+  spec/             VerificationSpec, FieldSpec, ConstraintSpec, ProjectorSpec,
+                    EncodingLayout, FieldBitMapping
   verify/
-    compose.rs      Domain expansion + structural enumeration + raw total
-    evaluate.rs     Constraint evaluation + projection + structural pipeline
-    registry.rs     ConstraintRegistry + ProjectorRegistry (pluggable builder)
+    compose.rs      Domain expansion, raw_total_combinations, StructuralEnum
+    evaluate.rs     evaluate_all, evaluate_structural, validate_into_space,
+                    build_runtime_checks
+    registry.rs     ConstraintRegistry, ProjectorRegistry, Check/Evaluator traits
   report/
-    reporter.rs     ReporterCapable trait + TextReporter + CsvReporter
-                    JsonReporter + TraceReporter
-    fih.rs          Fact envelope (typed, timestamped, content-addressed)
+    reporter.rs     ReporterCapable trait + Text/Csv/Json/Trace reporters
+    fih.rs          Fact envelope (fact_type, origin, target, payload,
+                    timestamp, parent_fact_id)
   format/
-    xif.rs          YamlFormat — XIF format parser
+    mod.rs          FormatCapable trait
+    xif.rs          YamlFormat, the XIF parser
   synth/
-    mod.rs          SvGenerator, MockSynthesisBackend, RunSynthesis
+    mod.rs          GenerateRtl, RunSynthesis, SvGenerator, MockSynthesisBackend
     sim.rs          RunSimulation trait + MockSimBackend
     backends/       SpikeBackend, YosysBackend
 benches/
   bench.rs          Performance reference (fixtures, methodology, groups)
 tests/
   fixtures/
-    common/         4 YAML fixture files
-    cva6/           5 YAML fixture files
-    ibex/           4 YAML fixture files
-  cli_test.rs       14 integration tests (+ 2 heavy CVA6 tests ignored by default)
-  structural_enum.rs 5 structural enumeration regression tests
+    common/         6 YAML fixture files
+    cva6/           5 YAML fixture files, `mask_table.json` (the committed decoder extraction)
+    ibex/           3 YAML fixture files
+    tagma/          2 YAML fixture files
+    rtl/            1 Verilog design fixture
+    yosys/          1 captured Yosys stat report
+  cli_test.rs       28 integration tests
+  structural_enum.rs 8 structural enumeration regression tests
+  tagma_fixture.rs  5 Tagma fixture tests
+  golden_anchor.rs  2 tagma golden anchor cross-channel tests
+  cva6_derivation.rs 4 CVA6 fixture derivation gate tests
 ```
 
 Backends are pluggable via environment variables:
@@ -255,6 +277,10 @@ Backends are pluggable via environment variables:
 | `EV_SPIKE_BIN` | path | Spike binary location |
 | `EV_PK_PATH` | path | Proxy kernel for Spike |
 | `EV_RISCV_CC` | command | RISC-V cross-compiler |
+| `EV_TAGMA_ANCHORS` | path | Generated `hw/rtl/golden_anchors.hex` for the tagma artifact channel |
+| `SYNTAGMA_DIR` | path | Sibling syntagma checkout (default `../syntagma`), the artifact-channel fallback |
+| `CVA6_DIR` | path | Sibling CVA6 checkout (default `../cva6`) for the fixture derivation gate's source channel |
+| `EV_UPDATE_MASK_TABLE` | `1` | Rewrite `tests/fixtures/cva6/mask_table.json` from a checkout at the pinned commit |
 
 ## Prerequisites
 

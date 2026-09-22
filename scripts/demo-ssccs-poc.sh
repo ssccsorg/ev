@@ -3,21 +3,27 @@ set -euo pipefail
 #
 # demo-ssccs-poc.sh — Channel: ev ↔ SSCCS POC golden anchor cross-verification
 #
-# Clones ssccs (or uses existing SSCCS_DIR), extracts golden anchors from
-# observe_full.S, generates YAML fixtures, and runs ev check to independently
-# verify that the exhaustive constraint engine produces the same results as
-# the hand-written RISC‑V assembly.
+# Clones ssccs (or uses an existing SSCCS_DIR), reads the golden anchors that
+# the hand-written RISC-V assembly in observe_full.S computes for each
+# segment, generates YAML fixtures, and runs `ev verify` to confirm that the
+# exhaustive constraint engine reproduces those per-segment results.
 #
 # Channels verified:
-#   narrow   — even ∧ range_0_10, proj_id  (5 segments, 2 pass)
-#   broad    — no constraints, proj_id      (5 segments, 5 pass)
-#   sum3d_a  — proj_sum3d on (2,1,0)       (1 segment)
-#   sum3d_b  — proj_sum3d on (1,2,3)       (1 segment)
-#   parity   — proj_parity on {2,3}         (2 segments)
+#   narrow   — even ∧ 0..10, identity        (5 segments, 2 pass)
+#   broad    — no constraints, identity      (5 segments, 5 pass)
+#   sum3d_a  — sum over (2,1,0)              (1 point)
+#   sum3d_b  — sum over (1,2,3)              (1 point)
+#   parity   — parity over {2,3}             (2 points)
+#
+# The constraints in the generated fixtures are runtime constraints (even,
+# ge, le). `ev verify` reports the structurally valid subset, so a structural
+# constraint such as `range` would remove a segment from the report instead
+# of marking it rejected, and the rows would no longer line up with the
+# assembly's per-segment golden list.
 #
 # Usage:
-#   ./scripts/demo-ssccs-poc.sh
-#   SSCCS_DIR=../ssccs bash scripts/demo-ssccs-poc.sh  (skip clone)
+#   ./run.sh --demo
+#   SSCCS_DIR=../ssccs bash scripts/demo-ssccs-poc.sh   (skip the clone)
 #
 
 cd "$(dirname "$0")/.."
@@ -51,12 +57,12 @@ if [ ! -f "$ASM" ]; then
     echo "ERROR: observe_full.S not found at $ASM"
     exit 1
 fi
-echo "  ✓ cloned"
+echo "  ok"
 echo ""
 
 # ── Step 2: Extract golden anchors ────────────────────────────────────
 
-echo "Step 2: Extracting golden anchors..."
+echo "Step 2: Extracting golden anchors from observe_full.S..."
 parse_golden() {
     grep "GOLDEN_${1}:" "$ASM" | head -1 | sed "s/.*GOLDEN_${1}: *//" | tr -d ' '
 }
@@ -70,11 +76,11 @@ PARITY_2=$(parse_golden "PARITY_2")
 PARITY_3=$(parse_golden "PARITY_3")
 
 echo "  SEGMENTS:  $SEGMENTS"
-echo "  NARROW:    $NARROW    (even ∧ range_0_10)"
+echo "  NARROW:    $NARROW    (even and 0..10)"
 echo "  BROAD:     $BROAD       (no constraints)"
-echo "  SUM3D_A:   $SUM3D_A         (2,1,0 → sum)"
-echo "  SUM3D_B:   $SUM3D_B         (1,2,3 → sum)"
-echo "  PARITY:    $PARITY_2,$PARITY_3       (2→even, 3→odd)"
+echo "  SUM3D_A:   $SUM3D_A         (2,1,0 -> sum)"
+echo "  SUM3D_B:   $SUM3D_B         (1,2,3 -> sum)"
+echo "  PARITY:    $PARITY_2,$PARITY_3       (2 -> even, 3 -> odd)"
 echo ""
 
 # ── Step 3: Generate YAML fixtures ────────────────────────────────────
@@ -82,7 +88,7 @@ echo ""
 mkdir -p "$YAML_DIR"
 IFS=',' read -ra SEGS <<< "$SEGMENTS"
 
-# Narrow: 5 segments, even AND range_0_10, proj_id
+# Narrow: 5 segments, even and 0..10, identity projection.
 cat > "$YAML_DIR/narrow.yaml" << YAML
 target: ssccs_poc_narrow
 fields:
@@ -90,16 +96,19 @@ fields:
     values: [${SEGS[0]}, ${SEGS[1]}, ${SEGS[2]}, ${SEGS[3]}, ${SEGS[4]}]
 constraints:
   - type: even
-    axis: 0
-  - type: range
-    axis: 0
-    min: 0
-    max: 10
+    field: "coord"
+  - type: ge
+    field: "coord"
+    value: 0
+  - type: le
+    field: "coord"
+    value: 10
 projector:
   type: identity
+  field: "coord"
 YAML
 
-# Broad: 5 segments, no constraints, proj_id
+# Broad: 5 segments, no constraints, identity projection.
 cat > "$YAML_DIR/broad.yaml" << YAML
 target: ssccs_poc_broad
 fields:
@@ -107,9 +116,10 @@ fields:
     values: [${SEGS[0]}, ${SEGS[1]}, ${SEGS[2]}, ${SEGS[3]}, ${SEGS[4]}]
 projector:
   type: identity
+  field: "coord"
 YAML
 
-# Sum3D A: single point (2,1,0)
+# Sum3D A: single point (2,1,0).
 cat > "$YAML_DIR/sum3d_a.yaml" << YAML
 target: ssccs_poc_sum3d_a
 fields:
@@ -119,7 +129,7 @@ fields:
 projector: { type: sum }
 YAML
 
-# Sum3D B: single point (1,2,3)
+# Sum3D B: single point (1,2,3).
 cat > "$YAML_DIR/sum3d_b.yaml" << YAML
 target: ssccs_poc_sum3d_b
 fields:
@@ -129,7 +139,7 @@ fields:
 projector: { type: sum }
 YAML
 
-# Parity: 2 segments
+# Parity: the two segments the assembly classifies.
 cat > "$YAML_DIR/parity.yaml" << YAML
 target: ssccs_poc_parity
 fields:
@@ -137,6 +147,7 @@ fields:
     values: [2, 3]
 projector:
   type: parity
+  field: "coord"
 YAML
 
 echo "Step 3: YAML fixtures generated"
@@ -149,12 +160,25 @@ echo ""
 
 echo "Step 4: Building ev..."
 cargo build --release --quiet 2>&1
-echo "  ✓ built"
+echo "  ok"
 echo ""
 
 EV="./target/release/ev"
 
 # ── Step 5: Run channels ──────────────────────────────────────────────
+
+# Decode the Fact envelope that `ev verify --format json` prints. The payload
+# is an opaque byte vector carrying the VerificationReport JSON; each result
+# row contributes its projection, or REJECT when the combination failed.
+CHANNEL_ROWS=$(cat <<'PY'
+import json, sys
+
+fact = json.load(sys.stdin)
+report = json.loads(bytes(fact["payload"]).decode())
+rows = [str(r["projection"]) if r["passed"] else "REJECT" for r in report["results"]]
+print(",".join(rows))
+PY
+)
 
 run_channel() {
     local name="$1"; local yaml="$2"; local golden="$3"
@@ -164,29 +188,26 @@ run_channel() {
 
     local output ev_fmt
     set +e
-    output=$("$EV" check --target "$yaml" --json 2>&1)
-    local ec=$?
+    output=$("$EV" verify --target "$yaml" --format json 2>&1)
     set -e
 
-    ev_fmt=$(echo "$output" | python3 -c "
-import json, sys
-data = json.load(sys.stdin)
-vals = []
-for r in data['results']:
-    if r['passed']:
-        vals.append(str(r['projection']))
-    else:
-        vals.append('REJECT')
-print(','.join(vals))
-" 2>/dev/null)
+    ev_fmt=$(echo "$output" | python3 -c "$CHANNEL_ROWS" 2>/dev/null) || ev_fmt=""
 
-    echo "  ev:      $ev_fmt"
+    if [ -z "$ev_fmt" ]; then
+        echo "  FAILED: could not read the result rows from ev output"
+        echo "$output" | head -5 | sed 's/^/    /'
+        FAILED=$((FAILED + 1))
+        echo ""
+        return
+    fi
+
+    echo "  ev:     $ev_fmt"
 
     if [ "$ev_fmt" = "$golden" ]; then
-        echo "  ✓ MATCH"
+        echo "  MATCH"
         PASSED=$((PASSED + 1))
     else
-        echo "  ✗ MISMATCH (expected: $golden, got: $ev_fmt)"
+        echo "  MISMATCH (expected: $golden, got: $ev_fmt)"
         FAILED=$((FAILED + 1))
     fi
     echo ""
@@ -209,14 +230,14 @@ echo "  Failed: $FAILED"
 echo ""
 
 if [ "$FAILED" -eq 0 ]; then
-    echo "  All 5 channels match POC golden anchors."
-    echo "  ev independently reproduces RISC‑V assembly results."
+    echo "  All 5 channels match the POC golden anchors."
+    echo "  ev independently reproduces the RISC-V assembly results."
     echo ""
-    echo "  narrow:   even ∧ range_0_10  →  $NARROW"
-    echo "  broad:    no constraints     →  $BROAD"
-    echo "  sum3d_a:  (2,1,0)            →  $SUM3D_A"
-    echo "  sum3d_b:  (1,2,3)            →  $SUM3D_B"
-    echo "  parity:   {2,3}              →  $PARITY_2,$PARITY_3"
+    echo "  narrow:   even and 0..10   ->  $NARROW"
+    echo "  broad:    no constraints   ->  $BROAD"
+    echo "  sum3d_a:  (2,1,0)          ->  $SUM3D_A"
+    echo "  sum3d_b:  (1,2,3)          ->  $SUM3D_B"
+    echo "  parity:   {2,3}            ->  $PARITY_2,$PARITY_3"
     echo ""
     echo "══════════════════════════════════════"
     exit 0

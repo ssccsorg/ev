@@ -23,9 +23,18 @@
 # No enable_mask constraints: the hardware accepts all register combinations
 # for the encodings above. Register semantics differ per instruction, but
 # every register combination is a valid encoding.
+#
+# `opcode` is declared and fixed to custom-3 (0x7B). The decoder table also
+# holds four MADD-family entries at opcodes 0x43, 0x47, 0x4B, and 0x4F; those
+# belong to a different opcode space and contribute no accepted word here,
+# which is what makes this fixture's accepted set equal to the table's
+# restriction to it. `tests/cva6_derivation.rs` re-derives the fixture from
+# the table and fails if an entry masks a bit no declared field covers.
 
 target: cva6_xif_ref
 fields:
+  opcode:
+    values: [0x7B]
   funct3:
     range: [0, 7]
   funct7:

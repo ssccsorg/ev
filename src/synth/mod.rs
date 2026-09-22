@@ -199,17 +199,50 @@ fn sv_projector(proj: &crate::spec::ProjectorSpec, field_names: &[&String]) -> S
         crate::spec::ProjectorSpec::Parity { field } => {
             format!("{}[0]", field)
         }
-        crate::spec::ProjectorSpec::TagmaDecode { field, base } => {
-            // Golden-anchor packed layout: offset[28:15] i[14:10] m[9:5] f[4:0].
-            // offset = code - base, i = offset / 588, m = (offset % 588) / 28, f = offset % 28.
-            // The expression is only meaningful for code >= base. SystemVerilog
-            // division and modulo on negative operands are tool-dependent, and
-            // the generated assertion module is exercised on the valid domain.
-            format!(
-                "(({f} - {base}) << 15) | ((({f} - {base}) / 588) << 10) | (((({f} - {base}) % 588) / 28) << 5) | (({f} - {base}) % 28)",
-                f = field,
-                base = base
-            )
+        crate::spec::ProjectorSpec::Decompose {
+            field,
+            base,
+            offset_shift,
+            axes,
+        } => {
+            // Packed axis layout: the reduced offset and the mixed-radix axis
+            // digits, each at its shift. The expression is only meaningful for
+            // field >= base. SystemVerilog division and modulo on negative
+            // operands are tool-dependent, and the generated assertion module
+            // is exercised on the valid domain.
+            //
+            // Unlike the evaluator, which yields no projection for an axis
+            // digit that does not fit its width, this expression keeps the
+            // digit's full width. The two agree only where the constraints
+            // bound the field so that every digit fits, as they do for the
+            // fixtures that use this projector.
+            let mut terms: Vec<String> = Vec::new();
+            if let Some(shift) = offset_shift {
+                terms.push(format!("(({field} - {base}) << {shift})"));
+            }
+
+            let mut divisor: i128 = 1;
+            for axis in axes {
+                let quotient = if divisor == 1 {
+                    format!("({field} - {base})")
+                } else {
+                    format!("(({field} - {base}) / {divisor})")
+                };
+                let digit = match axis.radix {
+                    Some(radix) => format!("({quotient} % {radix})"),
+                    None => quotient,
+                };
+                terms.push(if axis.shift == 0 {
+                    digit
+                } else {
+                    format!("({digit} << {})", axis.shift)
+                });
+                if let Some(radix) = axis.radix {
+                    divisor *= i128::from(radix);
+                }
+            }
+
+            terms.join(" | ")
         }
     }
 }

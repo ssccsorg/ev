@@ -16,11 +16,14 @@
 # verification devlog: the last valid syllable is U+D7A3, not U+D7AF
 # (0xAC00 + 11171 = 0xD7A3).
 #
-# The tagma_decode projector (issue #46, milestone 2) packs the axis
-# decomposition of every passing code point into the golden-anchor layout
-# offset[28:15] i[14:10] m[9:5] f[4:0], so the projection of code k equals
-# line k of syntagma/hw/rtl/golden_anchors.hex. Pass/fail itself remains a
-# domain check: the decomposition is a projection, not a constraint.
+# The decompose projector (issue #46, milestone 2; generalized in issue #55)
+# packs the axis decomposition of every passing code point into the
+# golden-anchor layout offset[28:15] i[14:10] m[9:5] f[4:0] from the axis list
+# below, so the projection of offset k (code 0xAC00 + k) equals line k + 1 of
+# syntagma/hw/rtl/golden_anchors.hex, which has no header. Pass/fail itself
+# remains a domain check: the decomposition is a projection, not a constraint,
+# and the projector bounds each axis by its width only, so the domain boundary
+# stays where the ge/le constraints put it.
 #
 # Verification space: 65,536 raw combinations
 # Valid: 11,172 (the Hangul syllable block), Failed: 54,364
@@ -37,6 +40,13 @@ constraints:
     field: "code"
     value: 0xD7A3
 projector:
-  type: tagma_decode
+  type: decompose
   field: "code"
   base: 0xAC00
+  # Anchor layout offset[28:15] i[14:10] m[9:5] f[4:0]:
+  #   offset = code - 0xAC00, i = offset / 588, m = (offset / 28) % 21, f = offset % 28
+  offset_shift: 15
+  axes:
+    - { radix: 28, width: 5, shift: 0 }   # f, the least significant axis
+    - { radix: 21, width: 5, shift: 5 }   # m
+    - { width: 5, shift: 10 }             # i, the residual

@@ -51,15 +51,27 @@ EV_SIM_BACKEND=mock LLVM_PROFILE_FILE="$PROFRAW_DIR/ev-ext-%p-%m.profraw" \
     "$EV_COV" simulate --target "$ALL_PASS" >/dev/null
 
 # Yosys synthesis backend, local yosys or the ev image.
+#
+# The container calls override the entrypoint: the image's ENTRYPOINT is the
+# ev binary itself, so without `--entrypoint bash` the CLI receives `bash`
+# and exits with "unrecognized subcommand 'bash'".
 echo "--- yosys synthesis ---"
 if command -v yosys >/dev/null 2>&1; then
     EV_SYNTH_BACKEND=yosys LLVM_PROFILE_FILE="$PROFRAW_DIR/ev-ext-%p-%m.profraw" \
         "$EV_COV" synth --target "$ALL_PASS" >/dev/null
+    EV_SYNTH_BACKEND=yosys LLVM_PROFILE_FILE="$PROFRAW_DIR/ev-ext-%p-%m.profraw" \
+        "$EV_COV" synth --design tests/fixtures/rtl/decode_demo.v --top decode_demo >/dev/null
 else
-    docker run --rm --pull=always -v "$(pwd):/workspace" -w /workspace \
+    docker run --rm --pull=always --entrypoint bash -v "$(pwd):/workspace" \
         -e EV_SYNTH_BACKEND=yosys \
         -e LLVM_PROFILE_FILE="/workspace/$PROFRAW_DIR/ev-ext-%p-%m.profraw" \
-        "$EV_IMAGE" bash -c "cd /workspace && EV_SYNTH_BACKEND=yosys ./target/llvm-cov-target/release/ev synth --target tests/fixtures/common/all_pass.xif.yaml" >/dev/null
+        "$EV_IMAGE" \
+        -c "cd /workspace && EV_SYNTH_BACKEND=yosys ./target/llvm-cov-target/release/ev synth --target tests/fixtures/common/all_pass.xif.yaml" >/dev/null
+    docker run --rm --pull=always --entrypoint bash -v "$(pwd):/workspace" \
+        -e EV_SYNTH_BACKEND=yosys \
+        -e LLVM_PROFILE_FILE="/workspace/$PROFRAW_DIR/ev-ext-%p-%m.profraw" \
+        "$EV_IMAGE" \
+        -c "cd /workspace && EV_SYNTH_BACKEND=yosys ./target/llvm-cov-target/release/ev synth --design tests/fixtures/rtl/decode_demo.v --top decode_demo" >/dev/null
 fi
 
 # Spike simulation backend, local spike + pk + riscv gcc or the ev image.
@@ -69,11 +81,12 @@ if command -v spike >/dev/null 2>&1 && command -v riscv64-unknown-elf-gcc >/dev/
         LLVM_PROFILE_FILE="$PROFRAW_DIR/ev-ext-%p-%m.profraw" \
         "$EV_COV" simulate --target "$ALL_PASS" >/dev/null
 else
-    docker run --rm --pull=always -v "$(pwd):/workspace" -w /workspace \
+    docker run --rm --pull=always --entrypoint bash -v "$(pwd):/workspace" \
         -e EV_SIM_BACKEND=spike \
         -e EV_PK_PATH=/usr/local/riscv64-unknown-elf/bin/pk \
         -e LLVM_PROFILE_FILE="/workspace/$PROFRAW_DIR/ev-ext-%p-%m.profraw" \
-        "$EV_IMAGE" bash -c "cd /workspace && EV_SIM_BACKEND=spike EV_PK_PATH=/usr/local/riscv64-unknown-elf/bin/pk ./target/llvm-cov-target/release/ev simulate --target tests/fixtures/common/all_pass.xif.yaml" >/dev/null
+        "$EV_IMAGE" \
+        -c "cd /workspace && EV_SIM_BACKEND=spike EV_PK_PATH=/usr/local/riscv64-unknown-elf/bin/pk ./target/llvm-cov-target/release/ev simulate --target tests/fixtures/common/all_pass.xif.yaml" >/dev/null
 fi
 
 echo "=== coverage: merged report and thresholds ==="

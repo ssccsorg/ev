@@ -46,9 +46,15 @@ enum Commands {
 
     /// SystemVerilog RTL generation and synthesis
     Synth {
-        /// Path to the YAML constraint file
-        #[arg(short, long)]
-        target: PathBuf,
+        /// Path to the YAML constraint file (generates RTL, then synthesizes it)
+        #[arg(short, long, conflicts_with = "design")]
+        target: Option<PathBuf>,
+        /// Path to an RTL file to synthesize directly
+        #[arg(long, conflicts_with = "target", required_unless_present = "target")]
+        design: Option<PathBuf>,
+        /// Top module for --design (default: the design file stem)
+        #[arg(long, requires = "design", conflicts_with = "target")]
+        top: Option<String>,
         /// Output results as JSON instead of text
         #[arg(long)]
         json: bool,
@@ -133,11 +139,60 @@ fn run_sim(target: &std::path::Path) -> anyhow::Result<SimulationResult> {
     backend.run(&spec, evaluations)
 }
 
-fn run_synth(target: &std::path::Path) -> anyhow::Result<SynthesisMetrics> {
-    let spec = VerificationSpec::from_yaml(target)?;
-    let rtl_path = SvGenerator.generate(&spec)?;
-    let backend = resolve_synth_backend();
-    backend.run(&rtl_path, &spec.target)
+/// What to synthesize: a spec that generates RTL, or an RTL file directly.
+enum SynthInput {
+    Spec(std::path::PathBuf),
+    Design {
+        rtl: std::path::PathBuf,
+        top: Option<String>,
+    },
+}
+
+fn run_synth(input: SynthInput) -> anyhow::Result<SynthesisMetrics> {
+    let (rtl_path, top_module) = match input {
+        SynthInput::Spec(target) => {
+            let spec = VerificationSpec::from_yaml(&target)?;
+            (SvGenerator.generate(&spec)?, spec.target)
+        }
+        SynthInput::Design { rtl, top } => {
+            let top_module = match top {
+                Some(top) => top,
+                None => design_top_module(&rtl)?,
+            };
+            // Yosys receives both values inside a `-p` script string, which
+            // splits on whitespace and treats `;` as a command separator, so
+            // such a value cannot be passed through faithfully. Report it
+            // instead of letting Yosys misread the path.
+            check_yosys_argument(&rtl.to_string_lossy(), "the design path")?;
+            check_yosys_argument(&top_module, "the top module name")?;
+            if !rtl.is_file() {
+                anyhow::bail!("design file not found: {}", rtl.display());
+            }
+            (rtl, top_module)
+        }
+    };
+    resolve_synth_backend().run(&rtl_path, &top_module)
+}
+
+/// Reject a value that the Yosys `-p` script cannot carry verbatim.
+fn check_yosys_argument(value: &str, what: &str) -> anyhow::Result<()> {
+    if value.chars().any(|c| c.is_whitespace() || c == ';') {
+        anyhow::bail!("{what} must not contain whitespace or ';': {value}");
+    }
+    Ok(())
+}
+
+/// Top module default for a design-only input: the RTL file stem.
+fn design_top_module(rtl: &std::path::Path) -> anyhow::Result<String> {
+    rtl.file_stem()
+        .and_then(|stem| stem.to_str())
+        .map(str::to_string)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "cannot derive a top module name from {}; pass --top",
+                rtl.display()
+            )
+        })
 }
 
 fn main() -> anyhow::Result<()> {
@@ -185,8 +240,21 @@ fn main() -> anyhow::Result<()> {
                 std::process::exit(1);
             }
         }
-        Commands::Synth { target, json } => {
-            let report = run_synth(&target)?;
+        Commands::Synth {
+            target,
+            design,
+            top,
+            json,
+        } => {
+            let input = match (target, design) {
+                (Some(target), None) => SynthInput::Spec(target),
+                (None, Some(rtl)) => SynthInput::Design { rtl, top },
+                (Some(_), Some(_)) => {
+                    anyhow::bail!("--target and --design are mutually exclusive")
+                }
+                (None, None) => anyhow::bail!("either --target or --design is required"),
+            };
+            let report = run_synth(input)?;
             print_synthesis_report(&report, json);
             if !report.status.eq_ignore_ascii_case("ok") {
                 anyhow::bail!("synthesis failed: {}", report.message.unwrap_or_default());

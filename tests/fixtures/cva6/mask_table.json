@@ -1,0 +1,120 @@
+{
+  "source_path": "core/cvxif_example/include/cvxif_instr_pkg.sv",
+  "source_commit": "6544a714c20193b94612f64a6aa43d9299feda49",
+  "source_sha256": "a498af9cdfc4ef0238f2cfbf5d24579ee5e9126443917675f5d5ccb8e022bee3",
+  "decoder_path": "core/cvxif_example/instr_decoder.sv",
+  "decoder_sha256": "6116f241a09a0494600319f33f41ea61e545c92e4ad729ced4e5c9c39337f3ca",
+  "nb_instr": 10,
+  "entries": [
+    {
+      "opcode": "NOP",
+      "instr": "0x0000007b",
+      "mask": "0xfe00707f",
+      "writeback": 0,
+      "register_read": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "opcode": "ADD",
+      "instr": "0x0000107b",
+      "mask": "0xfe00707f",
+      "writeback": 1,
+      "register_read": [
+        0,
+        1,
+        1
+      ]
+    },
+    {
+      "opcode": "DOUBLE_RS1",
+      "instr": "0x0200107b",
+      "mask": "0xfe00707f",
+      "writeback": 1,
+      "register_read": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "opcode": "DOUBLE_RS2",
+      "instr": "0x0400107b",
+      "mask": "0xfe00707f",
+      "writeback": 1,
+      "register_read": [
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "opcode": "ADD_MULTI",
+      "instr": "0x0600107b",
+      "mask": "0xfe00707f",
+      "writeback": 1,
+      "register_read": [
+        0,
+        1,
+        1
+      ]
+    },
+    {
+      "opcode": "ADD_RS3_R",
+      "instr": "0x0800107b",
+      "mask": "0xfe00707f",
+      "writeback": 1,
+      "register_read": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "opcode": "MADD_RS3_R4",
+      "instr": "0x00000043",
+      "mask": "0x0600707f",
+      "writeback": 1,
+      "register_read": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "opcode": "MSUB_RS3_R4",
+      "instr": "0x00000047",
+      "mask": "0x0600707f",
+      "writeback": 1,
+      "register_read": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "opcode": "NMSUB_RS3_R4",
+      "instr": "0x0000004b",
+      "mask": "0x0600707f",
+      "writeback": 1,
+      "register_read": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "opcode": "NMADD_RS3_R4",
+      "instr": "0x0000004f",
+      "mask": "0x0600707f",
+      "writeback": 1,
+      "register_read": [
+        1,
+        1,
+        1
+      ]
+    }
+  ]
+}

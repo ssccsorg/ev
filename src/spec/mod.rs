@@ -196,23 +196,119 @@ pub enum ProjectorSpec {
     /// Classify parity of a single axis.
     #[serde(rename = "parity")]
     Parity { field: String },
-    /// Tagma 3-axis decoder projection.
+    /// Mixed-radix decomposition of one field, packed together with the
+    /// reduced offset.
     ///
-    /// Packs the Hangul decomposition of the field value into the
-    /// golden-anchor layout offset[28:15] i[14:10] m[9:5] f[4:0], with
-    /// offset = code - base, i = offset / 588, m = (offset % 588) / 28,
-    /// f = offset % 28. Returns None for code points outside the valid
-    /// Hangul syllable block, matching the tagma_decoder domain.
-    #[serde(rename = "tagma_decode")]
-    TagmaDecode {
-        /// Field holding the 16-bit Hangul code point.
+    /// The field value is reduced by `base`, then split along `axes` from the
+    /// least significant axis first: an axis with a `radix` takes the next
+    /// mixed-radix digit of the reduced value, and an axis without a radix
+    /// takes everything that is left. The reduced offset and the axis digits
+    /// are packed at their `shift` positions. A negative reduced value, or an
+    /// axis digit that does not fit its `width`, yields no projection.
+    ///
+    /// This is the general form of a packed axis layout. The syntagma anchor
+    /// layout `offset[28:15] i[14:10] m[9:5] f[4:0]` is one instance:
+    ///
+    /// ```yaml
+    /// projector:
+    ///   type: decompose
+    ///   field: "code"
+    ///   base: 0xAC00
+    ///   offset_shift: 15
+    ///   axes:
+    ///     - { radix: 28, width: 5, shift: 0 }   # f = offset % 28
+    ///     - { radix: 21, width: 5, shift: 5 }   # m = (offset / 28) % 21
+    ///     - { width: 5, shift: 10 }             # i = offset / 588
+    /// ```
+    ///
+    /// Validity is the constraint set's business: the projector decomposes
+    /// whatever value the field domain produces.
+    #[serde(rename = "decompose")]
+    Decompose {
+        /// Field whose value is decomposed.
         field: String,
-        /// Base of the Hangul syllable block; defaults to 0xAC00.
-        #[serde(default = "default_tagma_base")]
+        /// Value subtracted from the field before decomposing.
+        #[serde(default)]
         base: i64,
+        /// Bit position of the reduced offset in the packed word; when absent
+        /// the offset is not part of the projection.
+        #[serde(default)]
+        offset_shift: Option<u32>,
+        /// Axes from the least significant to the most significant.
+        axes: Vec<AxisSpec>,
     },
 }
 
-fn default_tagma_base() -> i64 {
-    0xAC00
+/// One axis of a mixed-radix decomposition.
+#[derive(Debug, Clone, Deserialize)]
+pub struct AxisSpec {
+    /// Radix of the axis. The last axis may omit it, in which case that axis
+    /// takes the residual of the decomposition.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub radix: Option<i64>,
+    /// Width in bits of the packed axis digit.
+    pub width: u32,
+    /// Bit position of the packed axis digit.
+    pub shift: u32,
+}
+
+impl ProjectorSpec {
+    /// Check the projector parameters, returning a message for the caller to
+    /// surface. Parameters that cannot be interpreted are rejected here so a
+    /// malformed spec fails at parse time rather than during evaluation.
+    pub fn validate(&self) -> Result<(), String> {
+        let ProjectorSpec::Decompose {
+            offset_shift, axes, ..
+        } = self
+        else {
+            return Ok(());
+        };
+
+        if axes.is_empty() {
+            return Err("decompose: axes must not be empty".into());
+        }
+
+        let mut occupied: Vec<(u32, u32)> = Vec::new();
+        for (index, axis) in axes.iter().enumerate() {
+            if axis.width == 0 || axis.width > 63 {
+                return Err(format!("decompose: axis {index} width must be 1..=63"));
+            }
+            if axis.shift + axis.width > 63 {
+                return Err(format!("decompose: axis {index} does not fit in 63 bits"));
+            }
+            if let Some(radix) = axis.radix {
+                if radix < 2 {
+                    return Err(format!("decompose: axis {index} radix must be at least 2"));
+                }
+                if (radix as u64 - 1) >> axis.width != 0 {
+                    return Err(format!(
+                        "decompose: axis {index} width {} cannot hold radix {radix}",
+                        axis.width
+                    ));
+                }
+            }
+            for (other_shift, other_width) in &occupied {
+                let overlaps = axis.shift < other_shift + other_width
+                    && *other_shift < axis.shift + axis.width;
+                if overlaps {
+                    return Err(format!("decompose: axis {index} overlaps another axis"));
+                }
+            }
+            occupied.push((axis.shift, axis.width));
+        }
+
+        if let Some(shift) = offset_shift {
+            if *shift > 63 {
+                return Err("decompose: offset_shift must be at most 63".into());
+            }
+            let highest = occupied.iter().map(|(s, w)| s + w).max().unwrap_or(0);
+            if *shift < highest {
+                return Err(format!(
+                    "decompose: offset_shift {shift} overlaps the axes; use {highest} or more"
+                ));
+            }
+        }
+
+        Ok(())
+    }
 }

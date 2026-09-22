@@ -32,6 +32,8 @@ fi
 EV=./target/release/ev
 ALL_PASS=tests/fixtures/common/all_pass.xif.yaml
 MIXED=tests/fixtures/common/sample.xif.yaml
+# Sibling syntagma checkout, used for the golden anchor artifact channel.
+SYNTAGMA_DIR="${SYNTAGMA_DIR:-../syntagma}"
 
 # ── Helpers ───────────────────────────────────────────────────────────
 
@@ -79,9 +81,26 @@ verify_synth() {
     # Fact envelope must contain fact_type; status is inside payload
     grep -q '"fact_type": "synthesis_result"' "$tmpf" || { cat "$tmpe"; echo "FAILED: missing fact_type"; exit 1; }
     # Check that payload is non-empty and contains status='ok'
-    python3 -c "import json,sys; d=json.load(open('$tmpf')); p=json.loads(bytes(d['payload']).decode()); assert p['status']=='ok', f'status: {p[\"status\"]}'" || { cat "$tmpe"; echo "FAILED: synthesis status not ok"; exit 1; }
+    python3 -c "import json,sys; d=json.load(open('$tmpf')); p=json.loads(bytes(d['payload']).decode()); assert p['status']=='ok', f'status: {p[\"status\"]}'; assert p['gate_count'] is not None, 'gate_count is null (stat -json parsing)'" || { cat "$tmpe"; echo "FAILED: synthesis payload incomplete"; exit 1; }
     echo "  ok"
     rm -f "$tmpf" "$tmpe"
+
+    # Design-only input: the RTL is synthesized as committed, and the
+    # metrics must come back populated. A null gate count means the stat
+    # report was not written or not parsed.
+    echo "=== synthesis (design-only) ==="
+    local design_out design_ec=0
+    design_out=$(_yosys "$EV" synth --design tests/fixtures/rtl/decode_demo.v --top decode_demo 2>&1) || design_ec=$?
+    echo "$design_out"
+    if [ "$design_ec" -ne 0 ] || ! echo "$design_out" | grep -q "\[ok\]"; then
+        echo "  FAILED: design-only synthesis did not report ok"
+        VERIFY_FAILED=1
+    elif ! echo "$design_out" | grep -q "gate count: Some("; then
+        echo "  FAILED: design-only synthesis reported no gate count"
+        VERIFY_FAILED=1
+    else
+        echo "  ok"
+    fi
 }
 
 check_spike() {
@@ -178,14 +197,76 @@ verify_large_fixtures() {
     _timed "cva6 xif ref r4 fixture (16K combos)" $EV verify --target "tests/fixtures/cva6/xif_ref_r4.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
     _verify_check "cva6 xif ref r4"         2560    13824    "tests/fixtures/cva6/xif_ref_r4.xif.yaml"
     _timed "cva6 xif madd fixture (32k combos)" $EV verify --target "tests/fixtures/cva6/xif_madd.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
+    _verify_check "cva6 xif madd"          1024    31744    "tests/fixtures/cva6/xif_madd.xif.yaml"
     _timed "cva6 xif mac fixture (32k combos)" $EV verify --target "tests/fixtures/cva6/xif_mac.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
-    _timed "ibex custom alu fixture (524k combos)" $EV verify --target "tests/fixtures/ibex/alu_ext.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
+    _verify_check "cva6 xif mac"            28672   4096   "tests/fixtures/cva6/xif_mac.xif.yaml"
+    _timed "enable_mask demo fixture (524k combos)" $EV verify --target "tests/fixtures/common/enable_mask_demo.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
+    _verify_check "enable_mask demo"        4096    520192 "tests/fixtures/common/enable_mask_demo.xif.yaml"
     _verify_check "ibex rv32imcb encoding"      92160  432128 "tests/fixtures/ibex/rv32imcb.xif.yaml"
     _verify_check "ibex rv32imcb imm ops"       55616   9920  "tests/fixtures/ibex/rv32imcb_imm.xif.yaml"
     _verify_check "tagma decoder domain"        11172   54364 "tests/fixtures/tagma/tagma_decoder.xif.yaml"
     _verify_check "tagma demo top outputs"      11172   0     "tests/fixtures/tagma/tagma_demo_top.xif.yaml"
     echo "=== structural enumeration bench ==="
     cargo bench --bench bench -- "struct_enum/ibex|struct_enum/cva6" 2>&1 | grep -E 'struct_enum|time:' | head -6
+}
+
+# Cross-channel check of the decompose projector. The reference engine
+# (tagma_core::Coord::to_axes) is always available; a generated
+# golden_anchors.hex adds the line-by-line artifact channel when one is at
+# hand. An unavailable artifact is reported, never passed over silently.
+verify_golden_anchors() {
+    echo "=== tagma golden anchor cross-channel check ==="
+    echo "  reference engine: tagma_core::Coord::to_axes (11,172 offsets)"
+
+    # A supplied path that is not a readable file is a misconfiguration rather
+    # than a missing artifact: report that reason and stop.
+    if [ -n "${EV_TAGMA_ANCHORS:-}" ] && [ ! -f "${EV_TAGMA_ANCHORS}" ]; then
+        echo "  FAILED: EV_TAGMA_ANCHORS is not a readable file: ${EV_TAGMA_ANCHORS}"
+        VERIFY_FAILED=1
+        return 1
+    fi
+
+    local anchors="${EV_TAGMA_ANCHORS:-}"
+    if [ -z "$anchors" ] && [ -f "${SYNTAGMA_DIR}/hw/rtl/golden_anchors.hex" ]; then
+        anchors="${SYNTAGMA_DIR}/hw/rtl/golden_anchors.hex"
+    fi
+
+    local ec=0
+    if [ -n "$anchors" ]; then
+        echo "  anchor file: ${anchors}"
+        EV_TAGMA_ANCHORS="$anchors" cargo test --release --test golden_anchor || ec=$?
+    else
+        echo "  anchor file: unavailable (set EV_TAGMA_ANCHORS, or SYNTAGMA_DIR with hw/rtl/golden_anchors.hex)"
+        env -u EV_TAGMA_ANCHORS cargo test --release --test golden_anchor || ec=$?
+    fi
+    if [ "$ec" -ne 0 ]; then
+        echo "  FAILED: the tagma cross-channel check did not pass (see the test output above)"
+        VERIFY_FAILED=1
+    fi
+    return "$ec"
+}
+
+# Fixture derivation gate: re-derive the CVA6 fixtures from the committed
+# extraction of the hardware decoder mask table. A checkout at the pinned
+# commit (CVA6_DIR, default ../cva6) adds the source channel, which
+# re-extracts the table and checks the commit and the file digests. An
+# unavailable checkout is reported, never passed over silently.
+verify_cva6_derivation() {
+    echo "=== cva6 fixture derivation gate ==="
+    local dir="${CVA6_DIR:-../cva6}"
+    if [ -f "${dir}/core/cvxif_example/include/cvxif_instr_pkg.sv" ]; then
+        echo "  source checkout: ${dir} (the re-extraction channel runs)"
+    else
+        echo "  source checkout: unavailable (set CVA6_DIR to a CVA6 checkout at the pinned commit)"
+    fi
+
+    local ec=0
+    cargo test --release --test cva6_derivation -- --nocapture || ec=$?
+    if [ "$ec" -ne 0 ]; then
+        echo "  FAILED: the cva6 fixture derivation gate did not pass (see the test output above)"
+        VERIFY_FAILED=1
+    fi
+    return "$ec"
 }
 
 # ── Modes ─────────────────────────────────────────────────────────────
@@ -229,6 +310,8 @@ case ${1:-} in
         verify_synth || true
         verify_fixtures || true
         verify_large_fixtures || true
+        verify_golden_anchors || true
+        verify_cva6_derivation || true
         verify_sim || true
         echo ""
         if [ "$VERIFY_FAILED" -ne 0 ]; then
@@ -272,6 +355,8 @@ case ${1:-} in
         verify_synth || true
         verify_fixtures || true
         verify_large_fixtures || true
+        verify_golden_anchors || true
+        verify_cva6_derivation || true
         verify_sim || true
         echo ""
         if [ "$VERIFY_FAILED" -ne 0 ]; then

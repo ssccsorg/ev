@@ -4,8 +4,8 @@
 //! spawned binary, which the coverage instrumentation does not see. These
 //! tests evaluate the fixtures in-process through the public library API,
 //! so the ge/le constraint path, the YAML parse of the hex boundary
-//! constants, the tagma_decode projector, and the domain counts are covered
-//! by the instrumented suite.
+//! constants, the decompose projector, and the domain counts are covered by
+//! the instrumented suite.
 
 use ev::spec::VerificationSpec;
 use ev::synth::GenerateRtl;
@@ -102,7 +102,7 @@ fn tagma_demo_top_output_space() {
     );
 }
 
-/// The tagma_decode projector packs the decomposition into the golden-anchor
+/// The decompose projector packs the decomposition into the golden-anchor
 /// layout offset[28:15] i[14:10] m[9:5] f[4:0]. Literal spot values pin the
 /// packing without re-deriving it from the same formula.
 #[test]
@@ -139,9 +139,9 @@ fn tagma_decode_projection_full_domain() {
     }
 }
 
-/// The SV generator must emit the packed decode expression for the
-/// tagma_decode projector, so the golden-anchor layout is preserved in the
-/// generated RTL.
+/// The SV generator must emit the packed decomposition expression for the
+/// fixture's decompose projector, so the golden-anchor layout is preserved in
+/// the generated RTL.
 #[test]
 fn tagma_decode_sv_generation() {
     let spec = load_fixture("tests/fixtures/tagma/tagma_decoder.xif.yaml");
@@ -155,7 +155,11 @@ fn tagma_decode_sv_generation() {
         "generated SV must pack the offset into bits 28:15"
     );
     assert!(
-        sv.contains("/ 588") && sv.contains("% 588") && sv.contains("% 28"),
-        "generated SV must express the Tagma decomposition"
+        sv.contains("((code - 44032) % 28)"),
+        "generated SV must express the final axis"
+    );
+    assert!(
+        sv.contains("/ 28) % 21)") && sv.contains("/ 588) << 10)"),
+        "generated SV must express the medial and initial axes: {sv}"
     );
 }

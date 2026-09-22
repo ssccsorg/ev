@@ -1,0 +1,45 @@
+{
+   "creator": "Yosys 0.65 (git sha1 aec814bdf3071f7e0fd0fbe43f7f711e99d01e24, clang++ 17.0.0 -fPIC -O3)",
+   "invocation": "stat -json ",
+   "modules": {
+      "\\decode_demo": {
+         "num_wires":         13,
+         "num_wire_bits":     33,
+         "num_pub_wires":     5,
+         "num_pub_wire_bits": 25,
+         "num_ports":         4,
+         "num_port_bits":     17,
+         "num_memories":      0,
+         "num_memory_bits":   0,
+         "num_processes":     0,
+         "num_cells":         16,
+         "num_submodules":       0,
+         "num_cells_by_type": {
+            "$_AND_": 5,
+            "$_NAND_": 1,
+            "$_XNOR_": 7,
+            "$_XOR_": 3
+         }
+      }
+   },
+      "design": {
+         "num_wires":         13,
+         "num_wire_bits":     33,
+         "num_pub_wires":     5,
+         "num_pub_wire_bits": 25,
+         "num_ports":         4,
+         "num_port_bits":     17,
+         "num_memories":      0,
+         "num_memory_bits":   0,
+         "num_processes":     0,
+         "num_cells":         16,
+         "num_submodules":       0,
+         "num_cells_by_type": {
+            "$_AND_": 5,
+            "$_NAND_": 1,
+            "$_XNOR_": 7,
+            "$_XOR_": 3
+         }
+      }
+}
+

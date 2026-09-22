@@ -65,17 +65,17 @@ fn verify_text_mixed_fixture_exits_1() {
 }
 
 #[test]
-fn verify_rv32i_csr_access_fixture() {
+fn verify_ibex_csr_access_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("verify")
         .arg("--target")
         .arg("tests/fixtures/ibex/csr_access.xif.yaml")
         .arg("--json")
         .output()
-        .expect("failed to run ev verify on rv32i_csr_access fixture");
+        .expect("failed to run ev verify on the ibex_csr_access fixture");
     assert!(
         output.status.success(),
-        "rv32i_csr_access fixture should pass"
+        "ibex_csr_access fixture should pass"
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
@@ -121,18 +121,38 @@ fn verify_malformed_bad_constraint_type_exits_nonzero() {
 }
 
 #[test]
-fn verify_ibex_alu_ext_fixture() {
+fn verify_malformed_decompose_projector_exits_nonzero() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("verify")
         .arg("--target")
-        .arg("tests/fixtures/ibex/alu_ext.xif.yaml")
+        .arg("tests/fixtures/common/malformed_decompose.xif.yaml")
+        .output()
+        .expect("failed to run ev verify on the malformed decompose fixture");
+    assert!(
+        !output.status.success(),
+        "a malformed projector should exit non-zero"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("invalid projector") && stderr.contains("overlaps"),
+        "stderr should name the projector and the reason: {}",
+        stderr
+    );
+}
+
+#[test]
+fn verify_enable_mask_demo_fixture() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("verify")
+        .arg("--target")
+        .arg("tests/fixtures/common/enable_mask_demo.xif.yaml")
         .arg("--json")
         .output()
-        .expect("failed to run ev verify on ibex_alu_ext fixture");
+        .expect("failed to run ev verify on the enable_mask_demo fixture");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
         stdout.contains("fact_type"),
-        "ibex_alu_ext should produce fact output"
+        "enable_mask_demo should produce fact output"
     );
 }
 
@@ -276,6 +296,209 @@ fn synth_tagma_decoder_with_mock_backend() {
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("[ok]"), "synthesis should show ok status");
+}
+
+#[test]
+fn synth_design_uses_the_file_stem_as_top() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("synth")
+        .arg("--design")
+        .arg("tests/fixtures/rtl/decode_demo.v")
+        .env("EV_SYNTH_BACKEND", "mock")
+        .output()
+        .expect("failed to run ev synth --design");
+    assert!(output.status.success(), "ev synth --design should exit 0");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Synthesis: decode_demo [ok]"),
+        "--design without --top should resolve the file stem: {}",
+        stdout
+    );
+}
+
+#[test]
+fn synth_design_honours_the_top_override() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("synth")
+        .arg("--design")
+        .arg("tests/fixtures/rtl/decode_demo.v")
+        .arg("--top")
+        .arg("decode_demo_helper")
+        .env("EV_SYNTH_BACKEND", "mock")
+        .output()
+        .expect("failed to run ev synth --design --top");
+    assert!(
+        output.status.success(),
+        "ev synth --design --top should exit 0"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Synthesis: decode_demo_helper [ok]"),
+        "--top should select the module: {}",
+        stdout
+    );
+}
+
+#[test]
+fn synth_design_json_names_the_design_source() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("synth")
+        .arg("--design")
+        .arg("tests/fixtures/rtl/decode_demo.v")
+        .arg("--json")
+        .env("EV_SYNTH_BACKEND", "mock")
+        .output()
+        .expect("failed to run ev synth --design --json");
+    assert!(
+        output.status.success(),
+        "ev synth --design --json should exit 0"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let fact: serde_json::Value =
+        serde_json::from_str(&stdout).expect("ev synth --json should emit a Fact envelope");
+    assert_eq!(fact["fact_type"], "synthesis_result", "fact type");
+    assert_eq!(
+        fact["target"], "decode_demo",
+        "the fact target is the resolved top module"
+    );
+
+    // The payload is an opaque byte vector in the envelope, so decode it the
+    // way a consumer would and check that it names the design file rather
+    // than RTL generated from a spec.
+    let payload_bytes = fact["payload"]
+        .as_array()
+        .expect("the payload should be a byte array")
+        .iter()
+        .map(|byte| byte.as_u64().expect("payload bytes are numbers") as u8)
+        .collect::<Vec<u8>>();
+    let payload: serde_json::Value =
+        serde_json::from_slice(&payload_bytes).expect("the payload should be JSON");
+    let source = payload["source"].as_str().expect("payload source");
+    assert!(
+        source.contains("decode_demo.v") && !source.contains("tmp"),
+        "the source should be the design file: {source}"
+    );
+}
+
+#[test]
+fn synth_design_missing_file_fails() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("synth")
+        .arg("--design")
+        .arg("tests/fixtures/rtl/absent.v")
+        .env("EV_SYNTH_BACKEND", "mock")
+        .output()
+        .expect("failed to run ev synth --design on a missing file");
+    assert!(
+        !output.status.success(),
+        "a missing design file should fail"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("design file not found"),
+        "the error should name the cause: {}",
+        stderr
+    );
+}
+
+#[test]
+fn synth_requires_target_or_design() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("synth")
+        .output()
+        .expect("failed to run bare ev synth");
+    assert!(
+        !output.status.success(),
+        "ev synth without an input should fail"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("--design"),
+        "the error should name the required argument: {}",
+        stderr
+    );
+}
+
+#[test]
+fn synth_rejects_target_with_top() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("synth")
+        .arg("--target")
+        .arg("tests/fixtures/common/all_pass.xif.yaml")
+        .arg("--top")
+        .arg("decode_demo")
+        .output()
+        .expect("failed to run ev synth --target --top");
+    assert!(
+        !output.status.success(),
+        "--top is a --design-only option and should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("cannot be used with"),
+        "the error should explain the conflict: {}",
+        stderr
+    );
+}
+
+#[test]
+fn synth_rejects_target_with_design() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("synth")
+        .arg("--target")
+        .arg("tests/fixtures/common/all_pass.xif.yaml")
+        .arg("--design")
+        .arg("tests/fixtures/rtl/decode_demo.v")
+        .output()
+        .expect("failed to run ev synth --target --design");
+    assert!(
+        !output.status.success(),
+        "--target and --design are mutually exclusive"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("cannot be used with"),
+        "the error should explain the conflict: {}",
+        stderr
+    );
+}
+
+#[test]
+fn synth_design_rejects_an_argument_yosys_cannot_carry() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("synth")
+        .arg("--design")
+        .arg("tests/fixtures/rtl/decode demo.v")
+        .env("EV_SYNTH_BACKEND", "mock")
+        .output()
+        .expect("failed to run ev synth --design with whitespace in the path");
+    assert!(
+        !output.status.success(),
+        "a design path with whitespace should fail"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("must not contain whitespace"),
+        "the error should name the restriction: {}",
+        stderr
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("synth")
+        .arg("--design")
+        .arg("tests/fixtures/rtl/decode_demo.v")
+        .arg("--top")
+        .arg("decode;demo")
+        .env("EV_SYNTH_BACKEND", "mock")
+        .output()
+        .expect("failed to run ev synth --top with a command separator");
+    assert!(!output.status.success(), "a top name with ';' should fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("must not contain whitespace"),
+        "the error should name the restriction: {}",
+        stderr
+    );
 }
 
 #[test]
