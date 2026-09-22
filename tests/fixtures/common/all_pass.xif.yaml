@@ -1,3 +1,12 @@
+# Synthetic simple ALU: the smallest all-pass space.
+#
+# Four fields and no constraints, so the 16 x 16 x 4 = 1,024 raw combinations
+# are all valid. Used where a fixture that rejects nothing keeps the failure
+# path out of the measurement: the synthesis channel, the simulation smoke
+# test, and the coverage script.
+#
+# Models no core.
+
 target: simple_alu
 fields:
   op_a:

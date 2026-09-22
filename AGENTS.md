@@ -228,8 +228,6 @@ become a version.
 
 - Issue #58: pin the Ibex source revision for the `rv32imcb*` fixtures and add
   the source channel that mirrors the CVA6 derivation gate.
-- Issue #59: assert the four counts that are documented but not checked
-  (`xif_encoding`, `csr_access`, `all_pass`, `sample`).
 - Issue #44: execute the accepted CVA6 custom-3 encodings through the
   standard CVA6 tandem flow, which needs the external CVA6 repository. A
   sample's DV environment stays a sample concern: the encoding contract is

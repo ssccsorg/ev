@@ -1,4 +1,12 @@
-target: CVA6_XIF_Accelerator
+# Synthetic mixed pass/fail demonstration.
+#
+# `operand_a` is sampled on a stride of 2 and `eq` ties it to `operand_b`, so of
+# the 4 x 4 x 3 x 2 = 96 raw combinations 12 pass and 84 fail. Used as the small
+# mixed fixture for the CLI text and JSON paths.
+#
+# Models no core: the target names the shape of the space, not a provenance.
+
+target: accelerator_demo
 fields:
   operand_a:
     range: [0, 7]

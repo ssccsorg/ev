@@ -199,15 +199,15 @@ committed fixtures in a release build.
 | `cva6/xif_ref.xif.yaml` | CVA6 `core/cvxif_example/include/cvxif_instr_pkg.sv` and `instr_decoder.sv` at `6544a714c` | Hardware decoder mask table, R-type field terms | 33,554,432 | 196,608 | Derivation gate, count assertion, structural equivalence, CLI counts, Spike recheck |
 | `cva6/xif_ref_r4.xif.yaml` | The same table and revision | The same table in R4 field terms (`func2`, `rs3`) | 16,384 | 2,560 | Derivation gate, count assertion, structural equivalence, Spike recheck |
 | `cva6/xif_madd.xif.yaml` | The same table and revision, the MADD-family entries (`0x43`, `0x47`, `0x4B`, `0x4F`) | Mask table re-expressed as R4 fields | 32,768 | 1,024 | Derivation gate, count assertion |
-| `cva6/xif_encoding.xif.yaml` | The same table, plus `verif/env/corev-dv/custom/cvxif_custom_instr.sv`, at `6544a714c` | DV-class encodings on a register-reduced space, including encodings the decoder rejects | 8,192 | 48 | Spike recheck only; no count assertion (issue #59) |
+| `cva6/xif_encoding.xif.yaml` | The same table, plus `verif/env/corev-dv/custom/cvxif_custom_instr.sv`, at `6544a714c` | DV-class encodings on a register-reduced space, including encodings the decoder rejects | 8,192 | 48 | Count assertion, Spike recheck |
 | `cva6/xif_mac.xif.yaml` | None | Hand-written multiply-accumulate accelerator model | 32,768 | 28,672 | Count assertion, CLI output |
 | `ibex/rv32imcb.xif.yaml` | Ibex `rtl/ibex_decoder.sv`, `OPCODE_OP`, RV32BFull and RV32MFast. The revision is not pinned (issue #58) | Hand transcription of the decoder case statement | 524,288 | 92,160 | Count assertion |
 | `ibex/rv32imcb_imm.xif.yaml` | Ibex `rtl/ibex_decoder.sv`, `OPCODE_OP_IMM`, RV32BFull. The revision is not pinned (issue #58) | Hand transcription of the decoder case statement | 65,536 | 55,616 | Count assertion |
-| `ibex/csr_access.xif.yaml` | The RISC-V Zicsr specification | Hand-written standard encoding domain, with no illegal combination | 49,152 | 49,152 | CLI output only; no count assertion (issue #59) |
+| `ibex/csr_access.xif.yaml` | The RISC-V Zicsr specification | Hand-written standard encoding domain, with no illegal combination | 49,152 | 49,152 | Count assertion, CLI output |
 | `tagma/tagma_decoder.xif.yaml` | syntagma `hw/rtl/tagma_decoder.v` and the Tagma whitepaper (`10.5281/zenodo.21302508`); the reference engine is `tagma-core` at `205e3a0` | Input-domain contract of the decoder, projected into the golden-anchor layout | 65,536 | 11,172 | Count assertion, Tagma fixture tests, golden anchor cross-channel |
 | `tagma/tagma_demo_top.xif.yaml` | syntagma `hw/rtl/tagma_demo_top.v` | Registered output space of the three decoder axes | 11,172 | 11,172 | Count assertion, Tagma fixture tests |
-| `common/all_pass.xif.yaml` | None | Synthetic simple ALU with no constraints | 1,024 | 1,024 | CLI tests, synthesis channel, Spike recheck; no count assertion (issue #59) |
-| `common/sample.xif.yaml` | None | Synthetic mixed pass/fail demonstration | 96 | 12 | Structural equivalence, CLI output and JSON parse, Spike recheck; no count assertion (issue #59) |
+| `common/all_pass.xif.yaml` | None | Synthetic simple ALU with no constraints | 1,024 | 1,024 | Count assertion, CLI tests, synthesis channel, Spike recheck |
+| `common/sample.xif.yaml` | None | Synthetic mixed pass/fail demonstration | 96 | 12 | Count assertion, structural equivalence, CLI output and JSON parse, Spike recheck |
 | `common/enable_mask_demo.xif.yaml` | None | Synthetic `oneof` + `cross` + `enable_mask` coverage with an `identity` projector | 524,288 | 4,096 | Count assertion, structural parity on the distinct passing set |
 | `common/malformed_no_fields.xif.yaml` | None | Parser negative: a spec with no fields | 0 | 0 | CLI test: exits zero with zero counts |
 | `common/malformed_bad_type.xif.yaml` | None | Parser negative: an unknown constraint type | n/a | n/a | CLI test: exits non-zero and names the type |
@@ -231,9 +231,8 @@ specs:
 | `rtl/decode_demo.v` | Hand-written demo decoder for the design-only synthesis path | `run.sh --verify` requires a populated gate count |
 | `yosys/stat_decode_demo.json` | Captured Yosys 0.65 `stat -json` report for `decode_demo.v` | `parse_stat_reads_a_captured_report` |
 
-Two provenance gaps are recorded here rather than smoothed over: the Ibex
-revision is not pinned (issue #58), and four counts are documented without an
-assertion (issue #59).
+One provenance gap is recorded here rather than smoothed over: the Ibex
+revision is not pinned (issue #58).
 
 ## Validation Results
 
