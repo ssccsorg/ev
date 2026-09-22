@@ -7,12 +7,14 @@
 //! # Architecture
 //!
 //! ```text
-//! lib.rs         ← public API re-exports
-//! spec/          ← VerificationSpec, FieldSpec, ConstraintSpec, ProjectorSpec
-//! verify/        ← compose, evaluate, registry (Check trait + registries)
-//! report/        ← ReporterCapable trait + Fact envelope + implementations
-//! format/        ← FormatCapable trait + XIF format parser
-//! synth/         ← synthesis traits (GenerateRtl, RunSynthesis), SV generation, backends
+//! lib.rs          ← public API re-exports
+//! spec/           ← VerificationSpec, FieldSpec, ConstraintSpec, ProjectorSpec
+//! classification/ ← Classification, Verdict: the engine's output type
+//! verify/         ← compose, evaluate, registry (Check trait + registries);
+//!                   depends on the tagma-core crate for coordinate spaces
+//! report/         ← ReporterCapable trait + Fact envelope + implementations
+//! format/         ← FormatCapable trait + XIF format parser
+//! synth/          ← synthesis traits (GenerateRtl, RunSynthesis), SV generation, backends
 //! ```
 //!
 //! # Consuming as a library
@@ -26,6 +28,7 @@
 //! let results = evaluate_all(&spec, combos, &ConstraintRegistry::default(), &ProjectorRegistry::default());
 //! ```
 
+pub mod classification;
 pub mod format;
 pub mod report;
 pub mod spec;

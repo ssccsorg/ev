@@ -62,7 +62,7 @@ fn valid_code_projection_pairs() -> Vec<(i64, i64)> {
     .filter(|r| r.passed)
     .map(|r| {
         (
-            r.combination.values[0],
+            r.values[0],
             r.projection.expect("valid code points must project"),
         )
     })

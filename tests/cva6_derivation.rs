@@ -541,7 +541,7 @@ fn fixture_accepted(spec: &VerificationSpec, axes: &[String]) -> Vec<(Vec<i64>, 
         &ProjectorRegistry::default(),
     )
     .into_iter()
-    .map(|evaluation| (evaluation.combination.values, evaluation.passed))
+    .map(|evaluation| (evaluation.values, evaluation.passed))
     .collect()
 }
 

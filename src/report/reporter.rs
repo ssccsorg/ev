@@ -3,54 +3,29 @@
 //! Following the Nexus capability-trait pattern: each output format (text, JSON,
 //! CSV, trace) implements this trait. The pipeline only depends on the trait.
 //!
-//! Note: the trait is deliberately minimal (`target`, `spec_hash`, `field_order`,
-//! `evaluations`). It does NOT depend on `VerificationSpec` so that any colony
+//! Note: the trait is deliberately minimal (`target`, `spec_hash`, and the
+//! classification). It does NOT depend on `VerificationSpec` so that any colony
 //! — not just ev — can implement it.
 
-use crate::verify::evaluate::Evaluation;
+use crate::classification::{Classification, Verdict};
 use sha2::{Digest, Sha256};
 
 /// Capability: format and output verification results.
 ///
-/// Takes only the data it needs (target name, optional spec hash for content-
-/// addressing, field order, and evaluations). Does NOT take `&VerificationSpec`
-/// to keep the trait reusable across colonies.
+/// Takes only the data it needs (the target name, an optional spec hash for
+/// content-addressing, and the classification). Does NOT take
+/// `&VerificationSpec` to keep the trait reusable across colonies.
 pub trait ReporterCapable: Send + Sync {
-    /// Report results. Returns true if all evaluations passed.
+    /// Report results. Returns true if every point passed.
     ///
     /// * `target` — human-readable name of the verified target.
     /// * `spec_hash` — content-addressable hash of the spec (empty string if
     ///   not available / not needed, e.g. text reporter).
-    /// * `field_order` — ordered field names matching evaluation values.
-    /// * `total` — size of the raw combination space. With the structural
-    ///   pipeline the evaluation list holds only the structurally valid
-    ///   subset, so the reporters derive failed = total - passed instead of
-    ///   evaluations.len() - passed.
-    /// * `evaluations` — individual evaluation results.
-    fn report(
-        &self,
-        target: &str,
-        spec_hash: &str,
-        field_order: &[String],
-        total: usize,
-        evaluations: &[Evaluation],
-    ) -> bool;
-}
-
-// ============================================================================
-// Count helpers
-// ============================================================================
-
-/// Split an evaluation list into passed/failed counts against the raw total.
-/// The invariant passed <= total is enforced loudly: a silent usize wrap in
-/// release would corrupt verification counts.
-fn split_counts(total: usize, evaluations: &[Evaluation]) -> (usize, usize) {
-    let passed = evaluations.iter().filter(|e| e.passed).count();
-    assert!(
-        passed <= total,
-        "reporter invariant violated: passed ({passed}) exceeds raw total ({total})"
-    );
-    (passed, total - passed)
+    /// * `classification` — the field order, the raw total, and one verdict per
+    ///   emitted point. With the structural pipeline the verdict list holds only
+    ///   the structurally valid subset, so the counts are derived against the
+    ///   classification's total rather than the list length.
+    fn report(&self, target: &str, spec_hash: &str, classification: &Classification) -> bool;
 }
 
 // ============================================================================
@@ -60,40 +35,28 @@ fn split_counts(total: usize, evaluations: &[Evaluation]) -> (usize, usize) {
 pub struct CsvReporter;
 
 impl ReporterCapable for CsvReporter {
-    fn report(
-        &self,
-        target: &str,
-        _spec_hash: &str,
-        field_order: &[String],
-        total: usize,
-        evaluations: &[Evaluation],
-    ) -> bool {
-        let (passed_count, failed_count) = split_counts(total, evaluations);
+    fn report(&self, target: &str, _spec_hash: &str, classification: &Classification) -> bool {
+        let (passed_count, failed_count) = classification.counts();
 
         // Print metadata as comments
         println!("# target: {}", target);
-        println!("# total:  {}", total);
+        println!("# total:  {}", classification.total);
         println!("# passed: {}", passed_count);
         println!("# failed: {}", failed_count);
         println!();
 
         // Header
-        let mut header = field_order.join(",");
+        let mut header = classification.field_order.join(",");
         header.push_str(",passed,projection");
         println!("{}", header);
 
         // Rows — use field_order to align values with header
-        for e in evaluations {
-            let values: Vec<String> = field_order
+        for e in &classification.verdicts {
+            let values: Vec<String> = classification
+                .field_order
                 .iter()
                 .enumerate()
-                .map(|(i, _name)| {
-                    e.combination
-                        .values
-                        .get(i)
-                        .map(|v| v.to_string())
-                        .unwrap_or_default()
-                })
+                .map(|(i, _name)| e.values.get(i).map(|v| v.to_string()).unwrap_or_default())
                 .collect();
             let mut row = values.join(",");
             row.push(',');
@@ -117,15 +80,8 @@ impl ReporterCapable for CsvReporter {
 pub struct TraceReporter;
 
 impl ReporterCapable for TraceReporter {
-    fn report(
-        &self,
-        target: &str,
-        _spec_hash: &str,
-        field_order: &[String],
-        total: usize,
-        evaluations: &[Evaluation],
-    ) -> bool {
-        let (passed_count, failed_count) = split_counts(total, evaluations);
+    fn report(&self, target: &str, _spec_hash: &str, classification: &Classification) -> bool {
+        let (passed_count, failed_count) = classification.counts();
         let started_at = chrono::Utc::now();
 
         println!(
@@ -136,22 +92,18 @@ impl ReporterCapable for TraceReporter {
         println!(
             "[{}] INFO   total_combinations={}",
             started_at.to_rfc3339(),
-            total
+            classification.total
         );
         println!();
 
-        for e in evaluations.iter() {
+        for e in &classification.verdicts {
             let ts = chrono::Utc::now();
-            let values: String = field_order
+            let values: String = classification
+                .field_order
                 .iter()
                 .enumerate()
                 .map(|(j, name)| {
-                    let v = e
-                        .combination
-                        .values
-                        .get(j)
-                        .map(|v| v.to_string())
-                        .unwrap_or_default();
+                    let v = e.values.get(j).map(|v| v.to_string()).unwrap_or_default();
                     format!("{}={}", name, v)
                 })
                 .collect::<Vec<_>>()
@@ -184,7 +136,7 @@ impl ReporterCapable for TraceReporter {
             finished_at.to_rfc3339(),
             passed_count,
             failed_count,
-            evaluations.len()
+            classification.verdicts.len()
         );
 
         failed_count == 0
@@ -198,18 +150,11 @@ impl ReporterCapable for TraceReporter {
 pub struct TextReporter;
 
 impl ReporterCapable for TextReporter {
-    fn report(
-        &self,
-        target: &str,
-        _spec_hash: &str,
-        _field_order: &[String],
-        total: usize,
-        evaluations: &[Evaluation],
-    ) -> bool {
-        let (passed_count, failed_count) = split_counts(total, evaluations);
+    fn report(&self, target: &str, _spec_hash: &str, classification: &Classification) -> bool {
+        let (passed_count, failed_count) = classification.counts();
 
         println!("target: {}", target);
-        println!("total:  {}", total);
+        println!("total:  {}", classification.total);
         println!("passed: {}", passed_count);
         println!("failed: {}", failed_count);
         println!();
@@ -218,7 +163,11 @@ impl ReporterCapable for TextReporter {
             // The summary lines above are authoritative; the detail listing
             // is capped (the full list can be gigabytes for sparse spaces).
             const MAX_PRINTED_FAILURES: usize = 25;
-            let failed_rows: Vec<&Evaluation> = evaluations.iter().filter(|e| !e.passed).collect();
+            let failed_rows: Vec<&Verdict> = classification
+                .verdicts
+                .iter()
+                .filter(|e| !e.passed)
+                .collect();
             if !failed_rows.is_empty() {
                 println!("Failures:");
                 for (i, e) in failed_rows.iter().enumerate() {
@@ -232,7 +181,7 @@ impl ReporterCapable for TextReporter {
                         );
                         break;
                     }
-                    println!("  [FAIL] {:?} — {}", e.combination.values, e.reason);
+                    println!("  [FAIL] {:?} — {}", e.values, e.reason);
                 }
             }
         }
@@ -284,15 +233,8 @@ struct VerificationReport {
 pub struct JsonReporter;
 
 impl ReporterCapable for JsonReporter {
-    fn report(
-        &self,
-        target: &str,
-        spec_hash: &str,
-        field_order: &[String],
-        total: usize,
-        evaluations: &[Evaluation],
-    ) -> bool {
-        let (passed_count, failed_count) = split_counts(total, evaluations);
+    fn report(&self, target: &str, spec_hash: &str, classification: &Classification) -> bool {
+        let (passed_count, failed_count) = classification.counts();
         let origin = format!("ev/{}", env!("CARGO_PKG_VERSION"));
         let timestamp = chrono::Utc::now().to_rfc3339();
         let spec_hash = spec_hash.to_string();
@@ -302,25 +244,24 @@ impl ReporterCapable for JsonReporter {
             target: target.to_string(),
             timestamp,
             spec_hash: spec_hash.clone(),
-            total,
+            total: classification.total,
             passed: passed_count,
             failed: failed_count,
-            field_order: field_order.to_vec(),
-            results: evaluations
+            field_order: classification.field_order.clone(),
+            results: classification
+                .verdicts
                 .iter()
                 .map(|e| {
-                    let fields: BTreeMap<String, i64> = field_order
+                    let fields: BTreeMap<String, i64> = classification
+                        .field_order
                         .iter()
                         .enumerate()
-                        .filter_map(|(i, name)| {
-                            e.combination.values.get(i).map(|v| (name.clone(), *v))
-                        })
+                        .filter_map(|(i, name)| e.values.get(i).map(|v| (name.clone(), *v)))
                         .collect();
-                    let id =
-                        hash_evaluation(&spec_hash, &e.combination.values, e.passed, e.projection);
+                    let id = hash_evaluation(&spec_hash, &e.values, e.passed, e.projection);
                     EvaluationEntry {
                         id,
-                        combination: e.combination.values.clone(),
+                        combination: e.values.clone(),
                         fields,
                         passed: e.passed,
                         projection: e.projection,
@@ -364,21 +305,6 @@ pub fn hash_spec(spec: &crate::spec::VerificationSpec) -> String {
     h.update(format!("{:?}", spec.projector).as_bytes());
     for c in &spec.constraints {
         h.update(format!("{:?}", c).as_bytes());
-    }
-    format!("{:x}", h.finalize())
-}
-
-/// Hash all evaluations into a single content ID for simulation results.
-#[allow(dead_code)]
-pub fn hash_evaluations(evaluations: &[Evaluation]) -> String {
-    let mut h = Sha256::new();
-    for e in evaluations {
-        h.update(e.combination.values.len().to_le_bytes());
-        for v in &e.combination.values {
-            h.update(v.to_le_bytes());
-        }
-        h.update(if e.passed { b"1" } else { b"0" });
-        h.update(e.reason.as_bytes());
     }
     format!("{:x}", h.finalize())
 }

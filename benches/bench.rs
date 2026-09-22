@@ -450,14 +450,13 @@ fn bench_evaluate_structural_ibex(c: &mut Criterion) {
     let spec = ibex_spec();
     c.bench_function("evaluate_structural/ibex_524k", |b| {
         b.iter(|| {
-            let (total, results) = evaluate_structural(
+            let classification = evaluate_structural(
                 black_box(&spec),
                 &ConstraintRegistry::default(),
                 &ProjectorRegistry::default(),
             )
             .expect("structural evaluation");
-            let passed = results.iter().filter(|r| r.passed).count();
-            black_box((total, passed));
+            black_box((classification.total, classification.passed()));
         })
     });
 }
@@ -632,14 +631,13 @@ fn bench_evaluate_structural_cva6_full(c: &mut Criterion) {
     let spec = cva6_full_spec();
     c.bench_function("evaluate_structural/cva6_full_33M", |b| {
         b.iter(|| {
-            let (total, results) = evaluate_structural(
+            let classification = evaluate_structural(
                 black_box(&spec),
                 &ConstraintRegistry::default(),
                 &ProjectorRegistry::default(),
             )
             .expect("structural evaluation");
-            let passed = results.iter().filter(|r| r.passed).count();
-            black_box((total, passed));
+            black_box((classification.total, classification.passed()));
         })
     });
 }
@@ -731,14 +729,13 @@ fn bench_evaluate_structural_tagma(c: &mut Criterion) {
     let spec = tagma_spec();
     c.bench_function("evaluate_structural/tagma_decoder_64K", |b| {
         b.iter(|| {
-            let (total, results) = evaluate_structural(
+            let classification = evaluate_structural(
                 black_box(&spec),
                 &ConstraintRegistry::default(),
                 &ProjectorRegistry::default(),
             )
             .expect("structural evaluation");
-            let passed = results.iter().filter(|r| r.passed).count();
-            black_box((total, passed));
+            black_box((classification.total, classification.passed()));
         })
     });
 }

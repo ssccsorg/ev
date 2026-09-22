@@ -2,20 +2,12 @@
 //!
 //! Uses pluggable checks resolved from registries.
 
+use crate::classification::{Classification, Verdict};
 use crate::spec::{ConstraintSpec, VerificationSpec};
 use crate::verify::compose::{
     coords_to_coord_vec, raw_total_combinations, Combination, StructuralEnum,
 };
 use crate::verify::registry::{Check, ConstraintRegistry, ProjectorRegistry};
-
-/// Result of evaluating a single constraint combination.
-#[derive(Debug, Clone)]
-pub struct Evaluation {
-    pub combination: Combination,
-    pub passed: bool,
-    pub projection: Option<i64>,
-    pub reason: String,
-}
 
 /// Build a list of checks from the spec, excluding enable_mask constraints.
 fn build_checks(spec: &VerificationSpec, registry: &ConstraintRegistry) -> Vec<Box<dyn Check>> {
@@ -36,12 +28,15 @@ fn build_checks(spec: &VerificationSpec, registry: &ConstraintRegistry) -> Vec<B
 }
 
 /// Evaluate all combinations using the given registries.
+///
+/// `Combination` and the coordinate types it holds stay internal to the
+/// engine; what leaves is a [`Verdict`] per combination.
 pub fn evaluate_all(
     spec: &VerificationSpec,
     combinations: Vec<Combination>,
     constraint_registry: &ConstraintRegistry,
     projector_registry: &ProjectorRegistry,
-) -> Vec<Evaluation> {
+) -> Vec<Verdict> {
     let checks = build_checks(spec, constraint_registry);
     // Compute each check's description once. `describe()` can be expensive
     // (e.g. a cross constraint with a large mapping), and it is the same
@@ -55,14 +50,21 @@ pub fn evaluate_all(
     combinations
         .into_iter()
         .map(|combination| {
+            // The engine's internal representation is destructured here and
+            // does not leave this function.
+            let Combination {
+                values,
+                coordinates,
+                point,
+            } = combination;
             // enable_mask has already been applied by expand_all() in compose.rs.
             // The combination's values, coordinates, and point reflect masked fields.
             // Check field domain validity
             for (axis, (name, field_spec)) in spec.fields.iter().enumerate() {
-                if let Some(value) = combination.coordinates.get_axis(axis) {
+                if let Some(value) = coordinates.get_axis(axis) {
                     if !field_spec.allows(value) {
-                        return Evaluation {
-                            combination,
+                        return Verdict {
+                            values,
                             passed: false,
                             projection: None,
                             reason: format!(
@@ -78,9 +80,9 @@ pub fn evaluate_all(
 
             // Check all constraints (field-agnostic)
             for (i, check) in checks.iter().enumerate() {
-                if !check.allows(combination.point.coordinates()) {
-                    return Evaluation {
-                        combination,
+                if !check.allows(point.coordinates()) {
+                    return Verdict {
+                        values,
                         passed: false,
                         projection: None,
                         reason: check_descriptions[i].clone(),
@@ -88,10 +90,10 @@ pub fn evaluate_all(
                 }
             }
 
-            let projection = evaluator.evaluate(&combination.point);
+            let projection = evaluator.evaluate(&point);
 
-            Evaluation {
-                combination,
+            Verdict {
+                values,
                 passed: true,
                 projection,
                 reason: String::new(),
@@ -101,40 +103,44 @@ pub fn evaluate_all(
 }
 
 /// Evaluate only the structurally valid combinations, using `StructuralEnum`
-/// instead of the full cartesian expansion. Returns the raw total (the
-/// cartesian product size, never enumerated) and the evaluations of the
-/// structurally valid subset.
+/// instead of the full cartesian expansion. Returns the classification: the
+/// raw total (the cartesian product size, never enumerated) and a verdict for
+/// each structurally valid point.
 ///
-/// For specs with only runtime constraints the subset is the full space and
-/// the result matches `expand_all` + `evaluate_all` exactly. For specs with
-/// structural constraints (oneof, cross, bitmask) the invalid combinations
-/// are absent from the evaluation list; the returned total reconciles the
-/// reporter counts.
+/// For specs with only runtime constraints the verdict list covers the full
+/// space and the result matches `expand_all` + `evaluate_all` exactly. For
+/// specs with structural constraints (oneof, cross, bitmask) the invalid
+/// combinations are absent from the verdict list; the returned total
+/// reconciles the reported counts.
 pub fn evaluate_structural(
     spec: &VerificationSpec,
     constraint_registry: &ConstraintRegistry,
     projector_registry: &ProjectorRegistry,
-) -> Result<(usize, Vec<Evaluation>), String> {
+) -> Result<Classification, String> {
     if spec.fields.is_empty() {
-        return Ok((0, Vec::new()));
+        return Ok(Classification::new(Vec::new(), 0, Vec::new()));
     }
     let total = raw_total_combinations(spec)?;
     let combinations: Vec<Combination> = StructuralEnum::new(spec).collect();
-    let evaluations = evaluate_all(spec, combinations, constraint_registry, projector_registry);
+    let verdicts = evaluate_all(spec, combinations, constraint_registry, projector_registry);
 
     // Invariant guard: the structural generator must never emit more
     // combinations than the raw cartesian product. A violation means a
     // structural filter is misclassified or the generator over-emits, and
     // would silently corrupt the failed = total - passed counts.
-    if evaluations.len() > total {
+    if verdicts.len() > total {
         return Err(format!(
             "structural invariant violated: {} emitted combinations exceed raw total {}",
-            evaluations.len(),
+            verdicts.len(),
             total
         ));
     }
 
-    Ok((total, evaluations))
+    Ok(Classification::new(
+        spec.fields.keys().cloned().collect(),
+        total,
+        verdicts,
+    ))
 }
 
 /// Validate all combinations into a DynCoordSpace.
@@ -438,7 +444,7 @@ mod tests {
         // 3: even(fail) → reject
         // 10: even(ok) + range(ok) → pass, projection=10
         for r in &results {
-            match r.combination.values[0] {
+            match r.values[0] {
                 2 => {
                     assert!(r.passed, "2 should pass");
                     assert_eq!(r.projection, Some(2));
@@ -727,8 +733,8 @@ mod tests {
             &ProjectorRegistry::default(),
         );
         for r in &results {
-            let a = r.combination.values[0];
-            let b = r.combination.values[1];
+            let a = r.values[0];
+            let b = r.values[1];
             match a {
                 0 | 1 => {
                     // 0 & 2 = 0 ≠ 2, 1 & 2 = 0 ≠ 2
@@ -789,8 +795,8 @@ mod tests {
         // op=1, sub=3: fails (3 not in [0,1,2])
         // op=2: passes trivially (not in mapping, unrestrict)
         for r in &results {
-            let op = r.combination.values[0];
-            let sub = r.combination.values[1];
+            let op = r.values[0];
+            let sub = r.values[1];
             match (op, sub) {
                 (0, 0) => assert!(r.passed, "op=0, sub=0 should pass"),
                 (0, _) => assert!(!r.passed, "op=0, sub={} should fail", sub),
@@ -906,9 +912,9 @@ mod tests {
         );
         assert_eq!(results.len(), 32);
         for r in &results {
-            let op = r.combination.values[0];
-            let rs1 = r.combination.values[1];
-            let rd = r.combination.values[2];
+            let op = r.values[0];
+            let rs1 = r.values[1];
+            let rd = r.values[2];
             match op {
                 0 => {
                     // op=0: no mask applied, any value allowed

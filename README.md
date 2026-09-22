@@ -274,6 +274,7 @@ fixtures.
 ```
 src/
   main.rs           CLI (clap: verify, simulate, synth, fact decode)
+  classification/   Verdict, Classification — the engine's output type
   spec/             VerificationSpec, FieldSpec, ConstraintSpec, ProjectorSpec,
                     EncodingLayout, FieldBitMapping
   verify/
@@ -322,6 +323,7 @@ Backends are pluggable via environment variables:
 | `EV_TAGMA_ANCHORS` | path | Generated `hw/rtl/golden_anchors.hex` for the tagma artifact channel |
 | `SYNTAGMA_DIR` | path | Sibling syntagma checkout (default `../syntagma`), the artifact-channel fallback |
 | `CVA6_DIR` | path | Sibling CVA6 checkout (default `../cva6`) for the fixture derivation gate's source channel |
+| `IBEX_DIR` | path | Sibling Ibex checkout (default `../ibex`) for the source pin's checkout channel |
 | `EV_UPDATE_MASK_TABLE` | `1` | Rewrite `tests/fixtures/cva6/mask_table.json` from a checkout at the pinned commit |
 
 ## Prerequisites

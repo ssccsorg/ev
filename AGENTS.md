@@ -42,6 +42,7 @@ checked where it can be mechanical, and the source is pinned where it cannot
 src/
   main.rs           CLI (clap: verify, simulate, synth, fact decode)
   lib.rs            public re-exports
+  classification/   Verdict, Classification — the engine's output type
   spec/             VerificationSpec, FieldSpec, ConstraintSpec, ProjectorSpec,
                     EncodingLayout, FieldBitMapping
   verify/
@@ -241,7 +242,11 @@ Fixture Provenance table; keep the counts in step between the two.
 - New projector type: add a variant to `ProjectorSpec`, a builder in
   `ProjectorRegistry::default()`, and an arm in `sv_projector`.
 - New input format: implement `FormatCapable`. New output format: implement
-  `ReporterCapable` and pass the total through.
+  `ReporterCapable` and pass the classification through.
+- New classification engine: produce a `Classification` from a spec. The
+  built-in engine is `verify::evaluate_structural`, reached in one call in
+  `Commands::Verify`; #67 turns that call into a selectable capability with the
+  naive pipeline (`expand_all` + `evaluate_all`) as the second implementation.
 
 ## Documentation
 

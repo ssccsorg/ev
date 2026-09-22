@@ -129,14 +129,14 @@ fn run_sim(target: &std::path::Path) -> anyhow::Result<SimulationResult> {
     let projector_registry = ProjectorRegistry::default();
     let combinations =
         expand_all(&spec).map_err(|e| anyhow::anyhow!("domain expansion failed: {}", e))?;
-    let evaluations = evaluate_all(
+    let verdicts = evaluate_all(
         &spec,
         combinations,
         &constraint_registry,
         &projector_registry,
     );
     let backend = resolve_sim_backend();
-    backend.run(&spec, evaluations)
+    backend.run(&spec, verdicts)
 }
 
 /// What to synthesize: a spec that generates RTL, or an RTL file directly.
@@ -212,7 +212,7 @@ fn main() -> anyhow::Result<()> {
             // Structural pipeline: enumerate only the structurally valid
             // combinations (O(V) instead of O(N)); the raw total is computed
             // without expanding the space and reconciles the counts.
-            let (total, evaluations) =
+            let classification =
                 evaluate_structural(&spec, &constraint_registry, &projector_registry)
                     .map_err(|e| anyhow::anyhow!("structural evaluation failed: {}", e))?;
 
@@ -231,10 +231,8 @@ fn main() -> anyhow::Result<()> {
                 OutputFormat::Text => Box::new(TextReporter),
             };
 
-            let field_order: Vec<String> = spec.fields.keys().cloned().collect();
             let spec_hash = hash_spec(&spec);
-            let all_passed =
-                reporter.report(&spec.target, &spec_hash, &field_order, total, &evaluations);
+            let all_passed = reporter.report(&spec.target, &spec_hash, &classification);
 
             if !all_passed {
                 std::process::exit(1);
@@ -266,13 +264,10 @@ fn main() -> anyhow::Result<()> {
             format,
         } => {
             let result = run_sim(&target)?;
-            let n = result.evaluations.len();
-            let passed = result.evaluations.iter().filter(|e| e.passed).count();
-            let failed = n - passed;
+            let (passed, failed) = result.classification.counts();
             if json {
                 eprintln!("warning: --json is deprecated, use --format json instead");
             }
-            let field_order = result.field_order.clone();
             let fmt = format.unwrap_or(if json {
                 OutputFormat::Json
             } else {
@@ -285,27 +280,15 @@ fn main() -> anyhow::Result<()> {
                 }
                 OutputFormat::Csv => {
                     let reporter = CsvReporter;
-                    reporter.report(
-                        &result.tool,
-                        "",
-                        &field_order,
-                        result.evaluations.len(),
-                        &result.evaluations,
-                    );
+                    reporter.report(&result.tool, "", &result.classification);
                 }
                 OutputFormat::Trace => {
                     let reporter = TraceReporter;
-                    reporter.report(
-                        &result.tool,
-                        "",
-                        &field_order,
-                        result.evaluations.len(),
-                        &result.evaluations,
-                    );
+                    reporter.report(&result.tool, "", &result.classification);
                 }
                 OutputFormat::Text => {
                     println!("target: simulation ({} backend)", result.tool);
-                    println!("total:  {}", n);
+                    println!("total:  {}", result.classification.total);
                     println!("passed: {}", passed);
                     println!("failed: {}", failed);
                 }
