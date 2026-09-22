@@ -11,6 +11,21 @@ pass/fail deterministically and exhaustively.
 - Language: Rust (edition 2021), Apache 2.0
 - Version: 0.1.0 (pre-1.0, not published to crates.io)
 
+## Scope
+
+ev is the atomic verifier: given a spec it classifies the declared encoding
+space exhaustively and deterministically, and it pins where the spec came from.
+That is its whole responsibility.
+
+The accumulation layer is not ev's. Making the records a queryable, superseding
+corpus, comparing runs and engines, and the design-oracle product belong to
+ExaSpec, which consumes ev's Facts; the FIH field alignment waits for nexus
+(see Open Work). ev's obligation toward that layer is to emit a complete
+classification that is reproducible and correctly addressed, which is what
+issues #64, #65, and #68 are about, and to keep its engine one implementation
+behind a capability interface (#67) so a more specialized verifier can be
+routed in without changing what ev emits.
+
 ## Architecture
 
 ```text
