@@ -162,8 +162,6 @@ decoder fixtures are the `ibex/rv32imcb*.xif.yaml` pair (issue #36).
 | `SYNTAGMA_DIR` | path | Sibling syntagma checkout (default `../syntagma`), the artifact-channel fallback |
 | `CVA6_DIR` | path | Sibling CVA6 checkout (default `../cva6`) for the derivation gate's source channel |
 | `EV_UPDATE_MASK_TABLE` | `1` | Rewrite `tests/fixtures/cva6/mask_table.json` from a checkout at the pinned commit |
-| `CVA6_DIR` | path | Sibling CVA6 checkout (default `../cva6`) for the derivation gate's source channel |
-| `EV_UPDATE_MASK_TABLE` | `1` | Rewrite `tests/fixtures/cva6/mask_table.json` from a checkout at the pinned commit |
 
 ## Key Design Decisions
 

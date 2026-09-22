@@ -210,6 +210,12 @@ fn sv_projector(proj: &crate::spec::ProjectorSpec, field_names: &[&String]) -> S
             // field >= base. SystemVerilog division and modulo on negative
             // operands are tool-dependent, and the generated assertion module
             // is exercised on the valid domain.
+            //
+            // Unlike the evaluator, which yields no projection for an axis
+            // digit that does not fit its width, this expression keeps the
+            // digit's full width. The two agree only where the constraints
+            // bound the field so that every digit fits, as they do for the
+            // fixtures that use this projector.
             let mut terms: Vec<String> = Vec::new();
             if let Some(shift) = offset_shift {
                 terms.push(format!("(({field} - {base}) << {shift})"));

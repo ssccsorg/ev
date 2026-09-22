@@ -102,7 +102,7 @@ fn tagma_demo_top_output_space() {
     );
 }
 
-/// The tagma_decode projector packs the decomposition into the golden-anchor
+/// The decompose projector packs the decomposition into the golden-anchor
 /// layout offset[28:15] i[14:10] m[9:5] f[4:0]. Literal spot values pin the
 /// packing without re-deriving it from the same formula.
 #[test]

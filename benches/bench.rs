@@ -241,7 +241,7 @@ fn cva6_full_spec() -> VerificationSpec {
 ///
 /// Real fixture `tests/fixtures/tagma/tagma_decoder.xif.yaml`, the input
 /// domain contract of the syntagma 3-axis Hangul decoder. Two runtime
-/// constraints (ge 0xAC00, le 0xD7A3) plus the tagma_decode projector that
+/// constraints (ge 0xAC00, le 0xD7A3) plus the decompose projector that
 /// packs the axis decomposition into the golden-anchor layout.
 fn tagma_spec() -> VerificationSpec {
     let path = std::path::Path::new("tests/fixtures/tagma/tagma_decoder.xif.yaml");
@@ -705,7 +705,7 @@ fn bench_structural_enum_tagma(c: &mut Criterion) {
 }
 
 /// evaluate_all on the Tagma decoder fixture: the naive path materializes
-/// all 65,536 combos and runs the ge/le checks plus the tagma_decode
+/// all 65,536 combos and runs the ge/le checks plus the decompose
 /// projection on the passing ones, ~9.7 ms.
 fn bench_evaluate_tagma(c: &mut Criterion) {
     let spec = tagma_spec();

@@ -1,4 +1,4 @@
-//! Cross-channel check: the `tagma_decode` projector against the Tagma
+//! Cross-channel check: the `decompose` projector against the Tagma
 //! reference engine.
 //!
 //! `tests/tagma_fixture.rs` pins the projector two ways: three literal anchor
@@ -107,7 +107,7 @@ fn anchor_file() -> Option<String> {
 /// Channel 1: the projector must equal the reference engine on every valid
 /// code point.
 #[test]
-fn tagma_decode_matches_reference_engine_full_domain() {
+fn decompose_matches_reference_engine_full_domain() {
     let pairs = valid_code_projection_pairs();
 
     for (offset, (_code, projection)) in pairs.iter().enumerate() {
@@ -123,7 +123,7 @@ fn tagma_decode_matches_reference_engine_full_domain() {
 /// k + 1 (the file has no header) must equal the projection of code
 /// `0xAC00 + k`.
 #[test]
-fn tagma_decode_matches_golden_anchor_file() {
+fn decompose_matches_golden_anchor_file() {
     let Some(path) = anchor_file() else {
         eprintln!("{ANCHOR_ENV} is unset or empty; the anchor-file channel did not run");
         return;

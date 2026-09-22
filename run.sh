@@ -210,7 +210,7 @@ verify_large_fixtures() {
     cargo bench --bench bench -- "struct_enum/ibex|struct_enum/cva6" 2>&1 | grep -E 'struct_enum|time:' | head -6
 }
 
-# Cross-channel check of the tagma_decode projector. The reference engine
+# Cross-channel check of the decompose projector. The reference engine
 # (tagma_core::Coord::to_axes) is always available; a generated
 # golden_anchors.hex adds the line-by-line artifact channel when one is at
 # hand. An unavailable artifact is reported, never passed over silently.
