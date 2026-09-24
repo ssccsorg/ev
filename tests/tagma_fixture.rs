@@ -31,7 +31,7 @@ fn valid_code_projection_pairs(spec: &VerificationSpec) -> Vec<(i64, i64)> {
     .filter(|r| r.passed)
     .map(|r| {
         (
-            r.combination.values[0],
+            r.values[0],
             r.projection.expect("valid code points must project"),
         )
     })
@@ -61,7 +61,7 @@ fn tagma_decoder_domain_boundary() {
     let valid: Vec<i64> = results
         .into_iter()
         .filter(|r| r.passed)
-        .map(|r| r.combination.values[0])
+        .map(|r| r.values[0])
         .collect();
 
     assert_eq!(

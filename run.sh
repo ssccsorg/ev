@@ -137,8 +137,10 @@ verify_sim() {
 verify_fixtures() {
     echo "=== all-pass fixture ==="
     $EV verify --target "$ALL_PASS"
+    _verify_check "all-pass fixture"       1024    0       "$ALL_PASS"
     echo "=== mixed fixture ==="
     $EV verify --target "$MIXED" 2>&1 || true
+    _verify_check "mixed fixture"          12      84      "$MIXED"
     echo "=== json output ==="
     local json_out
     json_out=$($EV verify --target "$MIXED" --json 2>/dev/null || true)
@@ -200,10 +202,12 @@ verify_large_fixtures() {
     _verify_check "cva6 xif madd"          1024    31744    "tests/fixtures/cva6/xif_madd.xif.yaml"
     _timed "cva6 xif mac fixture (32k combos)" $EV verify --target "tests/fixtures/cva6/xif_mac.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
     _verify_check "cva6 xif mac"            28672   4096   "tests/fixtures/cva6/xif_mac.xif.yaml"
+    _verify_check "cva6 xif encoding"       48      8144   "tests/fixtures/cva6/xif_encoding.xif.yaml"
     _timed "enable_mask demo fixture (524k combos)" $EV verify --target "tests/fixtures/common/enable_mask_demo.xif.yaml" 2>&1 | grep -E '(target:|total:|passed:|failed:)' || true
     _verify_check "enable_mask demo"        4096    520192 "tests/fixtures/common/enable_mask_demo.xif.yaml"
     _verify_check "ibex rv32imcb encoding"      92160  432128 "tests/fixtures/ibex/rv32imcb.xif.yaml"
     _verify_check "ibex rv32imcb imm ops"       55616   9920  "tests/fixtures/ibex/rv32imcb_imm.xif.yaml"
+    _verify_check "ibex csr access"             49152   0     "tests/fixtures/ibex/csr_access.xif.yaml"
     _verify_check "tagma decoder domain"        11172   54364 "tests/fixtures/tagma/tagma_decoder.xif.yaml"
     _verify_check "tagma demo top outputs"      11172   0     "tests/fixtures/tagma/tagma_demo_top.xif.yaml"
     echo "=== structural enumeration bench ==="
@@ -269,6 +273,29 @@ verify_cva6_derivation() {
     return "$ec"
 }
 
+# Ibex source pin: the two RV32IMCB fixtures state the decoder file they were
+# transcribed from. A checkout at hand (IBEX_DIR, default ../ibex) is compared
+# with the pin, digest first. An unavailable checkout is reported, never passed
+# over silently, and the pin's coverage of the fixture files is checked
+# wherever the tests run.
+verify_ibex_source() {
+    echo "=== ibex source pin ==="
+    local dir="${IBEX_DIR:-../ibex}"
+    if [ -f "${dir}/rtl/ibex_decoder.sv" ]; then
+        echo "  source checkout: ${dir} (the pin is compared)"
+    else
+        echo "  source checkout: unavailable (set IBEX_DIR to an Ibex checkout)"
+    fi
+
+    local ec=0
+    cargo test --release --test ibex_source_pin -- --nocapture || ec=$?
+    if [ "$ec" -ne 0 ]; then
+        echo "  FAILED: the ibex source pin did not match (see the test output above)"
+        VERIFY_FAILED=1
+    fi
+    return "$ec"
+}
+
 # ── Modes ─────────────────────────────────────────────────────────────
 
 case ${1:-} in
@@ -312,6 +339,7 @@ case ${1:-} in
         verify_large_fixtures || true
         verify_golden_anchors || true
         verify_cva6_derivation || true
+        verify_ibex_source || true
         verify_sim || true
         echo ""
         if [ "$VERIFY_FAILED" -ne 0 ]; then
@@ -357,6 +385,7 @@ case ${1:-} in
         verify_large_fixtures || true
         verify_golden_anchors || true
         verify_cva6_derivation || true
+        verify_ibex_source || true
         verify_sim || true
         echo ""
         if [ "$VERIFY_FAILED" -ne 0 ]; then

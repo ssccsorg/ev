@@ -27,8 +27,8 @@
 //!  └── CoverageCapable  — return coverage data (which encodings exercised)
 //! ```
 
+use crate::classification::{Classification, Verdict};
 use crate::spec::VerificationSpec;
-use crate::verify::evaluate::Evaluation;
 
 // ============================================================================
 // Simulation traits
@@ -46,39 +46,38 @@ pub struct SimulationResult {
     pub tool: String,
     /// Tool version string.
     pub version: String,
-    /// Ordered field names matching evaluation values.
-    pub field_order: Vec<String>,
-    /// Evaluations after simulation — each encoding marked pass/fail.
-    /// Same structure as `evaluate::evaluate_all` output.
-    pub evaluations: Vec<Evaluation>,
+    /// The classification after simulation: the same field order and one
+    /// verdict per encoding, each marked pass/fail by the backend.
+    pub classification: Classification,
     /// Backend-specific opaque data (opaque to core).
     pub extra: Option<serde_json::Value>,
 }
 
 /// Base capability: run a simulator on a spec's encodings.
 ///
-/// The backend receives the full spec (for field names, constraints) and
-/// the pre-computed evaluations from static verification. It must return
-/// evaluations with simulation results merged.
+/// The backend receives the full spec (for field names, constraints) and the
+/// static verdicts from verification. It must return a classification whose
+/// verdicts carry the simulation results.
 ///
 /// # Error contract
 ///
 /// * `Ok(result)` — simulation ran to completion. Tool-level failures
-///   (encoding rejected, crash) are encoded in individual Evaluation records.
+///   (encoding rejected, crash) are encoded in individual verdicts.
 /// * `Err(...)` — infrastructure failure: tool not found, cross-compiler
 ///   missing, ELF generation failed.
 pub trait RunSimulation: Send + Sync {
     /// Run simulation on all valid encodings from a verification spec.
     ///
     /// `spec` — the full specification (field definitions, constraints).
-    /// `static_evaluations` — pre-computed evaluations from `evaluate_all`.
+    /// `static_verdicts` — verdicts from `evaluate_all`.
     ///
-    /// Returns evaluations with Spike results merged. Encodings that passed
-    /// static verification but failed simulation are marked as failed.
+    /// Returns a classification with the simulation results merged. Encodings
+    /// that passed static verification but failed simulation are marked as
+    /// failed.
     fn run(
         &self,
         spec: &VerificationSpec,
-        static_evaluations: Vec<Evaluation>,
+        static_verdicts: Vec<Verdict>,
     ) -> anyhow::Result<SimulationResult>;
 }
 
@@ -118,12 +117,13 @@ pub trait CoverageCapable: RunSimulation {
 impl From<&SimulationResult> for crate::report::fih::Fact {
     fn from(r: &SimulationResult) -> Self {
         let origin = format!("ev/simulation/{}", r.tool);
+        let (passed, failed) = r.classification.counts();
         let payload = serde_json::json!({
             "tool": r.tool,
             "version": r.version,
-            "total": r.evaluations.len(),
-            "passed": r.evaluations.iter().filter(|e| e.passed).count(),
-            "failed": r.evaluations.iter().filter(|e| !e.passed).count(),
+            "total": r.classification.total,
+            "passed": passed,
+            "failed": failed,
         });
         crate::report::fih::Fact::new(
             "simulation_result",
@@ -140,14 +140,14 @@ impl RunSimulation for MockSimBackend {
     fn run(
         &self,
         spec: &VerificationSpec,
-        static_evaluations: Vec<Evaluation>,
+        static_verdicts: Vec<Verdict>,
     ) -> anyhow::Result<SimulationResult> {
         let field_order: Vec<String> = spec.fields.keys().cloned().collect();
+        let total = static_verdicts.len();
         Ok(SimulationResult {
             tool: "mock".into(),
             version: "0.0.0".into(),
-            field_order,
-            evaluations: static_evaluations,
+            classification: Classification::new(field_order, total, static_verdicts),
             extra: None,
         })
     }

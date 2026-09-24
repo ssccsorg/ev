@@ -11,12 +11,38 @@ pass/fail deterministically and exhaustively.
 - Language: Rust (edition 2021), Apache 2.0
 - Version: 0.1.0 (pre-1.0, not published to crates.io)
 
+## Scope
+
+ev is the atomic verifier: given a spec it classifies the declared encoding
+space exhaustively and deterministically, and it pins where the spec came from.
+That is its whole responsibility.
+
+The accumulation layer is not ev's. Making the records a queryable, superseding
+corpus, comparing runs and engines, and the design-oracle product belong to
+ExaSpec, which consumes ev's Facts; the FIH field alignment waits for nexus
+(see Open Work). ev's obligation toward that layer is to emit a complete
+classification that is reproducible and correctly addressed, which is what
+issues #64, #65, and #68 are about, and to keep its engine one implementation
+behind a capability interface (#67) so a more specialized verifier can be
+routed in without changing what ev emits.
+
+The engine is a vessel rather than the differentiator. The classification
+behind the capability seam (#67) may be imported: an engine with different
+performance, different accuracy, or coverage of another chip family can be
+routed in without changing what ev emits, so breadth of targets is not ev's to
+grow. The samples under `tests/fixtures/` exercise the vessel and its
+channels, and what is ev's own is the machinery that makes an imported spec
+trustworthy: a spec states its source, the derivation from that source is
+checked where it can be mechanical, and the source is pinned where it cannot
+(#56, #58, #62).
+
 ## Architecture
 
 ```text
 src/
   main.rs           CLI (clap: verify, simulate, synth, fact decode)
   lib.rs            public re-exports
+  classification/   Verdict, Classification — the engine's output type
   spec/             VerificationSpec, FieldSpec, ConstraintSpec, ProjectorSpec,
                     EncodingLayout, FieldBitMapping
   verify/
@@ -104,6 +130,15 @@ when the layout changes.
   `../cva6`) it re-extracts the table and checks the commit and the file
   digests; `run.sh --verify` reports the source channel as checked or
   unavailable.
+- Ibex source pin: `tests/ibex_source_pin.rs` compares a checkout with
+  `tests/fixtures/ibex/decoder_pin.json`, which pins `rtl/ibex_decoder.sv` at
+  `f4540774` (the digest, the assumed configuration, and the two `rv32imcb*`
+  fixture files it covers). The digest is the hard check and the revision is
+  reported, so a checkout at another commit describing the same decoder passes
+  with a note. The fixture digests are checked wherever the tests run, so a
+  fixture edit has to restate the pin. No gate compares the fixtures'
+  `(funct7, funct3)` mapping with the decoder yet, which is why issue #62
+  exists and why the fixture headers say `transcribed from`.
 - Coverage gate: `scripts/coverage.sh` (cargo-llvm-cov, 80% lines and 80%
   regions) exercises the Spike, Yosys, and simulation backends with the
   instrumented binary.
@@ -118,12 +153,13 @@ when the layout changes.
 ### Tests and fixtures
 
 ```bash
-cargo test --release          # 130 tests: 83 lib, 28 CLI, 8 structural,
-                              # 5 tagma, 2 golden anchor, 4 derivation. None ignored.
+cargo test --release          # 132 tests: 83 lib, 28 CLI, 8 structural,
+                              # 5 tagma, 2 golden anchor, 4 derivation, 2 source pin.
+                              # None ignored.
 cargo bench -- cva6_full      # full-space CVA6 group
 cargo bench -- struct_enum_validity   # correctness guard, must stay green
 ./run.sh                      # fmt, clippy, build, test, verify
-./run.sh --verify             # Yosys, fixtures, golden anchors, derivation gate, Spike
+./run.sh --verify             # Yosys, fixtures, golden anchors, derivation gate, source pin, Spike
 ./run.sh --demo               # channel demo: the ssccs POC assembly golden anchors
 ./run.sh --coverage           # coverage gate
 ```
@@ -149,6 +185,10 @@ cross + enable_mask, identity projector). It is not an Ibex hardware model:
 Ibex exposes standard extensions through compile-time parameters, and its
 decoder fixtures are the `ibex/rv32imcb*.xif.yaml` pair (issue #36).
 
+The table above is the count reference. The fixture inventory, with each
+fixture's source, revision, derivation, and covering gate, is the README's
+Fixture Provenance table; keep the counts in step between the two.
+
 ### Backends and environment
 
 | Variable | Values | Effect |
@@ -162,6 +202,7 @@ decoder fixtures are the `ibex/rv32imcb*.xif.yaml` pair (issue #36).
 | `SYNTAGMA_DIR` | path | Sibling syntagma checkout (default `../syntagma`), the artifact-channel fallback |
 | `CVA6_DIR` | path | Sibling CVA6 checkout (default `../cva6`) for the derivation gate's source channel |
 | `EV_UPDATE_MASK_TABLE` | `1` | Rewrite `tests/fixtures/cva6/mask_table.json` from a checkout at the pinned commit |
+| `IBEX_DIR` | path | Sibling Ibex checkout (default `../ibex`) for the source pin's checkout channel |
 
 ## Key Design Decisions
 
@@ -177,6 +218,21 @@ decoder fixtures are the `ibex/rv32imcb*.xif.yaml` pair (issue #36).
 5. The structural pipeline is the default and the naive pipeline is the
    reference it is tested against; keep both, and keep the count invariants
    pinned per fixture.
+6. Target-specific knowledge lives in the fixture and the spec, never in the
+   engine. The engine knows fields, bit positions, constraints, and
+   projectors; a sample's name, its constants, and its sub-decoding belong to
+   the fixture that states them. Two incidents created the rule: a projector
+   carried a sample's name and base inside the engine (#55), and fixtures left
+   a field free that the decoder pins (#56). A projector or engine path that
+   names a core is a regression, and `tests/cva6_derivation.rs` is the guard
+   on the fixture side.
+7. ev makes no probabilistic claim. A run classifies every point of the
+   declared space and nothing else, and identical runs produce identical
+   records. Sampling, coverage percentages, and confidence bounds are outside
+   the concept: a claim that rests on a sample belongs to a different tool, and
+   comparing against such a tool measures that tool. The one percentage here is
+   the code-coverage gate, which measures this repository's test suite and
+   never a verification claim.
 
 ## How to Extend
 
@@ -186,7 +242,11 @@ decoder fixtures are the `ibex/rv32imcb*.xif.yaml` pair (issue #36).
 - New projector type: add a variant to `ProjectorSpec`, a builder in
   `ProjectorRegistry::default()`, and an arm in `sv_projector`.
 - New input format: implement `FormatCapable`. New output format: implement
-  `ReporterCapable` and pass the total through.
+  `ReporterCapable` and pass the classification through.
+- New classification engine: produce a `Classification` from a spec. The
+  built-in engine is `verify::evaluate_structural`, reached in one call in
+  `Commands::Verify`; #67 turns that call into a selectable capability with the
+  naive pipeline (`expand_all` + `evaluate_all`) as the second implementation.
 
 ## Documentation
 
@@ -214,8 +274,15 @@ become a version.
 
 ## Open Work
 
+- Issue #62: derive the Ibex fixture mapping from the decoder's `case`
+  statement. The decoder is behavioural code rather than a table, so this is a
+  reader for an RTL subset and a capability decision, not fixture hygiene. The
+  alternative, if the reader is not wanted, is to restate what the fixtures'
+  claim actually rests on.
 - Issue #44: execute the accepted CVA6 custom-3 encodings through the
-  standard CVA6 tandem flow, which needs the external CVA6 repository.
+  standard CVA6 tandem flow, which needs the external CVA6 repository. A
+  sample's DV environment stays a sample concern: the encoding contract is
+  checked by the derivation gate, without the external repository.
 - Issue #18: `--interpret` for failure explanation, re-scoped to an
   OpenAI-compatible endpoint instead of a bespoke provider client.
 - Fact ingestion: ev's `Fact` (blob payload with `fact_type`) is not the

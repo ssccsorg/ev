@@ -34,9 +34,9 @@
 //! * `EV_PK_PATH` — path to the pk proxy kernel (default: "pk")
 //! * `EV_RISCV_CC` — RISC-V cross-compiler (default: "riscv64-unknown-elf-gcc")
 
+use crate::classification::{Classification, Verdict};
 use crate::spec::{ConstraintSpec, EncodingLayout, VerificationSpec};
 use crate::synth::sim::{RunSimulation, SimulationResult};
-use crate::verify::evaluate::Evaluation;
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -64,32 +64,32 @@ impl RunSimulation for SpikeBackend {
     fn run(
         &self,
         spec: &VerificationSpec,
-        static_evaluations: Vec<Evaluation>,
+        static_verdicts: Vec<Verdict>,
     ) -> anyhow::Result<SimulationResult> {
         let field_names: Vec<&String> = spec.fields.keys().collect();
         let num_fields = field_names.len();
 
         // Collect valid (passing) encodings while preserving their original indices.
-        let valid_indices: Vec<usize> = static_evaluations
+        let valid_indices: Vec<usize> = static_verdicts
             .iter()
             .enumerate()
             .filter(|(_, e)| e.passed)
             .map(|(i, _)| i)
             .collect();
-        let valid_rows: Vec<Vec<i64>> = static_evaluations
+        let valid_rows: Vec<Vec<i64>> = static_verdicts
             .iter()
             .filter(|e| e.passed)
-            .map(|e| e.combination.values.clone())
+            .map(|e| e.values.clone())
             .collect();
 
         let field_order: Vec<String> = spec.fields.keys().cloned().collect();
 
         if valid_rows.is_empty() || num_fields == 0 {
+            let total = static_verdicts.len();
             return Ok(SimulationResult {
                 tool: "spike".into(),
                 version: env!("CARGO_PKG_VERSION").into(),
-                field_order,
-                evaluations: static_evaluations,
+                classification: Classification::new(field_order, total, static_verdicts),
                 extra: None,
             });
         }
@@ -118,13 +118,12 @@ impl RunSimulation for SpikeBackend {
 
         // Parse results and merge using original indices.
         let spike_passed = parse_spike_output(&stdout, valid_rows.len());
-        let merged = merge_results_with_indices(static_evaluations, &valid_indices, &spike_passed);
+        let merged = merge_results_with_indices(static_verdicts, &valid_indices, &spike_passed);
 
         Ok(SimulationResult {
             tool: "spike".into(),
             version: get_spike_version(),
-            field_order,
-            evaluations: merged,
+            classification: Classification::new(field_order, merged.len(), merged),
             extra: None,
         })
     }
@@ -148,10 +147,10 @@ fn get_spike_version() -> String {
 }
 
 fn merge_results_with_indices(
-    static_evaluations: Vec<Evaluation>,
+    static_verdicts: Vec<Verdict>,
     valid_indices: &[usize],
     spike_passed: &BTreeMap<usize, (bool, bool)>,
-) -> Vec<Evaluation> {
+) -> Vec<Verdict> {
     let mut spike_map: BTreeMap<usize, (bool, bool)> = BTreeMap::new();
     for (spike_idx, &orig_idx) in valid_indices.iter().enumerate() {
         if let Some(p) = spike_passed.get(&spike_idx) {
@@ -159,7 +158,7 @@ fn merge_results_with_indices(
         }
     }
 
-    static_evaluations
+    static_verdicts
         .into_iter()
         .enumerate()
         .map(|(i, mut eval)| {

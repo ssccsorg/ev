@@ -1,8 +1,14 @@
 # Ibex RV32IMCB I-type ALU encoding space.
 #
-# Models the OPCODE_IMM (0x13) register-immediate ALU operation decoding
-# of the Ibex RISC-V core, verified against ibex/rtl/ibex_decoder.sv
-# OPCODE_OP_IMM case statement.
+# Models the OPCODE_IMM (0x13) register-immediate ALU operation decoding of
+# the Ibex RISC-V core. The mapping is transcribed from
+# ibex/rtl/ibex_decoder.sv at commit f4540774 (master, 2026-05-27), the file
+# digest and the assumed configuration are pinned in
+# tests/fixtures/ibex/decoder_pin.json.
+#
+# The transcription is not compared with the decoder by a gate; issue #62
+# records deriving the accepted pairs from the decoder's case statement.
+# tests/ibex_source_pin.rs checks the pin when a checkout is at hand.
 #
 # Assumes RV32BFull is enabled.
 # I-type format: imm[11:0] | rs1[4:0] | funct3[2:0] | rd[4:0] | opcode[6:0]
