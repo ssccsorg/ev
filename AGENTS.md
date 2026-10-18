@@ -99,6 +99,23 @@ when the layout changes.
   identically. The coverage rule is documented at the function, and
   `tests/spec_hash.rs` pins the layout, comment, and cross-order cases.
 
+### Record contract
+
+- `VerificationReport` is the stable content of a verification run. It carries
+  `spec_hash`, `target`, `engine`, `claim`, `total`, `passed`, `failed`,
+  `field_order`, and one result per emitted point. It does not carry a
+  timestamp; the Fact envelope does.
+- A result carries `point_id` (SHA256 of the spec address and the field-value
+  vector, verdict excluded) and `id` (the observation, verdict and projection
+  included). The coordinate is the field vector in `field_order`, not the
+  packed word, because a layout is optional.
+- The payload is a pointer to the spec: domains, layout, and projector stay in
+  the spec addressed by `spec_hash`. The rejected set is `total - passed` and
+  is re-derived rather than emitted.
+- `SvGenerator` names generated RTL `<target>_<spec_hash[..16]>.sv`, so the
+  synthesis `source` is a function of the spec. The Yosys `extra` no longer
+  carries the temporary DOT and netlist paths.
+
 ### Classification capability
 
 - `verify::Classify` is the seam. `StructuralClassifier` is the default
@@ -194,10 +211,10 @@ when the layout changes.
 ### Tests and fixtures
 
 ```bash
-cargo test --release          # 150 tests: 83 lib, 31 CLI, 8 structural,
+cargo test --release          # 156 tests: 83 lib, 31 CLI, 8 structural,
                               # 5 tagma, 2 golden anchor, 4 derivation, 2 source pin,
-                              # 5 layout abstraction, 6 spec hash, 4 classification.
-                              # None ignored.
+                              # 5 layout abstraction, 6 spec hash, 4 classification,
+                              # 3 point identity, 3 run metadata. None ignored.
 cargo bench -- cva6_full      # full-space CVA6 group
 cargo bench -- struct_enum_validity   # correctness guard, must stay green
 ./run.sh                      # fmt, clippy, build, test, verify
@@ -286,6 +303,12 @@ Fixture Provenance table; keep the counts in step between the two.
    engines are exhaustive; an imported engine that samples or truncates sets
    `Partial`. The point coordinates stay independent of the engine, so verdicts
    from two engines are comparable at the same point.
+10. A record separates stable content from run metadata. The payload is the
+    content and is a function of the spec and the observation; the Fact
+    envelope carries the timestamp and origin. A point's `point_id` is the
+    coordinate (spec address plus field values) and excludes the verdict. The
+    payload stays a pointer to the spec, and the rejected set is
+    `total - passed`, re-derivable rather than emitted.
 
 ## How to Extend
 

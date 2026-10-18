@@ -107,6 +107,19 @@ ev fact decode                                  # Decode Fact JSON from stdin
 
 Output formats: `text` (default), `json`, `csv`, `trace`.
 
+## Record Shape
+
+`ev verify --json` emits a Fact envelope. The payload is the stable content of
+the run and carries `spec_hash`, `target`, `engine`, `claim`, `total`,
+`passed`, `failed`, `field_order`, and one result per emitted point. Each
+result has `point_id` (the coordinate, excluding the verdict) and `id` (the
+observation, including the verdict).
+
+The payload is a pointer to the spec: domains, layout, and projector stay in
+the spec addressed by `spec_hash`. The rejected set is `total - passed` and is
+re-derived from the spec. The Fact envelope, not the payload, carries the
+timestamp and origin.
+
 ## Input Format
 
 ### Field specification
@@ -349,6 +362,8 @@ tests/
     yosys/          1 captured Yosys stat report
   cli_test.rs       31 integration tests
   classifier.rs     4 classification capability tests
+  point_identity.rs 3 point identity tests
+  run_metadata.rs   3 run metadata tests
   structural_enum.rs 8 structural enumeration regression tests
   tagma_fixture.rs  5 Tagma fixture tests
   golden_anchor.rs  2 tagma golden anchor cross-channel tests

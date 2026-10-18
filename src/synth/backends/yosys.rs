@@ -54,7 +54,6 @@ impl RunSynthesis for YosysBackend {
 
         let stat_path = work_path.join("stat.json");
         let netlist_path = work_path.join("netlist.json");
-        let dot_path = work_path.join("netlist.dot");
         let log_path = work_path.join("yosys.log");
 
         let sv_path_str = rtl_path.display().to_string();
@@ -125,15 +124,8 @@ impl RunSynthesis for YosysBackend {
         }
 
         // ── DOT output ────────────────────────────────────────────────
-        if dot_path.exists() {
-            if let Ok(content) = std::fs::read_to_string(&dot_path) {
-                if content.contains("digraph") {
-                    extra["dot_path"] = serde_json::json!(dot_path.to_string_lossy().to_string());
-                }
-            }
-        }
-
-        extra["netlist_path"] = serde_json::json!(netlist_path.to_string_lossy().to_string());
+        // The artifacts live in the temporary work directory and are removed
+        // when the run returns, so their paths stay out of the record.
 
         // ── Warnings ──────────────────────────────────────────────────
         if log_path.exists() {

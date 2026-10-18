@@ -215,7 +215,11 @@ use std::collections::BTreeMap;
 
 #[derive(Debug, Serialize)]
 struct EvaluationEntry {
-    /// Content-addressable ID: SHA256(spec_hash || values || passed || projection).
+    /// Identity of the coordinate: SHA256(spec_hash || values). The verdict
+    /// and projection are excluded, so the same point keeps its identity when
+    /// a verdict changes.
+    point_id: String,
+    /// Identity of this observation: SHA256(spec_hash || values || passed || projection).
     id: String,
     combination: Vec<i64>,
     fields: BTreeMap<String, i64>,
@@ -225,14 +229,19 @@ struct EvaluationEntry {
     reason: String,
 }
 
+/// The stable content of a verification run.
+///
+/// The payload is a pointer to the spec: `spec_hash` addresses it and
+/// `field_order` fixes the coordinate order; domains, layout, and projector
+/// stay in the spec. `failed` is `total - passed`, so the rejected set is
+/// accounted for by count and re-derivable from the spec, not emitted as rows.
+/// The Fact envelope, not this payload, carries the run timestamp.
 #[derive(Debug, Serialize)]
 struct VerificationReport {
     /// Origin: "ev/{version}".
     origin: String,
     /// Target module identifier.
     target: String,
-    /// ISO 8601 timestamp of this verification run.
-    timestamp: String,
     /// Content-addressable hash of the specification (parent reference).
     spec_hash: String,
     /// Engine that produced this classification.
@@ -252,13 +261,11 @@ impl ReporterCapable for JsonReporter {
     fn report(&self, target: &str, spec_hash: &str, classification: &Classification) -> bool {
         let (passed_count, failed_count) = classification.counts();
         let origin = format!("ev/{}", env!("CARGO_PKG_VERSION"));
-        let timestamp = chrono::Utc::now().to_rfc3339();
         let spec_hash = spec_hash.to_string();
 
         let report = VerificationReport {
             origin: origin.clone(),
             target: target.to_string(),
-            timestamp,
             spec_hash: spec_hash.clone(),
             engine: classification.engine.clone(),
             claim: classification.claim,
@@ -277,7 +284,9 @@ impl ReporterCapable for JsonReporter {
                         .filter_map(|(i, name)| e.values.get(i).map(|v| (name.clone(), *v)))
                         .collect();
                     let id = hash_evaluation(&spec_hash, &e.values, e.passed, e.projection);
+                    let point_id = hash_point(&spec_hash, &e.values);
                     EvaluationEntry {
+                        point_id,
                         id,
                         combination: e.values.clone(),
                         fields,
@@ -332,6 +341,20 @@ pub fn hash_spec(spec: &crate::spec::VerificationSpec) -> String {
     h.update(format!("{:?}", spec.projector).as_bytes());
     for c in &spec.constraints {
         h.update(format!("{:?}", c).as_bytes());
+    }
+    format!("{:x}", h.finalize())
+}
+
+/// Hash a point's coordinate. Tied to its parent spec via spec_hash.
+///
+/// The verdict, the projection, and the reason are excluded: a point keeps
+/// its identity across engines and across a changed verdict. The coordinate
+/// is the field-value vector in the spec's field order, not the packed word.
+pub fn hash_point(spec_hash: &str, values: &[i64]) -> String {
+    let mut h = Sha256::new();
+    h.update(spec_hash.as_bytes());
+    for v in values {
+        h.update(v.to_le_bytes());
     }
     format!("{:x}", h.finalize())
 }

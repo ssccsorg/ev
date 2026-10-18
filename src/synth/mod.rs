@@ -20,6 +20,7 @@
 pub mod backends;
 pub mod sim;
 
+use crate::report::hash_spec;
 use crate::spec::VerificationSpec;
 use serde::{Deserialize, Serialize};
 
@@ -37,7 +38,7 @@ pub struct SynthesisMetrics {
     pub gate_count: Option<u64>,
     pub cell_area: Option<f64>,
     /// Backend-specific opaque data (opaque to core).
-    /// YosysBackend populates this with dot_path, cell_types, warnings, etc.
+    /// YosysBackend populates this with cell_types and warnings.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub extra: Option<serde_json::Value>,
     pub status: String,
@@ -105,8 +106,11 @@ impl GenerateRtl for SvGenerator {
 fn generate_sv(spec: &VerificationSpec) -> anyhow::Result<std::path::PathBuf> {
     let tmp_dir = std::env::temp_dir().join("ev-synth");
     std::fs::create_dir_all(&tmp_dir)?;
-    let unique_suffix: String = std::iter::repeat_with(fast_random_char).take(8).collect();
-    let sv_path = tmp_dir.join(format!("{}_{}.sv", spec.target, unique_suffix));
+    // The generated RTL is a pure function of the spec, so a stable name keeps
+    // the source path out of the run-scoped values; concurrent runs write the
+    // same bytes.
+    let spec_hash = hash_spec(spec);
+    let sv_path = tmp_dir.join(format!("{}_{}.sv", spec.target, &spec_hash[..16]));
 
     if spec.fields.is_empty() {
         anyhow::bail!("Cannot generate SystemVerilog: spec has no fields");
@@ -177,14 +181,6 @@ fn bits_for(value: u64) -> u32 {
         return 1;
     }
     64 - value.leading_zeros()
-}
-
-/// Fast non-crypto random char for temp file suffixes.
-fn fast_random_char() -> char {
-    use std::collections::hash_map::RandomState;
-    use std::hash::{BuildHasher, Hasher};
-    let h = RandomState::new().build_hasher().finish();
-    (b'a' + (h % 26) as u8) as char
 }
 
 /// Generate the right-hand side expression for the projector.
