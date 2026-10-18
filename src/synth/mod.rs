@@ -23,6 +23,7 @@ pub mod sim;
 use crate::report::hash_spec;
 use crate::spec::VerificationSpec;
 use serde::{Deserialize, Serialize};
+use std::io::Write;
 
 /// Tool-agnostic synthesis metrics.
 ///
@@ -151,7 +152,11 @@ fn generate_sv(spec: &VerificationSpec) -> anyhow::Result<std::path::PathBuf> {
     }
 
     sv.push_str("\nendmodule\n");
-    std::fs::write(&sv_path, sv)?;
+    // Concurrent runs generate the same path; write through a unique temporary
+    // file and rename it into place so a reader never sees a partial file.
+    let mut temp = tempfile::NamedTempFile::new_in(&tmp_dir)?;
+    temp.write_all(sv.as_bytes())?;
+    temp.persist(&sv_path).map_err(|error| error.error)?;
     Ok(sv_path)
 }
 

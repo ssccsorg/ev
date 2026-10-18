@@ -232,10 +232,10 @@ when the layout changes.
 ### Tests and fixtures
 
 ```bash
-cargo test --release          # 160 tests: 80 lib, 31 CLI, 8 structural,
+cargo test --release          # 161 tests: 80 lib, 31 CLI, 8 structural,
                               # 5 tagma, 2 golden anchor, 4 derivation, 2 source pin,
                               # 5 layout, 6 spec hash, 4 classification,
-                              # 3 point identity, 3 run metadata, 3 coordinate space,
+                              # 3 point identity, 4 run metadata, 3 coordinate space,
                               # 4 domain size. None ignored.
 cargo bench -- cva6_full      # full-space CVA6 group
 cargo bench -- struct_enum_validity   # correctness guard, must stay green

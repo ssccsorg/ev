@@ -60,7 +60,7 @@ until one does.
 ## Verification
 
 ```bash
-cargo test --release                                       # 160 passed, 0 ignored
+cargo test --release                                       # 161 passed, 0 ignored
 cargo clippy --all-targets -- -D warnings                  # clean
 cargo clippy --all-targets --no-default-features -- -D warnings  # clean
 cargo bench -- scaling                                     # the two axes

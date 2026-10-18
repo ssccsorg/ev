@@ -316,7 +316,7 @@ claims a pinned source, not a derived mapping (issue #62 decision).
 | SSCCS POC channel demo (`./run.sh --demo`, needs an ssccs checkout) | 5 / 5 channels match the hand-written assembly golden anchors |
 | Constraint types | 13 (range, even, eq, neq, lt, gt, le, ge, oneof, cross, bitmask, enable_mask, enable_set) |
 | Projector types | 4 (sum, identity, parity, decompose) |
-| Tests | 160 (80 lib + 31 CLI + 8 structural + 5 tagma + 2 golden anchor + 4 derivation + 2 source pin + 5 layout + 6 spec hash + 4 classification + 3 point identity + 3 run metadata + 3 coordinate space + 4 domain size), all passing, none ignored |
+| Tests | 161 (80 lib + 31 CLI + 8 structural + 5 tagma + 2 golden anchor + 4 derivation + 2 source pin + 5 layout + 6 spec hash + 4 classification + 3 point identity + 4 run metadata + 3 coordinate space + 4 domain size), all passing, none ignored |
 | Coverage gate | 80% lines / 80% regions (llvm-cov, all modules incl. Spike/Yosys backends) |
 | Simulation backends | Mock (default), Spike (`EV_SIM_BACKEND=spike`) |
 
@@ -368,7 +368,7 @@ tests/
   coord_space.rs    3 coordinate space tests
   domain_size.rs    4 domain size tests
   point_identity.rs 3 point identity tests
-  run_metadata.rs   3 run metadata tests
+  run_metadata.rs   4 run metadata tests
   structural_enum.rs 8 structural enumeration regression tests
   tagma_fixture.rs  5 Tagma fixture tests
   golden_anchor.rs  2 tagma golden anchor cross-channel tests

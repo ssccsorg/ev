@@ -80,3 +80,27 @@ fn generated_rtl_path_is_a_function_of_the_spec() {
         "the path must carry the spec address: {name}"
     );
 }
+
+#[test]
+fn concurrent_generation_leaves_complete_files() {
+    let spec = VerificationSpec::from_yaml(std::path::Path::new(ALL_PASS)).expect("parse spec");
+    let handles: Vec<_> = (0..8)
+        .map(|_| {
+            let spec = spec.clone();
+            std::thread::spawn(move || {
+                let path = SvGenerator.generate(&spec).expect("generate RTL");
+                let content = std::fs::read_to_string(&path).expect("read RTL");
+                (path, content)
+            })
+        })
+        .collect();
+
+    for handle in handles {
+        let (path, content) = handle.join().expect("generation thread");
+        assert!(
+            content.contains("module simple_alu"),
+            "{} is incomplete",
+            path.display()
+        );
+    }
+}
