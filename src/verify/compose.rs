@@ -4,7 +4,7 @@
 //! cartesian product of all field domains.
 
 use crate::spec::{ConstraintSpec, VerificationSpec};
-use tagma_core::{Coord, CoordPath};
+use std::collections::BTreeSet;
 
 /// A coordinate vector — one value per field.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -46,12 +46,49 @@ pub struct Combination {
     pub point: Point,
 }
 
+/// A set of distinct coordinate vectors.
+///
+/// `validate_into_space` places the structurally valid points here. The
+/// coordinates are the engine's field-value vectors, so the type carries no
+/// external coordinate crate.
+#[derive(Debug, Clone, Default)]
+pub struct CoordSpace {
+    points: BTreeSet<Vec<i64>>,
+}
+
+impl CoordSpace {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Insert a coordinate. Returns whether it was new.
+    pub fn place(&mut self, values: &[i64]) -> bool {
+        self.points.insert(values.to_vec())
+    }
+
+    pub fn contains(&self, values: &[i64]) -> bool {
+        self.points.contains(values)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Vec<i64>> + '_ {
+        self.points.iter()
+    }
+
+    pub fn len(&self) -> usize {
+        self.points.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.points.is_empty()
+    }
+}
+
 /// Maximum number of combinations expand_all will generate before returning an error.
 ///
 /// Upper bound for a materialized expansion. The structural pipeline does not
 /// allocate the raw space, but `expand_all` refuses to build one above this
 /// limit.
-pub const MAX_COMBINATIONS: usize = 1_000_000_000; // 1B — CoordSpace removes Vec allocation
+pub const MAX_COMBINATIONS: usize = 1_000_000_000;
 
 /// Total size of the raw cartesian product of all field domains, computed
 /// without enumerating the space. Returns an error when the product
@@ -193,31 +230,6 @@ pub fn expand_all(spec: &VerificationSpec) -> Result<Vec<Combination>, String> {
     }
 
     Ok(combinations)
-}
-
-/// Convert a coordinate slice to a Vec<Coord> for DynCoordSpace indexing.
-///
-/// Returns None if any field value exceeds the u16 Coord range.
-pub fn coords_to_coord_vec(coords: &[i64]) -> Option<Vec<Coord>> {
-    let mut result = Vec::with_capacity(coords.len());
-    for &v in coords {
-        let c = Coord::new(v as u16)?;
-        result.push(c);
-    }
-    Some(result)
-}
-
-/// Convert a coordinate vector to a CoordPath for CoordSpace indexing.
-///
-/// Returns None if any field value exceeds the u16 Coord range.
-pub fn coords_to_path<const N: usize>(coords: &[i64]) -> Option<CoordPath<N>> {
-    assert_eq!(coords.len(), N, "coords length must match CoordPath depth");
-    let mut arr: [Coord; N] = [Coord::new(0).unwrap(); N];
-    for (i, &v) in coords.iter().enumerate() {
-        let c = Coord::new(v as u16)?;
-        arr[i] = c;
-    }
-    Some(CoordPath::new(arr))
 }
 
 /// Type alias for structural filter result: (per-field allowed, cross mappings).
@@ -1169,28 +1181,6 @@ mod tests {
             "error should mention limit: {}",
             err
         );
-    }
-
-    // ── coords_to_coord_vec ─────────────────────────────────────
-
-    #[test]
-    fn coords_to_coord_vec_basic() {
-        let path = coords_to_coord_vec(&[0, 1, 2, 3, 4]).unwrap();
-        assert_eq!(path.len(), 5);
-        assert_eq!(path[0].index(), 0);
-        assert_eq!(path[4].index(), 4);
-    }
-
-    #[test]
-    fn coords_to_coord_vec_out_of_range() {
-        let result = coords_to_coord_vec(&[0, 20000]);
-        assert!(result.is_none(), "values > 11171 should return None");
-    }
-
-    #[test]
-    fn coords_to_coord_vec_empty() {
-        let path = coords_to_coord_vec(&[]).unwrap();
-        assert!(path.is_empty());
     }
 
     // ── structural_filters ───────────────────────────────────────

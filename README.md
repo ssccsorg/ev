@@ -362,6 +362,7 @@ tests/
     yosys/          1 captured Yosys stat report
   cli_test.rs       31 integration tests
   classifier.rs     4 classification capability tests
+  coord_space.rs    3 coordinate space tests
   point_identity.rs 3 point identity tests
   run_metadata.rs   3 run metadata tests
   structural_enum.rs 8 structural enumeration regression tests

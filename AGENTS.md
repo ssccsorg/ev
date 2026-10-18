@@ -211,10 +211,11 @@ when the layout changes.
 ### Tests and fixtures
 
 ```bash
-cargo test --release          # 156 tests: 83 lib, 31 CLI, 8 structural,
+cargo test --release          # 156 tests: 80 lib, 31 CLI, 8 structural,
                               # 5 tagma, 2 golden anchor, 4 derivation, 2 source pin,
-                              # 5 layout abstraction, 6 spec hash, 4 classification,
-                              # 3 point identity, 3 run metadata. None ignored.
+                              # 5 layout, 6 spec hash, 4 classification,
+                              # 3 point identity, 3 run metadata, 3 coordinate space.
+                              # None ignored.
 cargo bench -- cva6_full      # full-space CVA6 group
 cargo bench -- struct_enum_validity   # correctness guard, must stay green
 ./run.sh                      # fmt, clippy, build, test, verify
@@ -337,13 +338,12 @@ Published numbers live in the corpus, not here.
 
 ## Dependency Note
 
-`tagma-core` is a git dependency on `github.com/ssccsorg/tagma`, used by
-`src/verify/compose.rs` (`Coord`, `CoordPath`) and `src/verify/evaluate.rs`
-(`DynCoordSpace`). `Cargo.lock` pins the revision; `Cargo.toml` does not.
-Syntagma plans to publish it to crates.io, at which point the dependency can
-become a version. It is the one domain-named dependency left in the core; if
-the engine is to ship without it, replacing the three coordinate helpers is
-the next decoupling step.
+`tagma-core` is a dev-dependency on `github.com/ssccsorg/tagma`, used only by
+`tests/golden_anchor.rs` to compare the `decompose` projection with the
+syntagma reference engine. The library has no domain-named runtime dependency:
+`verify::CoordSpace` holds the engine's field-value vectors. `Cargo.lock` pins
+the revision; `Cargo.toml` does not. Syntagma plans to publish it to crates.io,
+at which point the dev-dependency can become a version.
 
 ## Git and Workflow
 

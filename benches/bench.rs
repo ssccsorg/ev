@@ -77,7 +77,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::collections::BTreeMap;
 
 use ev::spec::{ConstraintSpec, FieldSpec, ProjectorSpec, VerificationSpec};
-use ev::verify::compose::{coords_to_coord_vec, expand_all, EnumerateIter, StructuralEnum};
+use ev::verify::compose::{expand_all, EnumerateIter, StructuralEnum};
 use ev::verify::evaluate::{evaluate_all, evaluate_structural, validate_into_space};
 use ev::verify::registry::{Check, ConstraintRegistry, ProjectorRegistry};
 
@@ -488,10 +488,10 @@ fn bench_space_lookup_valid(c: &mut Criterion) {
     let spec = ibex_spec();
     let space = validate_into_space(&spec, &ConstraintRegistry::default());
     // A known valid combination: funct7=4, funct3=4 (PACK), rs1=0, rs2=0, rd=0
-    let valid_path = coords_to_coord_vec(&[4, 4, 0, 0, 0]).unwrap();
+    let valid_path = [4, 4, 0, 0, 0];
     c.bench_function("coordspace/lookup_valid", |b| {
         b.iter(|| {
-            let result = space.at(black_box(&valid_path));
+            let result = space.contains(black_box(&valid_path));
             black_box(result);
         })
     });
@@ -503,10 +503,10 @@ fn bench_space_lookup_invalid(c: &mut Criterion) {
     let spec = ibex_spec();
     let space = validate_into_space(&spec, &ConstraintRegistry::default());
     // A known invalid combination: funct7=4, funct3=0 (not in mapping)
-    let invalid_path = coords_to_coord_vec(&[4, 0, 0, 0, 0]).unwrap();
+    let invalid_path = [4, 0, 0, 0, 0];
     c.bench_function("coordspace/lookup_invalid", |b| {
         b.iter(|| {
-            let result = space.at(black_box(&invalid_path));
+            let result = space.contains(black_box(&invalid_path));
             black_box(result);
         })
     });

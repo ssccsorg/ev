@@ -22,7 +22,6 @@ tracing = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
 sha2 = "0.10"
 tempfile = "3"
-tagma-core = { git = "https://github.com/ssccsorg/tagma", package = "tagma-core" }
 indicatif = "0.17"
 colored = "2"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
@@ -30,6 +29,9 @@ hex = "0.4"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
+# The golden-anchor test compares the decompose projection with the syntagma
+# reference engine. The library itself has no domain-named dependency.
+tagma-core = { git = "https://github.com/ssccsorg/tagma", package = "tagma-core" }
 
 [[bench]]
 name = "bench"
