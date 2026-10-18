@@ -143,7 +143,7 @@ pub enum ConstraintSpec {
     /// Bitmask constraint: `field & mask` must equal `value`.
     ///
     /// Checks that specific bits of a field are set/cleared.
-    /// Used to model bit-field decode conditions (e.g. funct7[1]=1 for Zbt).
+    /// Used to model bit-field decode conditions (e.g. `funct7[1]=1` for Zbt).
     #[serde(rename = "bitmask")]
     Bitmask {
         /// Field name.
