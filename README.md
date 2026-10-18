@@ -1,16 +1,20 @@
 # ev — ExaVerif
 
-Exhaustive verification CLI for RISC-V custom instruction extensions.
-Apache 2.0.
+Exhaustive verification for a declared discrete space. Apache 2.0.
 
-ev verifies instruction encoding spaces, and a target is described by its
-spec alone: the fields, their bit positions in the word, and the constraints
-between them. A run classifies every point of that space and nothing else, and
-identical runs produce identical records; there is no sampling and no
-probabilistic claim. No constraint type or projector carries a target's name
-or constant. The cores and designs that appear here, CVA6, Ibex, and the Tagma
-decoder, are samples that exercise the engine and its channels, and each one
-is derived from that project's own source rather than restated from memory.
+A target is whatever its spec declares: named fields, a finite domain per
+field, constraints between them, and an optional projection. ev classifies
+every point of that space and nothing else, and identical runs produce
+identical records; there is no sampling and no probabilistic claim. No
+constraint type or projector carries a target's name or constant.
+
+A bit layout is data, not an engine assumption. A spec either declares a
+layout inline or selects a named profile, and the RISC-V profiles (`riscv-r`,
+`riscv-r4`) and the Spike backend are compiled under the `riscv` feature,
+which is on by default. The cores and designs that appear here, CVA6, Ibex,
+and the Tagma decoder, are samples that exercise the engine and its channels,
+and each one is derived from that project's own source rather than restated
+from memory.
 
 33.5 million combinations verified deterministically in about 0.2 s (release)
 through the structural enumeration pipeline, which is the CLI default since
@@ -21,9 +25,9 @@ backend cross-checks the constraint model and instruction-word assembly in C.
 
 ## What It Does
 
-Given a YAML file describing instruction fields and constraints, ev enumerates
-and evaluates every valid combination, reports exactly which encodings are valid
-and which are not — deterministically and exhaustively.
+Given a YAML file describing fields and constraints, ev enumerates and
+evaluates every valid combination, reports exactly which points are valid and
+which are not, deterministically and exhaustively.
 
 Constraint types are split between structural constraints (oneof, range, bitmask,
 cross, enable_mask, enable_set) that are encoded directly into the enumeration
@@ -112,6 +116,36 @@ fields:
 projector:
   type: sum
 ```
+
+### Word layout
+
+A spec that models a bit-packed word selects a profile or declares the layout
+inline. A spec that does not model one omits both, and the engine carries no
+word.
+
+```yaml
+target: cva6_xif_ref
+profile: riscv-r
+fields:
+  opcode:
+    values: [0x7B]
+  funct3:
+    range: [0, 7]
+```
+
+```yaml
+target: frame_demo
+layout:
+  word_width: 16
+  field_map:
+    kind: { pos: 0, width: 4 }
+    payload: { pos: 4, width: 12 }
+```
+
+`profile` is resolved through `LayoutRegistry`. The built-in names are
+`riscv-r` and `riscv-r4` (alias `r4`) with the `riscv` feature. A caller can
+register further profiles and parse with `VerificationSpec::from_yaml_with`.
+`layout` and `profile` are mutually exclusive.
 
 ### Constraints
 
@@ -276,7 +310,9 @@ src/
   main.rs           CLI (clap: verify, simulate, synth, fact decode)
   classification/   Verdict, Classification — the engine's output type
   spec/             VerificationSpec, FieldSpec, ConstraintSpec, ProjectorSpec,
-                    EncodingLayout, FieldBitMapping
+                    WordLayout, FieldBitMapping
+  profile/          LayoutRegistry; riscv.rs holds the RISC-V layouts
+                    (feature = "riscv")
   verify/
     compose.rs      Domain expansion, raw_total_combinations, StructuralEnum
     evaluate.rs     evaluate_all, evaluate_structural, validate_into_space,
@@ -292,7 +328,7 @@ src/
   synth/
     mod.rs          GenerateRtl, RunSynthesis, SvGenerator, MockSynthesisBackend
     sim.rs          RunSimulation trait + MockSimBackend
-    backends/       SpikeBackend, YosysBackend
+    backends/       YosysBackend; SpikeBackend with feature = "riscv"
 benches/
   bench.rs          Performance reference (fixtures, methodology, groups)
 tests/
@@ -309,13 +345,14 @@ tests/
   golden_anchor.rs  2 tagma golden anchor cross-channel tests
   cva6_derivation.rs 4 CVA6 fixture derivation gate tests
   ibex_source_pin.rs 2 Ibex decoder source pin tests
+  profile_registry.rs 5 layout abstraction tests
 ```
 
 Backends are pluggable via environment variables:
 
 | Variable | Values | Effect |
 |----------|--------|--------|
-| `EV_SIM_BACKEND` | `mock` (default), `spike` | Simulation backend |
+| `EV_SIM_BACKEND` | `mock` (default), `spike` (`riscv` feature) | Simulation backend |
 | `EV_SYNTH_BACKEND` | `mock`, `yosys` (default) | Synthesis backend |
 | `EV_SPIKE_BIN` | path | Spike binary location |
 | `EV_PK_PATH` | path | Proxy kernel for Spike |
@@ -333,6 +370,10 @@ Backends are pluggable via environment variables:
 - Python 3 (for channel demo)
 - Yosys (optional, for synthesis)
 - Spike, riscv64-unknown-elf-gcc, riscv-pk (optional, for simulation)
+
+The `riscv` feature is in the default feature set. A build with
+`--no-default-features` carries no RISC-V profile and no Spike backend, and a
+spec that names `riscv-r` fails to parse rather than silently falling back.
 
 ## License
 

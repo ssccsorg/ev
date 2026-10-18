@@ -291,6 +291,12 @@ impl ReporterCapable for JsonReporter {
 
 /// Hash a spec into a deterministic content ID.
 ///
+/// The hash covers everything that changes the classified space: the target,
+/// each field's domain, the word layout (bit positions and width), the
+/// projector, and the constraints. A new `VerificationSpec` field belongs here
+/// when it changes which points pass or how they project; presentation-only
+/// data does not.
+///
 /// Public so the caller can compute this once and pass to the reporter
 /// trait, keeping the trait free of `&VerificationSpec` dependencies.
 pub fn hash_spec(spec: &crate::spec::VerificationSpec) -> String {
@@ -302,6 +308,9 @@ pub fn hash_spec(spec: &crate::spec::VerificationSpec) -> String {
         h.update(format!("{:?}", field.alignment).as_bytes());
         h.update(format!("{:?}", field.values).as_bytes());
     }
+    // The bit layout is part of the space: the same fields mapped to different
+    // bits describe different targets.
+    h.update(format!("{:?}", spec.layout).as_bytes());
     h.update(format!("{:?}", spec.projector).as_bytes());
     for c in &spec.constraints {
         h.update(format!("{:?}", c).as_bytes());
@@ -355,7 +364,7 @@ mod tests {
         VerificationSpec {
             target: "test".into(),
             fields,
-            encoding: None,
+            layout: None,
             constraints: vec![ConstraintSpec::Eq {
                 field_a: "op".into(),
                 field_b: "rs1".into(),
@@ -371,6 +380,27 @@ mod tests {
         let h2 = hash_spec(&spec);
         assert_eq!(h1, h2, "same spec should produce same hash");
         assert_eq!(h1.len(), 64, "SHA256 hex should be 64 chars");
+    }
+
+    #[test]
+    fn hash_spec_differs_when_layout_changes() {
+        use crate::spec::{FieldBitMapping, WordLayout};
+
+        let spec1 = make_spec();
+        let mut spec2 = make_spec();
+        spec2.layout = Some(WordLayout {
+            word_width: Some(16),
+            field_map: BTreeMap::from([
+                ("op".to_string(), FieldBitMapping { pos: 0, width: 3 }),
+                ("rs1".to_string(), FieldBitMapping { pos: 3, width: 5 }),
+            ]),
+        });
+
+        assert_ne!(
+            hash_spec(&spec1),
+            hash_spec(&spec2),
+            "a layout change must move the content address"
+        );
     }
 
     #[test]

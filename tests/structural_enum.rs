@@ -40,7 +40,7 @@ fn make_spec(
     VerificationSpec {
         target: "structural_enum_test".into(),
         fields,
-        encoding: None,
+        layout: None,
         constraints,
         projector: ProjectorSpec::Sum,
     }

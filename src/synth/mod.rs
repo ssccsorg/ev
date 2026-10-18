@@ -13,7 +13,7 @@
 //! synth::SvGenerator        ← default GenerateRtl impl
 //! synth::MockSynthesisBackend ← test/CI synthesis backend
 //! synth::MockSimBackend     ← test/CI simulation backend
-//! synth::backends::spike    ← SpikeBackend (implements RunSimulation)
+//! synth::backends::spike    ← SpikeBackend (RISC-V, feature = "riscv")
 //! synth::backends::yosys    ← YosysBackend (implements RunSynthesis)
 //! ```
 
@@ -396,7 +396,7 @@ mod tests {
         VerificationSpec {
             target: "test_module".into(),
             fields,
-            encoding: None,
+            layout: None,
             constraints: vec![],
             projector,
         }

@@ -243,7 +243,7 @@ mod tests {
             fields,
             constraints,
             projector,
-            encoding: None,
+            layout: None,
         }
     }
 

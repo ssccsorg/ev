@@ -125,7 +125,7 @@ fn small_spec() -> VerificationSpec {
     VerificationSpec {
         target: "bench_small".into(),
         fields,
-        encoding: None,
+        layout: None,
         constraints: vec![],
         projector: ProjectorSpec::Sum,
     }
@@ -189,7 +189,7 @@ fn medium_spec() -> VerificationSpec {
     VerificationSpec {
         target: "bench_medium".into(),
         fields,
-        encoding: None,
+        layout: None,
         constraints: vec![ConstraintSpec::Cross {
             field_a: "funct7".into(),
             field_b: "funct3".into(),

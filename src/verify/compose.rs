@@ -6,7 +6,7 @@
 use crate::spec::{ConstraintSpec, VerificationSpec};
 use tagma_core::{Coord, CoordPath};
 
-/// A coordinate vector — one value per instruction field.
+/// A coordinate vector — one value per field.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Coordinates {
     pub raw: Vec<i64>,
@@ -48,8 +48,9 @@ pub struct Combination {
 
 /// Maximum number of combinations expand_all will generate before returning an error.
 ///
-/// Set to 10 million to cover typical RISC-V XIF designs (4-6 fields, small domains)
-/// while preventing OOM from accidentally large specifications.
+/// Upper bound for a materialized expansion. The structural pipeline does not
+/// allocate the raw space, but `expand_all` refuses to build one above this
+/// limit.
 pub const MAX_COMBINATIONS: usize = 1_000_000_000; // 1B — CoordSpace removes Vec allocation
 
 /// Total size of the raw cartesian product of all field domains, computed
@@ -731,7 +732,7 @@ mod tests {
         VerificationSpec {
             target: "test".into(),
             fields,
-            encoding: None,
+            layout: None,
             constraints: vec![],
             projector: crate::spec::ProjectorSpec::Sum,
         }
@@ -911,7 +912,7 @@ mod tests {
         let spec = VerificationSpec {
             target: "test".into(),
             fields,
-            encoding: None,
+            layout: None,
             constraints: vec![crate::spec::ConstraintSpec::EnableMask {
                 field: "op".into(),
                 value: 0,
@@ -961,7 +962,7 @@ mod tests {
         let spec = VerificationSpec {
             target: "test".into(),
             fields,
-            encoding: None,
+            layout: None,
             constraints: vec![crate::spec::ConstraintSpec::EnableMask {
                 field: "op".into(),
                 value: 0,
@@ -1012,7 +1013,7 @@ mod tests {
         let spec = VerificationSpec {
             target: "test".into(),
             fields,
-            encoding: None,
+            layout: None,
             constraints: vec![
                 crate::spec::ConstraintSpec::EnableMask {
                     field: "op".into(),
@@ -1083,7 +1084,7 @@ mod tests {
         let spec = VerificationSpec {
             target: "test".into(),
             fields,
-            encoding: None,
+            layout: None,
             constraints: vec![crate::spec::ConstraintSpec::EnableSet {
                 field: "op".into(),
                 value: 0,
@@ -1207,7 +1208,7 @@ mod tests {
         let spec = VerificationSpec {
             target: "test".into(),
             fields,
-            encoding: None,
+            layout: None,
             constraints: vec![ConstraintSpec::Oneof {
                 field: "x".into(),
                 values: vec![2, 4, 6, 8],
@@ -1234,7 +1235,7 @@ mod tests {
         let spec = VerificationSpec {
             target: "test".into(),
             fields,
-            encoding: None,
+            layout: None,
             constraints: vec![ConstraintSpec::Bitmask {
                 field: "a".into(),
                 mask: 2,
@@ -1270,7 +1271,7 @@ mod tests {
         let spec = VerificationSpec {
             target: "test".into(),
             fields,
-            encoding: None,
+            layout: None,
             constraints: vec![ConstraintSpec::Cross {
                 field_a: "op".into(),
                 field_b: "sub".into(),
@@ -1330,7 +1331,7 @@ mod tests {
         let spec = VerificationSpec {
             target: "test".into(),
             fields,
-            encoding: None,
+            layout: None,
             constraints: vec![ConstraintSpec::Oneof {
                 field: "x".into(),
                 values: vec![0, 2, 4],

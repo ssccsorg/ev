@@ -24,7 +24,7 @@
 # coprocessor decoder rejects.
 
 target: cva6_xif_madd
-encoding: r4
+profile: riscv-r4
 fields:
   opcode:
     values: [0x43, 0x47, 0x4B, 0x4F]

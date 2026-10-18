@@ -27,6 +27,7 @@
 # and is not included in this encoding-only fixture.
 
 target: cva6_xif_encoding
+profile: riscv-r
 fields:
   funct3:
     range: [0, 7]

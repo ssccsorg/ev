@@ -14,7 +14,7 @@ use std::path::PathBuf;
 #[command(
     name = "ev",
     version,
-    about = "Exhaustive verification for custom instruction extensions"
+    about = "Exhaustive verification for declared discrete design spaces"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -60,7 +60,7 @@ enum Commands {
         json: bool,
     },
 
-    /// ISA simulation verification via Spike
+    /// Simulation verification through a backend
     Simulate {
         /// Path to the YAML constraint file
         #[arg(short, long)]
@@ -86,10 +86,20 @@ enum FactCommands {
     Decode,
 }
 
-fn resolve_sim_backend() -> Box<dyn RunSimulation> {
-    match std::env::var("EV_SIM_BACKEND").unwrap_or_default().as_str() {
-        "spike" => Box::new(ev::synth::backends::spike::SpikeBackend),
-        _ => Box::new(MockSimBackend),
+fn resolve_sim_backend() -> anyhow::Result<Box<dyn RunSimulation>> {
+    let name = std::env::var("EV_SIM_BACKEND").unwrap_or_default();
+    match name.as_str() {
+        "" | "mock" => Ok(Box::new(MockSimBackend)),
+        #[cfg(feature = "riscv")]
+        "spike" => Ok(Box::new(ev::synth::backends::spike::SpikeBackend)),
+        other => {
+            let supported = if cfg!(feature = "riscv") {
+                "`mock` or `spike`"
+            } else {
+                "`mock` (this build has no `riscv` feature)"
+            };
+            anyhow::bail!("unknown simulation backend `{other}`; supported: {supported}")
+        }
     }
 }
 
@@ -135,7 +145,7 @@ fn run_sim(target: &std::path::Path) -> anyhow::Result<SimulationResult> {
         &constraint_registry,
         &projector_registry,
     );
-    let backend = resolve_sim_backend();
+    let backend = resolve_sim_backend()?;
     backend.run(&spec, verdicts)
 }
 

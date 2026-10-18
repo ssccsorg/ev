@@ -3,7 +3,8 @@
 //! Implements `RunSimulation` for the Spike RISC-V ISA simulator.
 //! Batches all valid encodings into a single RISC-V C program,
 //! cross-compiles it, runs the ELF under Spike + pk, and parses
-//! per-encoding pass/fail results from stdout.
+//! per-encoding pass/fail results from stdout. Compiled only with the
+//! `riscv` feature.
 //!
 //! # Architecture
 //!
@@ -35,7 +36,7 @@
 //! * `EV_RISCV_CC` — RISC-V cross-compiler (default: "riscv64-unknown-elf-gcc")
 
 use crate::classification::{Classification, Verdict};
-use crate::spec::{ConstraintSpec, EncodingLayout, VerificationSpec};
+use crate::spec::{ConstraintSpec, VerificationSpec, WordLayout};
 use crate::synth::sim::{RunSimulation, SimulationResult};
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -95,11 +96,16 @@ impl RunSimulation for SpikeBackend {
         }
 
         // Generate C source with signal handling and per-encoding execution.
+        if let Some(width) = spec.layout.as_ref().and_then(|layout| layout.word_width) {
+            if width > 64 {
+                anyhow::bail!("spike backend supports words up to 64 bits, got {width}");
+            }
+        }
         let tmp_dir = std::env::temp_dir().join("ev-sim");
         std::fs::create_dir_all(&tmp_dir)?;
         let c_src = generate_c_source(
             &spec.target,
-            &spec.encoding,
+            &spec.layout,
             &field_names,
             &spec.constraints,
             &valid_rows,
@@ -189,10 +195,10 @@ fn merge_results_with_indices(
 // ============================================================================
 
 /// Generate C source with packed encoding data, constraint evaluation,
-/// and instruction word assembly from encoding layout.
+/// and word assembly from the bit layout.
 fn generate_c_source(
     target: &str,
-    encoding_opt: &Option<EncodingLayout>,
+    layout_opt: &Option<WordLayout>,
     field_names: &[&String],
     constraints: &[ConstraintSpec],
     rows: &[Vec<i64>],
@@ -224,11 +230,10 @@ fn generate_c_source(
     // Generate constraint check code.
     let constraint_code = generate_c_constraints(constraints, field_names);
 
-    // Generate instruction word assembly code from encoding layout.
-    // Fields in the layout that are absent from the spec's field list
-    // (e.g. a fixed `opcode` field) use constant 0, since they are not
-    // part of the combinatorial expansion.
-    let assemble_lines: Vec<String> = match encoding_opt {
+    // Generate word assembly code from the layout. Fields in the layout that
+    // are absent from the spec's field list (e.g. a fixed `opcode` field) use
+    // constant 0, since they are not part of the combinatorial expansion.
+    let assemble_lines: Vec<String> = match layout_opt {
         Some(layout) => layout
             .field_map
             .iter()
@@ -259,8 +264,8 @@ fn generate_c_source(
         assemble_lines.join("\n")
     };
 
-    // Generate pre-computed instruction words for each encoding.
-    let instr_word_lines: Vec<String> = match encoding_opt {
+    // Generate pre-computed reference words for each encoding.
+    let instr_word_lines: Vec<String> = match layout_opt {
         Some(layout) => rows
             .iter()
             .map(|row| {
@@ -272,11 +277,10 @@ fn generate_c_source(
                         word |= (val & mask) << mapping.pos;
                     }
                 }
-                // Truncate to insn_width bits
-                let mask = if layout.insn_width < 64 {
-                    (1u64 << layout.insn_width) - 1
-                } else {
-                    !0u64
+                // Truncate to the declared word width.
+                let mask = match layout.word_width {
+                    Some(width) if width < 64 => (1u64 << width) - 1,
+                    _ => !0u64,
                 };
                 format!("    0x{:016X}ULL", word & mask)
             })
@@ -298,7 +302,7 @@ fn generate_c_source(
         String::new()
     };
     // The C program cross-checks its assembled word against the Rust-computed
-    // reference only when an encoding layout exists.
+    // reference only when a bit layout exists.
     let has_instr_words = !instr_word_lines.is_empty();
 
     format!(

@@ -2,10 +2,12 @@
 
 ## Project Identity
 
-Exhaustive verification CLI for RISC-V custom instruction extensions. Given
-a YAML spec describing instruction fields and constraints, `ev` generates
-every structurally valid combination, evaluates the constraints, and reports
-pass/fail deterministically and exhaustively.
+Exhaustive verification of a declared discrete space. Given a YAML spec
+naming fields and constraints, `ev` generates every structurally valid
+combination, evaluates the constraints, and reports pass/fail deterministically
+and exhaustively. A bit-packed word is optional: a spec selects a named layout
+profile or declares one inline, and the RISC-V profiles are one feature of the
+build.
 
 - Repository: `github.com/ssccsorg/ev`
 - Language: Rust (edition 2021), Apache 2.0
@@ -44,7 +46,9 @@ src/
   lib.rs            public re-exports
   classification/   Verdict, Classification — the engine's output type
   spec/             VerificationSpec, FieldSpec, ConstraintSpec, ProjectorSpec,
-                    EncodingLayout, FieldBitMapping
+                    WordLayout, FieldBitMapping
+  profile/          LayoutRegistry; riscv.rs holds the RISC-V layouts
+                    (feature = "riscv")
   verify/
     compose.rs      domain expansion, raw_total_combinations, StructuralEnum
     evaluate.rs     evaluate_all, evaluate_structural, validate_into_space,
@@ -59,7 +63,8 @@ src/
   synth/
     mod.rs          GenerateRtl, RunSynthesis, SvGenerator, MockSynthesisBackend
     sim.rs          RunSimulation, MockSimBackend
-    backends/       spike.rs (SpikeBackend), yosys.rs (YosysBackend)
+    backends/       yosys.rs (YosysBackend); spike.rs (SpikeBackend,
+                    feature = "riscv")
 benches/bench.rs    criterion reference, fixture table in the module doc
 tests/              integration tests, fixtures under tests/fixtures/
 docs/               private devlog only (see Documentation)
@@ -69,6 +74,25 @@ The README carries the same tree in user-facing form. Keep the two in step
 when the layout changes.
 
 ## Current State
+
+### Space and layout abstraction
+
+- The engine operates on fields and domains alone. A target may pack its
+  fields into a bit word, but that is data: `VerificationSpec.layout` is
+  `Option<WordLayout>`, and a spec that omits it has no word.
+- A spec selects a layout by name with `profile`, or declares it inline with
+  `layout`. The two are mutually exclusive, and an unknown profile is an
+  error that lists the known names.
+- `profile::LayoutRegistry` holds the names. `LayoutRegistry::default()`
+  registers `riscv-r` and `riscv-r4` (alias `r4`) only with the `riscv`
+  feature, which is in the default feature set. A downstream consumer can
+  register its own profiles and parse with
+  `VerificationSpec::from_yaml_with`.
+- The `riscv` feature also gates `synth::backends::spike`. A build with
+  `--no-default-features` has neither the RISC-V layouts nor the Spike
+  backend, and `EV_SIM_BACKEND=spike` fails instead of falling back to mock.
+- `hash_spec` includes the layout, so the same fields mapped to different bits
+  are different spaces.
 
 ### Constraint and projector surface
 
@@ -113,12 +137,12 @@ when the layout changes.
   with a generated `hw/rtl/golden_anchors.hex` when `EV_TAGMA_ANCHORS` points
   at one.
   `run.sh --verify` reports the artifact channel as checked or unavailable.
-- Spike backend: `src/synth/backends/spike.rs` generates a C program that
-  re-implements the constraint model and the instruction-word assembly,
+- Spike backend (feature `riscv`): `src/synth/backends/spike.rs` generates a
+  C program that re-implements the constraint model and the word assembly,
   cross-compiles it, and runs it under Spike plus pk. The C assembler is
-  checked against Rust-computed reference words. This is not ISA-level
-  execution: custom-3 opcodes are illegal in the base RISC-V ISA, so Spike
-  never executes the custom words.
+  checked against Rust-computed reference words when the spec declares a
+  layout. This is not ISA-level execution: custom-3 opcodes are illegal in the
+  base RISC-V ISA, so Spike never executes the custom words.
 - CVA6 fixture derivation gate: `tests/cva6_derivation.rs` re-derives
   `cva6/xif_ref.xif.yaml`, `cva6/xif_ref_r4.xif.yaml`, and
   `cva6/xif_madd.xif.yaml` from `tests/fixtures/cva6/mask_table.json`, the
@@ -153,9 +177,9 @@ when the layout changes.
 ### Tests and fixtures
 
 ```bash
-cargo test --release          # 132 tests: 83 lib, 28 CLI, 8 structural,
-                              # 5 tagma, 2 golden anchor, 4 derivation, 2 source pin.
-                              # None ignored.
+cargo test --release          # 138 tests: 84 lib, 28 CLI, 8 structural,
+                              # 5 tagma, 2 golden anchor, 4 derivation, 2 source pin,
+                              # 5 layout abstraction. None ignored.
 cargo bench -- cva6_full      # full-space CVA6 group
 cargo bench -- struct_enum_validity   # correctness guard, must stay green
 ./run.sh                      # fmt, clippy, build, test, verify
@@ -193,7 +217,7 @@ Fixture Provenance table; keep the counts in step between the two.
 
 | Variable | Values | Effect |
 |---|---|---|
-| `EV_SIM_BACKEND` | `mock` (default), `spike` | Simulation backend |
+| `EV_SIM_BACKEND` | `mock` (default), `spike` (`riscv` feature) | Simulation backend |
 | `EV_SYNTH_BACKEND` | `mock`, `yosys` (default) | Synthesis backend |
 | `EV_SPIKE_BIN` | path | Spike binary |
 | `EV_PK_PATH` | path | Proxy kernel |
@@ -226,7 +250,13 @@ Fixture Provenance table; keep the counts in step between the two.
    a field free that the decoder pins (#56). A projector or engine path that
    names a core is a regression, and `tests/cva6_derivation.rs` is the guard
    on the fixture side.
-7. ev makes no probabilistic claim. A run classifies every point of the
+7. A target family enters through a layout profile, not through the engine.
+   `riscv-r` and `riscv-r4` are registry entries compiled under the `riscv`
+   feature, so the default build names no architecture and a build without the
+   feature has no RISC-V profile. The generic default is no word layout; a
+   fixture that models an instruction word declares the profile that makes it
+   one.
+8. ev makes no probabilistic claim. A run classifies every point of the
    declared space and nothing else, and identical runs produce identical
    records. Sampling, coverage percentages, and confidence bounds are outside
    the concept: a claim that rests on a sample belongs to a different tool, and
@@ -241,6 +271,10 @@ Fixture Provenance table; keep the counts in step between the two.
   `sv_constraint_assertion` in `synth/mod.rs`.
 - New projector type: add a variant to `ProjectorSpec`, a builder in
   `ProjectorRegistry::default()`, and an arm in `sv_projector`.
+- New layout profile: implement a builder returning `WordLayout` and register
+  it in `LayoutRegistry::default()` (or in the caller's registry). A profile
+  that belongs to one architecture goes behind its own feature, as `riscv`
+  does.
 - New input format: implement `FormatCapable`. New output format: implement
   `ReporterCapable` and pass the classification through.
 - New classification engine: produce a `Classification` from a spec. The
@@ -261,7 +295,9 @@ Published numbers live in the corpus, not here.
 `src/verify/compose.rs` (`Coord`, `CoordPath`) and `src/verify/evaluate.rs`
 (`DynCoordSpace`). `Cargo.lock` pins the revision; `Cargo.toml` does not.
 Syntagma plans to publish it to crates.io, at which point the dependency can
-become a version.
+become a version. It is the one domain-named dependency left in the core; if
+the engine is to ship without it, replacing the three coordinate helpers is
+the next decoupling step.
 
 ## Git and Workflow
 

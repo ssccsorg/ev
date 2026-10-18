@@ -31,7 +31,7 @@
 # No enable_mask constraints; every register combination is a valid encoding.
 
 target: cva6_xif_ref_r4
-encoding: r4
+profile: riscv-r4
 fields:
   opcode:
     values: [0x7B]

@@ -2,9 +2,15 @@
 name = "ev"
 version = "0.1.0"
 edition = "2021"
-description = "exhaustive verification CLI for RISC‑V custom instructions"
+description = "exhaustive verification for declared discrete design spaces"
 license = "Apache-2.0"
 repository = "https://github.com/ssccsorg/ev"
+
+[features]
+default = ["riscv"]
+# RISC-V layouts and the Spike backend. Without it, ev verifies any declared
+# space and carries no architecture-specific code.
+riscv = []
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }

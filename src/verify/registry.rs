@@ -727,7 +727,7 @@ mod tests {
         VerificationSpec {
             target: "t".into(),
             fields,
-            encoding: None,
+            layout: None,
             constraints: Vec::new(),
             projector,
         }
