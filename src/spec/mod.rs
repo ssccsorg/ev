@@ -59,6 +59,34 @@ pub struct FieldSpec {
 }
 
 impl FieldSpec {
+    /// Number of values in this field's domain, without materializing it.
+    ///
+    /// Matches [`FieldSpec::expand`] for a positive alignment. A zero or
+    /// negative alignment has no meaningful step, so the size is reported as
+    /// zero rather than dividing by zero.
+    pub fn len(&self) -> usize {
+        if let Some(ref values) = self.values {
+            return values.len();
+        }
+        let (min, max) = self.range.unwrap_or((0, 255));
+        let step = self.alignment.unwrap_or(1);
+        if step <= 0 || min > max {
+            return 0;
+        }
+        let first = min + (step - min % step) % step;
+        let last = max - (max % step + step) % step;
+        if first > last {
+            0
+        } else {
+            ((last - first) / step + 1) as usize
+        }
+    }
+
+    /// Whether this field's domain has no values.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     /// All values this field can take (domain expansion).
     pub fn expand(&self) -> Vec<i64> {
         if let Some(ref values) = self.values {

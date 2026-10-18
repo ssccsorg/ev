@@ -128,6 +128,25 @@ when the layout changes.
   fields, so a partial record cannot be read as a complete classification.
 - `tests/classifier.rs` compares the two engines at each emitted coordinate.
 
+### Enumeration property
+
+- The structural iterator is index-free: it visits the structurally valid
+  points and each emitted point costs O(k) in the field count. Growing the
+  field count at fixed V is linear, not exponential.
+- `raw_total_combinations` is O(k) and flat in the raw product size, because
+  `FieldSpec::len` computes a domain's cardinality without materializing it.
+- The structural filter setup is O(sum of domain sizes), not O(k). It
+  dominates the end-to-end time when one field carries a large domain, so the
+  end-to-end pipeline cost is `O(sum domains + V*k)`, not `O(V)` alone. The
+  committed fixtures keep the domains small (8..128), so the 33M CVA6 raw
+  product does not mean a 33M setup.
+- Memory is O(V): `evaluate_structural` collects the valid combinations and
+  the verdicts. The largest committed valid set is 196,608 points. A
+  streaming path is deferred until a consumer needs a valid set that does not
+  fit memory (issue #68 decision).
+- `benches/bench.rs` carries the scaling group and the medians; `cargo bench --
+  scaling` reproduces them.
+
 ### Constraint and projector surface
 
 - Constraint types (13): `range`, `even`, `eq`, `neq`, `lt`, `gt`, `le`,
@@ -213,11 +232,11 @@ when the layout changes.
 ### Tests and fixtures
 
 ```bash
-cargo test --release          # 156 tests: 80 lib, 31 CLI, 8 structural,
+cargo test --release          # 160 tests: 80 lib, 31 CLI, 8 structural,
                               # 5 tagma, 2 golden anchor, 4 derivation, 2 source pin,
                               # 5 layout, 6 spec hash, 4 classification,
-                              # 3 point identity, 3 run metadata, 3 coordinate space.
-                              # None ignored.
+                              # 3 point identity, 3 run metadata, 3 coordinate space,
+                              # 4 domain size. None ignored.
 cargo bench -- cva6_full      # full-space CVA6 group
 cargo bench -- struct_enum_validity   # correctness guard, must stay green
 ./run.sh                      # fmt, clippy, build, test, verify
@@ -312,6 +331,10 @@ Fixture Provenance table; keep the counts in step between the two.
     coordinate (spec address plus field values) and excludes the verdict. The
     payload stays a pointer to the spec, and the rejected set is
     `total - passed`, re-derivable rather than emitted.
+11. ev classifies encoding spaces, not compile-time configuration spaces. A
+    configuration selects which instructions exist; it is not a field of an
+    instruction. A spec models one configuration, and the fixture states the
+    parameter binding it assumes (issue #36 decision).
 
 ## How to Extend
 

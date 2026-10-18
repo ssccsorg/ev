@@ -101,7 +101,7 @@ pub fn raw_total_combinations(spec: &VerificationSpec) -> Result<usize, String> 
     let mut total: usize = 1;
     for name in spec.fields.keys() {
         let def = spec.fields.get(name).expect("field must exist");
-        let len = def.expand().len();
+        let len = def.len();
         total = total.checked_mul(len).ok_or_else(|| {
             format!(
                 "domain expansion overflow: total combinations exceed usize (field domain size {})",

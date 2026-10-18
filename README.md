@@ -309,13 +309,14 @@ claims a pinned source, not a derived mapping (issue #62 decision).
 | struct_enum benchmark (same machine, release) | 18.8 ms |
 | CVA6 fixture derivation | the three decoder-derived fixtures match a re-extraction of the mask table at `6544a714c`: 6 `(funct3, funct7)` pairs for `xif_ref`, 5 `(funct3, func2)` pairs for `xif_ref_r4`, 1 for `xif_madd` |
 | Ibex source pin | the two RV32IMCB fixtures are pinned to `ibex_decoder.sv` at `f4540774` (digest `ba04566d`), compared when `IBEX_DIR` is set; the mapping is a hand transcription, not a derived artifact (issue #62 decision) |
+| Enumeration property | the iterator visits V points at O(k) per point, flat from 64k to 6.4M raw at fixed V; the raw total is O(k) and flat (37 ns); the structural filter setup is O(sum domains), so end to end is `O(sum domains + V*k)`; memory is O(V) |
 | Spike backend | C/Rust recheck: 196,608 / 196,608 agree |
 | Tagma decoder cross-channel | 11,172 / 11,172 projections equal `tagma_core::Coord::to_axes`; the generated `golden_anchors.hex` matches line by line when `EV_TAGMA_ANCHORS` is set |
 | Synthesis channel | `--design` on the syntagma Tagma decoder reports 478 cells, the number the syntagma generic Yosys flow reports for the same RTL; `--target` on `all_pass` reports 28 (both with Yosys 0.65) |
 | SSCCS POC channel demo (`./run.sh --demo`, needs an ssccs checkout) | 5 / 5 channels match the hand-written assembly golden anchors |
 | Constraint types | 13 (range, even, eq, neq, lt, gt, le, ge, oneof, cross, bitmask, enable_mask, enable_set) |
 | Projector types | 4 (sum, identity, parity, decompose) |
-| Tests | 156 (80 lib + 31 CLI + 8 structural + 5 tagma + 2 golden anchor + 4 derivation + 2 source pin + 5 layout + 6 spec hash + 4 classification + 3 point identity + 3 run metadata + 3 coordinate space), all passing, none ignored |
+| Tests | 160 (80 lib + 31 CLI + 8 structural + 5 tagma + 2 golden anchor + 4 derivation + 2 source pin + 5 layout + 6 spec hash + 4 classification + 3 point identity + 3 run metadata + 3 coordinate space + 4 domain size), all passing, none ignored |
 | Coverage gate | 80% lines / 80% regions (llvm-cov, all modules incl. Spike/Yosys backends) |
 | Simulation backends | Mock (default), Spike (`EV_SIM_BACKEND=spike`) |
 
@@ -323,7 +324,7 @@ Benchmark methodology and reproducibility: the structural pipeline is the
 CLI default; the raw total is computed from the field domains without
 enumeration, and only structurally valid combinations are generated and
 evaluated. Reproduce with `cargo bench -- cva6_full` on the committed
-fixtures.
+fixtures, and the two synthetic scaling axes with `cargo bench -- scaling`.
 
 ## Architecture
 
@@ -365,6 +366,7 @@ tests/
   cli_test.rs       31 integration tests
   classifier.rs     4 classification capability tests
   coord_space.rs    3 coordinate space tests
+  domain_size.rs    4 domain size tests
   point_identity.rs 3 point identity tests
   run_metadata.rs   3 run metadata tests
   structural_enum.rs 8 structural enumeration regression tests

@@ -7,9 +7,10 @@
 //! - `evaluate_all` (standard): materializes the full Cartesian product of
 //!   field domains (O(N)) and runs every constraint check on every
 //!   combination.
-//! - `struct_enum` (structural, synTagma): encodes the constraints into the
-//!   enumeration space and visits only the valid combinations (O(V)),
-//!   lazily, with O(1) memory.
+//! - `struct_enum` (structural): encodes the constraints into the
+//!   enumeration space and visits only the structurally valid combinations
+//!   (O(V) visits). Memory is the restricted domains plus the emitted set, not
+//!   the raw product.
 //!
 //! Methodology
 //! -----------
@@ -32,13 +33,55 @@
 //!
 //! The Tagma row is excluded from the speedup comparison. The fixture is
 //! the Tagma hardware contract itself (the input domain of the syntagma
-//! 3-axis decoder), and the structural enumeration is the Tagma engine, so
-//! comparing the two on this fixture is not a demonstration of the
-//! enumeration-strategy gain. Its ge/le constraints are runtime-only, its
-//! structural density is 100%, and the evaluate vs struct_enum ratio is the
-//! enumeration overhead floor, not a sparse-space effect; the table density
-//! (17%) is the valid/raw ratio, not a structural filter ratio. The rows
-//! remain as reference measurements only.
+//! 3-axis decoder), its ge/le constraints are runtime-only, its structural
+//! density is 100%, and the evaluate vs struct_enum ratio is the enumeration
+//! overhead floor, not a sparse-space effect; the table density (17%) is the
+//! valid/raw ratio, not a structural filter ratio. The rows remain as
+//! reference measurements only.
+//!
+//! Scaling
+//! -------
+//! Two synthetic axes isolate the enumeration property. Both live in the
+//! `scaling` group. Medians from a release run with a 1 s warm-up and a 2 s
+//! measurement window; absolute times are machine-specific.
+//!
+//! Fixed V, growing raw N: `a,b` in 0..7 with `cross a -> [a]`, and `c` in
+//! 0..C-1 restricted to `[0]` by `oneof`. V stays 8 while N is 64C.
+//!
+//! | Raw N | filters | raw_total | iterator | end to end |
+//! |------:|--------:|----------:|---------:|-----------:|
+//! | 64,000 | 3.7 µs | 37 ns | 1.64 µs | 5.6 µs |
+//! | 640,000 | 38.6 µs | 37 ns | 1.70 µs | 40.0 µs |
+//! | 6,400,000 | 272 µs | 37 ns | 1.93 µs | 319 µs |
+//!
+//! Growing k at fixed V: k two-value fields with all but the first fixed by
+//! `oneof`. V stays 2 while N is 2^k.
+//!
+//! | k | raw_total | end to end |
+//! |--:|----------:|-----------:|
+//! | 4 | 65 ns | 0.97 µs |
+//! | 8 | 213 ns | 1.91 µs |
+//! | 16 | 486 ns | 3.69 µs |
+//! | 32 | n/a (N > MAX_COMBINATIONS) | 8.15 µs |
+//!
+//! What they show:
+//!
+//! - The iterator cost is flat as the raw domain grows at fixed V (1.64 to
+//!   1.93 µs for a 100x raw increase). The enumeration is index-free.
+//! - `raw_total_combinations` is O(k) and flat in N (37 ns at all three
+//!   sizes), because `FieldSpec::len` computes the domain size without
+//!   materializing it.
+//! - The structural filter setup is O(sum of domain sizes), not O(k). It
+//!   dominates the end-to-end time when one field carries a large domain
+//!   (3.7 µs to 272 µs for a 100x domain). The cost tracks the declared
+//!   domains, not only the valid set.
+//! - Growing the field count at fixed V is linear in k, not exponential
+//!   (0.97 to 8.15 µs for 4 to 32 fields).
+//!
+//! The memory boundary is O(V): `evaluate_structural` collects the valid
+//! combinations and the verdicts. The largest committed valid set is 196,608
+//! points (CVA6 full). A streaming path would need a sink-based record API;
+//! it is deferred until a consumer needs a valid set that does not fit memory.
 //!
 //! The CLI verify path (`evaluate_structural`: raw total + structural
 //! subset + evaluate_all on the valid rows) measures 36.3 ms on the CVA6
@@ -70,14 +113,17 @@
 //! cargo bench -- cva6_full    # full-space CVA6 group only
 //! cargo bench -- expand       # expand/enumerate group only
 //! cargo bench -- "struct_enum/cva6"   # structural enumeration only
+//! cargo bench -- scaling     # the two synthetic scaling axes
 //! cargo bench -- struct_enum_validity # correctness guard (must stay green)
 //! ```
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
 use std::collections::BTreeMap;
 
 use ev::spec::{ConstraintSpec, FieldSpec, ProjectorSpec, VerificationSpec};
-use ev::verify::compose::{expand_all, EnumerateIter, StructuralEnum};
+use ev::verify::compose::{
+    expand_all, raw_total_combinations, structural_filters, EnumerateIter, StructuralEnum,
+};
 use ev::verify::evaluate::{evaluate_all, evaluate_structural, validate_into_space};
 use ev::verify::registry::{Check, ConstraintRegistry, ProjectorRegistry};
 
@@ -770,6 +816,120 @@ fn bench_constraint_check(c: &mut Criterion) {
 }
 
 // ===========================================================================
+// Scaling: the enumeration property
+// ===========================================================================
+//
+// Two synthetic axes, both with a fixed valid count:
+//
+// - Fixed V, growing raw N: an unconstrained-looking field `c` carries a
+//   large domain but a `oneof` restricts it to one value. The raw total grows
+//   with `c`; the valid set stays at 8. The iterator is index-free, but the
+//   structural filters expand the domain, so the end-to-end cost grows with
+//   the raw domain size while the iterator alone stays flat. The two
+//   measurements are reported separately so the boundary is visible.
+// - Growing field count k at fixed V: k two-value fields with all but the
+//   first fixed by `oneof`. V stays at 2, N is 2^k, and each emitted point has
+//   k fields, so the cost should be linear in k rather than exponential.
+
+fn scaling_field(min: i64, max: i64) -> FieldSpec {
+    FieldSpec {
+        range: Some((min, max)),
+        alignment: None,
+        values: None,
+    }
+}
+
+fn fixed_valid_growing_raw_spec(c_domain: i64) -> VerificationSpec {
+    let mut fields = BTreeMap::new();
+    fields.insert("a".to_string(), scaling_field(0, 7));
+    fields.insert("b".to_string(), scaling_field(0, 7));
+    fields.insert("c".to_string(), scaling_field(0, c_domain - 1));
+
+    let mapping: BTreeMap<i64, Vec<i64>> = (0..8).map(|value| (value, vec![value])).collect();
+    let constraints = vec![
+        ConstraintSpec::Cross {
+            field_a: "a".into(),
+            field_b: "b".into(),
+            mapping,
+        },
+        ConstraintSpec::Oneof {
+            field: "c".into(),
+            values: vec![0],
+        },
+    ];
+
+    VerificationSpec {
+        target: format!("scaling_fixed_v_{c_domain}"),
+        fields,
+        layout: None,
+        constraints,
+        projector: ProjectorSpec::Sum,
+    }
+}
+
+fn growing_fields_fixed_valid_spec(k: usize) -> VerificationSpec {
+    let mut fields = BTreeMap::new();
+    let mut constraints = Vec::new();
+    for index in 0..k {
+        let name = format!("f{index}");
+        fields.insert(name.clone(), scaling_field(0, 1));
+        if index > 0 {
+            constraints.push(ConstraintSpec::Oneof {
+                field: name,
+                values: vec![0],
+            });
+        }
+    }
+
+    VerificationSpec {
+        target: format!("scaling_k_{k}"),
+        fields,
+        layout: None,
+        constraints,
+        projector: ProjectorSpec::Sum,
+    }
+}
+
+fn bench_fixed_valid_growing_raw(c: &mut Criterion) {
+    for c_domain in [1_000i64, 10_000, 100_000] {
+        let spec = fixed_valid_growing_raw_spec(c_domain);
+        let raw = 64 * c_domain as usize;
+
+        c.bench_function(&format!("scaling/fixed_v/end_to_end/raw_{raw}"), |b| {
+            b.iter(|| StructuralEnum::new(black_box(&spec)).count())
+        });
+        c.bench_function(&format!("scaling/fixed_v/iter/raw_{raw}"), |b| {
+            b.iter_batched(
+                || StructuralEnum::new(black_box(&spec)),
+                |iter| iter.count(),
+                BatchSize::LargeInput,
+            )
+        });
+        c.bench_function(&format!("scaling/fixed_v/filters/raw_{raw}"), |b| {
+            b.iter(|| black_box(structural_filters(black_box(&spec))))
+        });
+        c.bench_function(&format!("scaling/fixed_v/raw_total/raw_{raw}"), |b| {
+            b.iter(|| raw_total_combinations(black_box(&spec)).expect("raw total"))
+        });
+    }
+}
+
+fn bench_growing_fields_fixed_valid(c: &mut Criterion) {
+    for k in [4usize, 8, 16, 32] {
+        let spec = growing_fields_fixed_valid_spec(k);
+
+        c.bench_function(&format!("scaling/growing_k/end_to_end/k_{k}"), |b| {
+            b.iter(|| StructuralEnum::new(black_box(&spec)).count())
+        });
+        if k <= 20 {
+            c.bench_function(&format!("scaling/growing_k/raw_total/k_{k}"), |b| {
+                b.iter(|| raw_total_combinations(black_box(&spec)).expect("raw total"))
+            });
+        }
+    }
+}
+
+// ===========================================================================
 // Criterion configuration
 // ===========================================================================
 
@@ -821,4 +981,11 @@ criterion_group!(
               bench_structural_enum_validity_cva6_full
 );
 
-criterion_main!(coordspace, expand, eval_light, eval_heavy, cva6_full);
+// Scaling: the enumeration property, synthetic and fast.
+criterion_group!(
+    name = scaling;
+    config = Criterion::default().sample_size(30);
+    targets = bench_fixed_valid_growing_raw, bench_growing_fields_fixed_valid
+);
+
+criterion_main!(coordspace, expand, eval_light, eval_heavy, cva6_full, scaling);
