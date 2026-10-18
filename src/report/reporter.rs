@@ -40,6 +40,11 @@ impl ReporterCapable for CsvReporter {
 
         // Print metadata as comments
         println!("# target: {}", target);
+        println!(
+            "# engine: {} {}",
+            classification.engine.name, classification.engine.version
+        );
+        println!("# claim:  {}", classification.claim);
         println!("# total:  {}", classification.total);
         println!("# passed: {}", passed_count);
         println!("# failed: {}", failed_count);
@@ -85,9 +90,11 @@ impl ReporterCapable for TraceReporter {
         let started_at = chrono::Utc::now();
 
         println!(
-            "[{}] TRACE  verification_started  target={}",
+            "[{}] TRACE  verification_started  target={} engine={} claim={}",
             started_at.to_rfc3339(),
-            target
+            target,
+            classification.engine.name,
+            classification.claim
         );
         println!(
             "[{}] INFO   total_combinations={}",
@@ -154,6 +161,11 @@ impl ReporterCapable for TextReporter {
         let (passed_count, failed_count) = classification.counts();
 
         println!("target: {}", target);
+        println!(
+            "engine: {} {}",
+            classification.engine.name, classification.engine.version
+        );
+        println!("claim:  {}", classification.claim);
         println!("total:  {}", classification.total);
         println!("passed: {}", passed_count);
         println!("failed: {}", failed_count);
@@ -223,6 +235,10 @@ struct VerificationReport {
     timestamp: String,
     /// Content-addressable hash of the specification (parent reference).
     spec_hash: String,
+    /// Engine that produced this classification.
+    engine: crate::classification::EngineIdentity,
+    /// What the engine claims about the space.
+    claim: crate::classification::ClaimClass,
     total: usize,
     passed: usize,
     failed: usize,
@@ -244,6 +260,8 @@ impl ReporterCapable for JsonReporter {
             target: target.to_string(),
             timestamp,
             spec_hash: spec_hash.clone(),
+            engine: classification.engine.clone(),
+            claim: classification.claim,
             total: classification.total,
             passed: passed_count,
             failed: failed_count,

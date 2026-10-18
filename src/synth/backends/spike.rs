@@ -35,7 +35,7 @@
 //! * `EV_PK_PATH` — path to the pk proxy kernel (default: "pk")
 //! * `EV_RISCV_CC` — RISC-V cross-compiler (default: "riscv64-unknown-elf-gcc")
 
-use crate::classification::{Classification, Verdict};
+use crate::classification::{ClaimClass, Classification, EngineIdentity, Verdict};
 use crate::spec::{ConstraintSpec, VerificationSpec, WordLayout};
 use crate::synth::sim::{RunSimulation, SimulationResult};
 use std::collections::BTreeMap;
@@ -90,7 +90,13 @@ impl RunSimulation for SpikeBackend {
             return Ok(SimulationResult {
                 tool: "spike".into(),
                 version: env!("CARGO_PKG_VERSION").into(),
-                classification: Classification::new(field_order, total, static_verdicts),
+                classification: Classification::by(
+                    EngineIdentity::new("ev/spike", env!("CARGO_PKG_VERSION")),
+                    ClaimClass::Exhaustive,
+                    field_order,
+                    total,
+                    static_verdicts,
+                ),
                 extra: None,
             });
         }
@@ -129,7 +135,13 @@ impl RunSimulation for SpikeBackend {
         Ok(SimulationResult {
             tool: "spike".into(),
             version: get_spike_version(),
-            classification: Classification::new(field_order, merged.len(), merged),
+            classification: Classification::by(
+                EngineIdentity::new("ev/spike", env!("CARGO_PKG_VERSION")),
+                ClaimClass::Exhaustive,
+                field_order,
+                merged.len(),
+                merged,
+            ),
             extra: None,
         })
     }

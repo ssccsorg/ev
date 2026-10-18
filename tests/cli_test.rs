@@ -558,3 +558,49 @@ fn synth_help_succeeds() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("--target"), "help should mention --target");
 }
+
+#[test]
+fn verify_default_classifier_names_the_engine() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("verify")
+        .arg("--target")
+        .arg("tests/fixtures/common/all_pass.xif.yaml")
+        .output()
+        .expect("failed to run ev verify");
+    assert!(output.status.success(), "all_pass should exit 0");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("engine: ev/structural"), "{stdout}");
+    assert!(stdout.contains("claim:  exhaustive"), "{stdout}");
+}
+
+#[test]
+fn verify_naive_classifier_names_the_engine() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .env("EV_CLASSIFIER", "naive")
+        .arg("verify")
+        .arg("--target")
+        .arg("tests/fixtures/common/sample.xif.yaml")
+        .output()
+        .expect("failed to run ev verify with the naive classifier");
+    assert!(
+        !output.status.success(),
+        "the mixed fixture has failures, so verify exits 1"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("engine: ev/naive"), "{stdout}");
+    assert!(stdout.contains("claim:  exhaustive"), "{stdout}");
+}
+
+#[test]
+fn verify_unknown_classifier_fails() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .env("EV_CLASSIFIER", "nope")
+        .arg("verify")
+        .arg("--target")
+        .arg("tests/fixtures/common/all_pass.xif.yaml")
+        .output()
+        .expect("failed to run ev verify with an unknown classifier");
+    assert!(!output.status.success(), "an unknown classifier must fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("unknown classifier `nope`"), "{stderr}");
+}

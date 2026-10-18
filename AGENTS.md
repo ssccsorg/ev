@@ -26,7 +26,8 @@ ExaSpec, which consumes ev's Facts; the FIH field alignment waits for nexus
 classification that is reproducible and correctly addressed, which is what
 issues #64, #65, and #68 are about, and to keep its engine one implementation
 behind a capability interface (#67) so a more specialized verifier can be
-routed in without changing what ev emits.
+routed in without changing what ev emits. That capability now exists as
+`verify::Classify`.
 
 The engine is a vessel rather than the differentiator. The classification
 behind the capability seam (#67) may be imported: an engine with different
@@ -50,6 +51,7 @@ src/
   profile/          LayoutRegistry; riscv.rs holds the RISC-V layouts
                     (feature = "riscv")
   verify/
+    classifier.rs   Classify trait, StructuralClassifier, NaiveClassifier
     compose.rs      domain expansion, raw_total_combinations, StructuralEnum
     evaluate.rs     evaluate_all, evaluate_structural, validate_into_space,
                     build_runtime_checks
@@ -96,6 +98,18 @@ when the layout changes.
   A `cross` mapping is a `BTreeMap`, so two runs address the same spec
   identically. The coverage rule is documented at the function, and
   `tests/spec_hash.rs` pins the layout, comment, and cross-order cases.
+
+### Classification capability
+
+- `verify::Classify` is the seam. `StructuralClassifier` is the default
+  (`ev/structural`), and `NaiveClassifier` (`ev/naive`) is the reference
+  full-expansion implementation. `EV_CLASSIFIER=structural|naive` selects one,
+  and an unknown value fails instead of falling back.
+- `Classification` carries `engine: EngineIdentity` and `claim: ClaimClass`.
+  The built-in engines claim `Exhaustive`; `Partial` is the class an imported
+  engine must set when it samples or truncates. Every reporter emits both
+  fields, so a partial record cannot be read as a complete classification.
+- `tests/classifier.rs` compares the two engines at each emitted coordinate.
 
 ### Constraint and projector surface
 
@@ -180,9 +194,10 @@ when the layout changes.
 ### Tests and fixtures
 
 ```bash
-cargo test --release          # 143 tests: 83 lib, 28 CLI, 8 structural,
+cargo test --release          # 150 tests: 83 lib, 31 CLI, 8 structural,
                               # 5 tagma, 2 golden anchor, 4 derivation, 2 source pin,
-                              # 5 layout abstraction, 6 spec hash. None ignored.
+                              # 5 layout abstraction, 6 spec hash, 4 classification.
+                              # None ignored.
 cargo bench -- cva6_full      # full-space CVA6 group
 cargo bench -- struct_enum_validity   # correctness guard, must stay green
 ./run.sh                      # fmt, clippy, build, test, verify
@@ -221,6 +236,7 @@ Fixture Provenance table; keep the counts in step between the two.
 | Variable | Values | Effect |
 |---|---|---|
 | `EV_SIM_BACKEND` | `mock` (default), `spike` (`riscv` feature) | Simulation backend |
+| `EV_CLASSIFIER` | `structural` (default), `naive` | Classification engine |
 | `EV_SYNTH_BACKEND` | `mock`, `yosys` (default) | Synthesis backend |
 | `EV_SPIKE_BIN` | path | Spike binary |
 | `EV_PK_PATH` | path | Proxy kernel |
@@ -233,9 +249,9 @@ Fixture Provenance table; keep the counts in step between the two.
 
 ## Key Design Decisions
 
-1. Capability traits: `FormatCapable`, `ReporterCapable`, `GenerateRtl`,
-   `RunSimulation`, `RunSynthesis`. New formats and backends require no
-   pipeline change.
+1. Capability traits: `FormatCapable`, `ReporterCapable`, `Classify`,
+   `GenerateRtl`, `RunSimulation`, `RunSynthesis`. New formats, engines, and
+   backends require no pipeline change.
 2. Constraints reference fields by name string, never by numeric axis, so
    YAML declaration order does not matter.
 3. `ConstraintRegistry` and `ProjectorRegistry` use a builder pattern over
@@ -266,6 +282,10 @@ Fixture Provenance table; keep the counts in step between the two.
    comparing against such a tool measures that tool. The one percentage here is
    the code-coverage gate, which measures this repository's test suite and
    never a verification claim.
+9. A classification record names its engine and claim class. The built-in
+   engines are exhaustive; an imported engine that samples or truncates sets
+   `Partial`. The point coordinates stay independent of the engine, so verdicts
+   from two engines are comparable at the same point.
 
 ## How to Extend
 
@@ -280,10 +300,10 @@ Fixture Provenance table; keep the counts in step between the two.
   does.
 - New input format: implement `FormatCapable`. New output format: implement
   `ReporterCapable` and pass the classification through.
-- New classification engine: produce a `Classification` from a spec. The
-  built-in engine is `verify::evaluate_structural`, reached in one call in
-  `Commands::Verify`; #67 turns that call into a selectable capability with the
-  naive pipeline (`expand_all` + `evaluate_all`) as the second implementation.
+- New classification engine: implement `Classify` and select it in
+  `resolve_classifier`. The built-in engine is `verify::evaluate_structural`
+  (`StructuralClassifier`), and the naive pipeline is the second in-repo
+  implementation; keep both comparable at the coordinate level.
 
 ## Documentation
 

@@ -6,8 +6,10 @@ use ev::spec::VerificationSpec;
 use ev::synth::backends::yosys::YosysBackend;
 use ev::synth::sim::{MockSimBackend, RunSimulation, SimulationResult};
 use ev::synth::{GenerateRtl, MockSynthesisBackend, RunSynthesis, SvGenerator, SynthesisMetrics};
-use ev::verify::{evaluate_all, evaluate_structural, expand_all};
-use ev::verify::{ConstraintRegistry, ProjectorRegistry};
+use ev::verify::{evaluate_all, expand_all};
+use ev::verify::{
+    Classify, ConstraintRegistry, NaiveClassifier, ProjectorRegistry, StructuralClassifier,
+};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -108,6 +110,14 @@ fn resolve_synth_backend() -> Box<dyn RunSynthesis> {
         return Box::new(MockSynthesisBackend);
     }
     Box::new(YosysBackend)
+}
+
+fn resolve_classifier() -> anyhow::Result<Box<dyn Classify>> {
+    match std::env::var("EV_CLASSIFIER").unwrap_or_default().as_str() {
+        "" | "structural" => Ok(Box::new(StructuralClassifier)),
+        "naive" => Ok(Box::new(NaiveClassifier)),
+        other => anyhow::bail!("unknown classifier `{other}`; supported: `structural` or `naive`"),
+    }
 }
 
 fn print_synthesis_report(report: &SynthesisMetrics, json: bool) {
@@ -222,9 +232,12 @@ fn main() -> anyhow::Result<()> {
             // Structural pipeline: enumerate only the structurally valid
             // combinations (O(V) instead of O(N)); the raw total is computed
             // without expanding the space and reconciles the counts.
-            let classification =
-                evaluate_structural(&spec, &constraint_registry, &projector_registry)
-                    .map_err(|e| anyhow::anyhow!("structural evaluation failed: {}", e))?;
+            let classifier = resolve_classifier()?;
+            let classification = classifier
+                .classify(&spec, &constraint_registry, &projector_registry)
+                .map_err(|e| {
+                    anyhow::anyhow!("{} classification failed: {}", classifier.name(), e)
+                })?;
 
             if json {
                 eprintln!("warning: --json is deprecated, use --format json instead");
@@ -298,6 +311,11 @@ fn main() -> anyhow::Result<()> {
                 }
                 OutputFormat::Text => {
                     println!("target: simulation ({} backend)", result.tool);
+                    println!(
+                        "engine: {} {}",
+                        result.classification.engine.name, result.classification.engine.version
+                    );
+                    println!("claim:  {}", result.classification.claim);
                     println!("total:  {}", result.classification.total);
                     println!("passed: {}", passed);
                     println!("failed: {}", failed);

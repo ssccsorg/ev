@@ -13,6 +13,8 @@
 //!   caller.
 //! - [`format::FormatCapable`] parses the spec, and a caller can supply its
 //!   own format or its own registry.
+//! - [`verify::Classify`] lets an engine replace the built-in structural
+//!   enumerator without changing the record.
 //!
 //! # Architecture
 //!
@@ -21,7 +23,7 @@
 //! spec/           ← VerificationSpec, FieldSpec, ConstraintSpec, ProjectorSpec, WordLayout
 //! profile/        ← LayoutRegistry; riscv.rs holds the RISC-V layouts (feature = "riscv")
 //! classification/ ← Classification, Verdict: the engine's output type
-//! verify/         ← compose, evaluate, registry (Check trait + registries)
+//! verify/         ← compose, evaluate, classifier (Classify trait + engines), registry
 //! report/         ← ReporterCapable trait + Fact envelope + implementations
 //! format/         ← FormatCapable trait + XIF format parser
 //! synth/          ← synthesis traits (GenerateRtl, RunSynthesis), SV generation, backends

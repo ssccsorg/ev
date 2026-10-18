@@ -34,6 +34,11 @@ cross, enable_mask, enable_set) that are encoded directly into the enumeration
 space, and runtime constraints (eq, neq, lt, gt, le, ge, even) that are checked
 per combination. Only structurally valid combinations are ever generated.
 
+The default classifier is the structural enumerator. `EV_CLASSIFIER=naive`
+selects the full-expansion reference, which emits every point and is used to
+compare records at the same coordinates. Every record names the engine and
+whether its claim is exhaustive or partial.
+
 A single command verifies the 33.5 million combination CVA6 CV-X-IF encoding
 space derived from the hardware decoder mask table
 (`cva6/core/cvxif_example/include/cvxif_instr_pkg.sv` at commit `6544a714c`)
@@ -48,6 +53,8 @@ Output:
 
 ```
 target: cva6_xif_ref
+engine: ev/structural 0.1.0
+claim:  exhaustive
 total:  33554432
 passed: 196608
 failed: 33357824
@@ -314,6 +321,7 @@ src/
   profile/          LayoutRegistry; riscv.rs holds the RISC-V layouts
                     (feature = "riscv")
   verify/
+    classifier.rs   Classify trait, StructuralClassifier, NaiveClassifier
     compose.rs      Domain expansion, raw_total_combinations, StructuralEnum
     evaluate.rs     evaluate_all, evaluate_structural, validate_into_space,
                     build_runtime_checks
@@ -339,7 +347,8 @@ tests/
     tagma/          2 YAML fixture files
     rtl/            1 Verilog design fixture
     yosys/          1 captured Yosys stat report
-  cli_test.rs       28 integration tests
+  cli_test.rs       31 integration tests
+  classifier.rs     4 classification capability tests
   structural_enum.rs 8 structural enumeration regression tests
   tagma_fixture.rs  5 Tagma fixture tests
   golden_anchor.rs  2 tagma golden anchor cross-channel tests
@@ -354,6 +363,7 @@ Backends are pluggable via environment variables:
 | Variable | Values | Effect |
 |----------|--------|--------|
 | `EV_SIM_BACKEND` | `mock` (default), `spike` (`riscv` feature) | Simulation backend |
+| `EV_CLASSIFIER` | `structural` (default), `naive` | Classification engine |
 | `EV_SYNTH_BACKEND` | `mock`, `yosys` (default) | Synthesis backend |
 | `EV_SPIKE_BIN` | path | Spike binary location |
 | `EV_PK_PATH` | path | Proxy kernel for Spike |

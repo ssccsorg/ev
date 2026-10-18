@@ -27,7 +27,7 @@
 //!  └── CoverageCapable  — return coverage data (which encodings exercised)
 //! ```
 
-use crate::classification::{Classification, Verdict};
+use crate::classification::{ClaimClass, Classification, EngineIdentity, Verdict};
 use crate::spec::VerificationSpec;
 
 // ============================================================================
@@ -121,6 +121,8 @@ impl From<&SimulationResult> for crate::report::fih::Fact {
         let payload = serde_json::json!({
             "tool": r.tool,
             "version": r.version,
+            "engine": &r.classification.engine,
+            "claim": r.classification.claim,
             "total": r.classification.total,
             "passed": passed,
             "failed": failed,
@@ -147,7 +149,13 @@ impl RunSimulation for MockSimBackend {
         Ok(SimulationResult {
             tool: "mock".into(),
             version: "0.0.0".into(),
-            classification: Classification::new(field_order, total, static_verdicts),
+            classification: Classification::by(
+                EngineIdentity::new("ev/mock", env!("CARGO_PKG_VERSION")),
+                ClaimClass::Exhaustive,
+                field_order,
+                total,
+                static_verdicts,
+            ),
             extra: None,
         })
     }
