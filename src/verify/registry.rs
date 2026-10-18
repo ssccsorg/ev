@@ -450,7 +450,7 @@ struct CrossC {
     axis_a: usize,
     field_b: String,
     axis_b: usize,
-    mapping: std::collections::HashMap<i64, Vec<i64>>,
+    mapping: std::collections::BTreeMap<i64, Vec<i64>>,
 }
 
 impl Check for CrossC {

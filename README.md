@@ -346,6 +346,7 @@ tests/
   cva6_derivation.rs 4 CVA6 fixture derivation gate tests
   ibex_source_pin.rs 2 Ibex decoder source pin tests
   profile_registry.rs 5 layout abstraction tests
+  spec_hash.rs      6 content-address coverage tests
 ```
 
 Backends are pluggable via environment variables:

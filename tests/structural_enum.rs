@@ -75,7 +75,7 @@ fn structural_enum_cross_wrap_regression() {
             values: None,
         },
     );
-    let mapping: std::collections::HashMap<i64, Vec<i64>> =
+    let mapping: std::collections::BTreeMap<i64, Vec<i64>> =
         [(0, vec![0, 1]), (1, vec![0, 1]), (2, vec![5])].into();
     let spec = make_spec(
         fields,
@@ -119,7 +119,7 @@ fn structural_enum_skips_invalid_initial_state() {
             values: None,
         },
     );
-    let mapping: std::collections::HashMap<i64, Vec<i64>> = [(0, vec![5]), (1, vec![0, 1])].into();
+    let mapping: std::collections::BTreeMap<i64, Vec<i64>> = [(0, vec![5]), (1, vec![0, 1])].into();
     let spec = make_spec(
         fields,
         vec![ConstraintSpec::Cross {

@@ -125,7 +125,7 @@ pub enum ConstraintSpec {
     Cross {
         field_a: String,
         field_b: String,
-        mapping: std::collections::HashMap<i64, Vec<i64>>,
+        mapping: std::collections::BTreeMap<i64, Vec<i64>>,
     },
     /// Conditional field activation: when `field` equals `value`,
     /// force the listed `disable` fields to zero.

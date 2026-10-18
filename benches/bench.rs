@@ -180,7 +180,7 @@ fn medium_spec() -> VerificationSpec {
             values: None,
         },
     );
-    let mapping: std::collections::HashMap<i64, Vec<i64>> = [
+    let mapping: std::collections::BTreeMap<i64, Vec<i64>> = [
         (0, vec![0, 1, 2, 3, 4, 5, 6, 7]),
         (4, vec![1, 4, 5, 6, 7]),
         (5, vec![1, 2, 3, 4, 5, 6, 7]),

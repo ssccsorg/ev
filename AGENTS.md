@@ -91,8 +91,11 @@ when the layout changes.
 - The `riscv` feature also gates `synth::backends::spike`. A build with
   `--no-default-features` has neither the RISC-V layouts nor the Spike
   backend, and `EV_SIM_BACKEND=spike` fails instead of falling back to mock.
-- `hash_spec` includes the layout, so the same fields mapped to different bits
-  are different spaces.
+- `hash_spec` includes the layout and covers everything that changes the
+  classified space: target, field domains, layout, projector, and constraints.
+  A `cross` mapping is a `BTreeMap`, so two runs address the same spec
+  identically. The coverage rule is documented at the function, and
+  `tests/spec_hash.rs` pins the layout, comment, and cross-order cases.
 
 ### Constraint and projector surface
 
@@ -177,9 +180,9 @@ when the layout changes.
 ### Tests and fixtures
 
 ```bash
-cargo test --release          # 138 tests: 84 lib, 28 CLI, 8 structural,
+cargo test --release          # 143 tests: 83 lib, 28 CLI, 8 structural,
                               # 5 tagma, 2 golden anchor, 4 derivation, 2 source pin,
-                              # 5 layout abstraction. None ignored.
+                              # 5 layout abstraction, 6 spec hash. None ignored.
 cargo bench -- cva6_full      # full-space CVA6 group
 cargo bench -- struct_enum_validity   # correctness guard, must stay green
 ./run.sh                      # fmt, clippy, build, test, verify

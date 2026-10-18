@@ -769,7 +769,7 @@ mod tests {
                 values: Some(vec![0, 1, 2, 3]),
             },
         );
-        let mapping: std::collections::HashMap<i64, Vec<i64>> =
+        let mapping: std::collections::BTreeMap<i64, Vec<i64>> =
             [(0, vec![0]), (1, vec![0, 1, 2])].into();
         let spec = make_spec(
             fields,
@@ -828,7 +828,7 @@ mod tests {
                 values: Some(vec![0, 1, 2, 3]),
             },
         );
-        let mapping: std::collections::HashMap<i64, Vec<i64>> =
+        let mapping: std::collections::BTreeMap<i64, Vec<i64>> =
             [(0, vec![0]), (1, vec![0, 1, 2])].into();
         let spec = make_spec(
             fields,

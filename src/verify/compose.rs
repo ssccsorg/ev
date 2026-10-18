@@ -223,7 +223,7 @@ pub fn coords_to_path<const N: usize>(coords: &[i64]) -> Option<CoordPath<N>> {
 /// Type alias for structural filter result: (per-field allowed, cross mappings).
 pub type StructuralFilters = (
     Vec<Vec<i64>>,
-    Vec<(usize, usize, std::collections::HashMap<i64, Vec<i64>>)>,
+    Vec<(usize, usize, std::collections::BTreeMap<i64, Vec<i64>>)>,
 );
 
 /// Build a structural filter from constraints.
@@ -232,7 +232,7 @@ pub type StructuralFilters = (
 /// restrict the space. Constraints that cannot be expressed as
 /// structural filters (eq, neq) are returned for runtime evaluation.
 pub fn structural_filters(spec: &VerificationSpec) -> StructuralFilters {
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
 
     let field_names: Vec<&String> = spec.fields.keys().collect();
     let domains: Vec<Vec<i64>> = field_names
@@ -246,7 +246,7 @@ pub fn structural_filters(spec: &VerificationSpec) -> StructuralFilters {
     // Start with full domain per field
     let mut allowed: Vec<Vec<i64>> = domains.clone();
     // Cross constraints: (parent_idx, child_idx, mapping)
-    let mut cross_maps: Vec<(usize, usize, HashMap<i64, Vec<i64>>)> = Vec::new();
+    let mut cross_maps: Vec<(usize, usize, BTreeMap<i64, Vec<i64>>)> = Vec::new();
 
     for constraint in &spec.constraints {
         match constraint {
@@ -326,7 +326,8 @@ pub struct StructuralEnum {
     /// Cross mapping: child field index → (parent field index, mapping).
     /// When enumerating the child field, the parent value restricts which
     /// child values are valid.
-    cross_maps: std::collections::HashMap<usize, (usize, std::collections::HashMap<i64, Vec<i64>>)>,
+    cross_maps:
+        std::collections::BTreeMap<usize, (usize, std::collections::BTreeMap<i64, Vec<i64>>)>,
     /// Done flag.
     done: bool,
     /// Field names (for enable_mask/ enable_set).
@@ -339,7 +340,7 @@ pub struct StructuralEnum {
     /// For each (child field, parent value) that the mapping constrains, the
     /// index of the first allowed child value that satisfies the mapping.
     /// Absence of a key means the parent value has no satisfying child value.
-    first_valid: std::collections::HashMap<(usize, i64), usize>,
+    first_valid: std::collections::BTreeMap<(usize, i64), usize>,
 }
 
 /// Order fields so parents precede their cross-constrained children.
@@ -350,9 +351,9 @@ pub struct StructuralEnum {
 /// cross constraints are unsupported and may over-generate.
 fn build_field_order(
     n: usize,
-    cross_maps: &std::collections::HashMap<
+    cross_maps: &std::collections::BTreeMap<
         usize,
-        (usize, std::collections::HashMap<i64, Vec<i64>>),
+        (usize, std::collections::BTreeMap<i64, Vec<i64>>),
     >,
 ) -> Vec<usize> {
     let mut children: Vec<Vec<usize>> = vec![Vec::new(); n];
@@ -392,10 +393,10 @@ impl StructuralEnum {
 
         // Re-index cross maps: for each child field, store a reference
         // to its parent field and mapping
-        let mut indexed: std::collections::HashMap<
+        let mut indexed: std::collections::BTreeMap<
             usize,
-            (usize, std::collections::HashMap<i64, Vec<i64>>),
-        > = std::collections::HashMap::new();
+            (usize, std::collections::BTreeMap<i64, Vec<i64>>),
+        > = std::collections::BTreeMap::new();
         for (parent, child, mapping) in cross_maps {
             indexed.insert(child, (parent, mapping));
         }
@@ -405,8 +406,8 @@ impl StructuralEnum {
 
         // Precompute the first allowed index satisfying each constrained
         // (child field, parent value) pair, so fix_suffix runs in O(1).
-        let mut first_valid: std::collections::HashMap<(usize, i64), usize> =
-            std::collections::HashMap::new();
+        let mut first_valid: std::collections::BTreeMap<(usize, i64), usize> =
+            std::collections::BTreeMap::new();
         for (child, (_, mapping)) in &indexed {
             for (pv, vals) in mapping {
                 if let Some(idx) = allowed[*child].iter().position(|v| vals.contains(v)) {
@@ -1266,7 +1267,7 @@ mod tests {
                 values: Some(vec![0, 1, 2, 3]),
             },
         );
-        let mapping: std::collections::HashMap<i64, Vec<i64>> =
+        let mapping: std::collections::BTreeMap<i64, Vec<i64>> =
             [(0, vec![0]), (1, vec![0, 1, 2])].into();
         let spec = VerificationSpec {
             target: "test".into(),

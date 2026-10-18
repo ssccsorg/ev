@@ -383,27 +383,6 @@ mod tests {
     }
 
     #[test]
-    fn hash_spec_differs_when_layout_changes() {
-        use crate::spec::{FieldBitMapping, WordLayout};
-
-        let spec1 = make_spec();
-        let mut spec2 = make_spec();
-        spec2.layout = Some(WordLayout {
-            word_width: Some(16),
-            field_map: BTreeMap::from([
-                ("op".to_string(), FieldBitMapping { pos: 0, width: 3 }),
-                ("rs1".to_string(), FieldBitMapping { pos: 3, width: 5 }),
-            ]),
-        });
-
-        assert_ne!(
-            hash_spec(&spec1),
-            hash_spec(&spec2),
-            "a layout change must move the content address"
-        );
-    }
-
-    #[test]
     fn hash_spec_differs_when_fields_change() {
         let spec1 = make_spec();
         let mut spec2 = make_spec();
