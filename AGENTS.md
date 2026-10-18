@@ -194,9 +194,11 @@ when the layout changes.
   fixture files it covers). The digest is the hard check and the revision is
   reported, so a checkout at another commit describing the same decoder passes
   with a note. The fixture digests are checked wherever the tests run, so a
-  fixture edit has to restate the pin. No gate compares the fixtures'
-  `(funct7, funct3)` mapping with the decoder yet, which is why issue #62
-  exists and why the fixture headers say `transcribed from`.
+  fixture edit has to restate the pin. The mapping itself is a hand
+  transcription. Deriving it would require elaborating the decoder's
+  behavioural `casez` code, which is an RTL reader and a separate capability;
+  ev's scope is the atomic verifier, so the fixture claims a pinned source, not
+  a derived mapping (issue #62 decision).
 - Coverage gate: `scripts/coverage.sh` (cargo-llvm-cov, 80% lines and 80%
   regions) exercises the Spike, Yosys, and simulation backends with the
   instrumented binary.
@@ -356,11 +358,6 @@ at which point the dev-dependency can become a version.
 
 ## Open Work
 
-- Issue #62: derive the Ibex fixture mapping from the decoder's `case`
-  statement. The decoder is behavioural code rather than a table, so this is a
-  reader for an RTL subset and a capability decision, not fixture hygiene. The
-  alternative, if the reader is not wanted, is to restate what the fixtures'
-  claim actually rests on.
 - Issue #44: execute the accepted CVA6 custom-3 encodings through the
   standard CVA6 tandem flow, which needs the external CVA6 repository. A
   sample's DV environment stays a sample concern: the encoding contract is

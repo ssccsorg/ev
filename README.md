@@ -257,8 +257,8 @@ committed fixtures in a release build.
 | `cva6/xif_madd.xif.yaml` | The same table and revision, the MADD-family entries (`0x43`, `0x47`, `0x4B`, `0x4F`) | Mask table re-expressed as R4 fields | 32,768 | 1,024 | Derivation gate, count assertion |
 | `cva6/xif_encoding.xif.yaml` | The same table, plus `verif/env/corev-dv/custom/cvxif_custom_instr.sv`, at `6544a714c` | DV-class encodings on a register-reduced space, including encodings the decoder rejects | 8,192 | 48 | Count assertion, Spike recheck |
 | `cva6/xif_mac.xif.yaml` | None | Hand-written multiply-accumulate accelerator model | 32,768 | 28,672 | Count assertion, CLI output |
-| `ibex/rv32imcb.xif.yaml` | Ibex `rtl/ibex_decoder.sv`, `OPCODE_OP`, RV32BFull and RV32MFast, at `f4540774` | Hand transcription of the decoder case statement; not compared with the decoder by a gate (issue #62) | 524,288 | 92,160 | Count assertion, source pin |
-| `ibex/rv32imcb_imm.xif.yaml` | Ibex `rtl/ibex_decoder.sv`, `OPCODE_OP_IMM`, RV32BFull, at `f4540774` | Hand transcription of the decoder case statement; not compared with the decoder by a gate (issue #62) | 65,536 | 55,616 | Count assertion, source pin |
+| `ibex/rv32imcb.xif.yaml` | Ibex `rtl/ibex_decoder.sv`, `OPCODE_OP`, RV32BFull and RV32MFast, at `f4540774` | Hand transcription of the decoder case statement; the source pin checks the decoder and this file, not the mapping | 524,288 | 92,160 | Count assertion, source pin |
+| `ibex/rv32imcb_imm.xif.yaml` | Ibex `rtl/ibex_decoder.sv`, `OPCODE_OP_IMM`, RV32BFull, at `f4540774` | Hand transcription of the decoder case statement; the source pin checks the decoder and this file, not the mapping | 65,536 | 55,616 | Count assertion, source pin |
 | `ibex/csr_access.xif.yaml` | The RISC-V Zicsr specification | Hand-written standard encoding domain, with no illegal combination | 49,152 | 49,152 | Count assertion, CLI output |
 | `tagma/tagma_decoder.xif.yaml` | syntagma `hw/rtl/tagma_decoder.v` and the Tagma whitepaper (`10.5281/zenodo.21302508`); the reference engine is `tagma-core` at `205e3a0` | Input-domain contract of the decoder, projected into the golden-anchor layout | 65,536 | 11,172 | Count assertion, Tagma fixture tests, golden anchor cross-channel |
 | `tagma/tagma_demo_top.xif.yaml` | syntagma `hw/rtl/tagma_demo_top.v` | Registered output space of the three decoder axes | 11,172 | 11,172 | Count assertion, Tagma fixture tests |
@@ -291,10 +291,12 @@ specs:
 | `yosys/stat_decode_demo.json` | Captured Yosys 0.65 `stat -json` report for `decode_demo.v` | `parse_stat_reads_a_captured_report` |
 
 One limitation is recorded here rather than smoothed over. The CVA6 fixtures are
-re-derived from their source by a gate, and the Ibex pair is pinned to its
-decoder, but no gate compares the Ibex mapping with the decoder that states it:
-that decoder is behavioural code rather than a table, so deriving the accepted
-pairs from it is its own subject (issue #62).
+re-derived from their source by a gate. The Ibex pair is pinned to its decoder,
+and the pin checks the decoder file and the fixture digests, but the mapping
+itself is a hand transcription. Deriving it mechanically would require
+elaborating the decoder's behavioural `casez` code, which is an RTL reader and a
+separate capability; ev's scope is the atomic verifier. The fixture therefore
+claims a pinned source, not a derived mapping (issue #62 decision).
 
 ## Validation Results
 
@@ -306,14 +308,14 @@ pairs from it is its own subject (issue #62).
 | Previous CLI time (expand_all, release) | 13.1 s (benched evaluate) |
 | struct_enum benchmark (same machine, release) | 18.8 ms |
 | CVA6 fixture derivation | the three decoder-derived fixtures match a re-extraction of the mask table at `6544a714c`: 6 `(funct3, funct7)` pairs for `xif_ref`, 5 `(funct3, func2)` pairs for `xif_ref_r4`, 1 for `xif_madd` |
-| Ibex source pin | the two RV32IMCB fixtures are pinned to `ibex_decoder.sv` at `f4540774` (digest `ba04566d`), compared when `IBEX_DIR` is set; the mapping itself is not yet derived from the decoder (issue #62) |
+| Ibex source pin | the two RV32IMCB fixtures are pinned to `ibex_decoder.sv` at `f4540774` (digest `ba04566d`), compared when `IBEX_DIR` is set; the mapping is a hand transcription, not a derived artifact (issue #62 decision) |
 | Spike backend | C/Rust recheck: 196,608 / 196,608 agree |
 | Tagma decoder cross-channel | 11,172 / 11,172 projections equal `tagma_core::Coord::to_axes`; the generated `golden_anchors.hex` matches line by line when `EV_TAGMA_ANCHORS` is set |
 | Synthesis channel | `--design` on the syntagma Tagma decoder reports 478 cells, the number the syntagma generic Yosys flow reports for the same RTL; `--target` on `all_pass` reports 28 (both with Yosys 0.65) |
 | SSCCS POC channel demo (`./run.sh --demo`, needs an ssccs checkout) | 5 / 5 channels match the hand-written assembly golden anchors |
 | Constraint types | 13 (range, even, eq, neq, lt, gt, le, ge, oneof, cross, bitmask, enable_mask, enable_set) |
 | Projector types | 4 (sum, identity, parity, decompose) |
-| Tests | 132 (83 lib + 28 CLI + 8 structural + 5 tagma + 2 golden anchor + 4 derivation + 2 source pin), all passing, none ignored |
+| Tests | 156 (80 lib + 31 CLI + 8 structural + 5 tagma + 2 golden anchor + 4 derivation + 2 source pin + 5 layout + 6 spec hash + 4 classification + 3 point identity + 3 run metadata + 3 coordinate space), all passing, none ignored |
 | Coverage gate | 80% lines / 80% regions (llvm-cov, all modules incl. Spike/Yosys backends) |
 | Simulation backends | Mock (default), Spike (`EV_SIM_BACKEND=spike`) |
 

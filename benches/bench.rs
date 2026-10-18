@@ -332,11 +332,11 @@ fn bench_enumerate_ibex(c: &mut Criterion) {
 // ===========================================================================
 //
 // `evaluate_all` is the standard pipeline: expand + per-combination
-// constraint checks (O(N)). `struct_enum` is the Tagma-based structural
-// pipeline: it emits only the valid combinations (O(V)). `validate_into_space`
-// places every structurally valid combination into a DynCoordSpace,
-// deduplicating identical coordinate paths. The trio is benchmarked on each
-// fixture to expose the O(N) vs O(V) gap.
+// constraint checks (O(N)). `struct_enum` is the structural pipeline: it
+// emits only the valid combinations (O(V)). `validate_into_space` places
+// every structurally valid combination into a `CoordSpace`, deduplicating
+// identical coordinate paths. The trio is benchmarked on each fixture to
+// expose the O(N) vs O(V) gap.
 
 /// evaluate_all on the small spec: 27 combos through the full check set.
 fn bench_evaluate_small(c: &mut Criterion) {

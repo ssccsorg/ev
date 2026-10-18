@@ -25,9 +25,10 @@
 //!
 //! What this does not do: compare the fixtures' `(funct7, funct3)` mapping
 //! with the decoder. The decoder states legality as behavioural `casez` code
-//! with parameter-gated branches rather than as a table, so deriving the
-//! accepted pairs from it is its own subject (issue #62). The fixture headers
-//! say `transcribed from` for that reason.
+//! with parameter-gated branches rather than as a table. Deriving the accepted
+//! pairs would require elaborating that subset, which is an RTL reader and a
+//! separate capability; ev's scope is the atomic verifier, so the fixture is
+//! an imported claim with a pinned source. The fixture headers state that.
 
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -103,9 +104,10 @@ fn sha256_file(path: &Path) -> Result<String, String> {
 
 /// Channel 1: the pin still covers the fixtures it was taken against.
 ///
-/// This runs with or without a checkout. It does not check the mapping, which
-/// no gate does yet (issue #62); it makes a fixture edit visible, because the
-/// pin's claim about the decoder only holds for the file that was read.
+/// This runs with or without a checkout. It does not check the mapping: the
+/// fixture is a hand transcription with a pinned source, and ev does not
+/// elaborate the decoder. It makes a fixture edit visible, because the pin's
+/// claim about the decoder only holds for the file that was read.
 #[test]
 fn pin_covers_the_fixture_files() {
     let pin = load_pin();
