@@ -317,6 +317,8 @@ verify_cva6_derivation() {
     fi
 
     local ec=0
+    # Integration tests rebuild the bin target; keep the RISC-V feature so the
+    # release binary stays usable for the Spike channel that follows.
     cargo test --release --features riscv --test cva6_derivation -- --nocapture || ec=$?
     if [ "$ec" -ne 0 ]; then
         echo "  FAILED: the cva6 fixture derivation gate did not pass (see the test output above)"
