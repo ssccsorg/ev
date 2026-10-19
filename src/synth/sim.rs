@@ -1,18 +1,15 @@
 //! Core simulation abstractions — traits and shared types.
 //!
-//! Tool-agnostic layer for ISA simulation backends. Any RISC-V simulator
-//! (Spike, QEMU, riscvOVPsim, custom ISS) can be plugged in by implementing
-//! the `RunSimulation` trait. The core layer knows nothing about any specific
-//! tool.
+//! Tool-agnostic layer for simulation backends. A simulator for any target
+//! can be plugged in by implementing the `RunSimulation` trait; the core
+//! layer knows nothing about a specific tool or architecture.
 //!
 //! # Architecture
 //!
 //! ```text
 //! RunSimulation        ← spec + encodings → evaluations (trait)
 //!  ├── MockSimBackend  ← test/CI: static passthrough
-//!  └── SpikeBackend    ← Spike ISA simulator
-//!       (future) QEMUBackend     ← QEMU system-mode emulation
-//!       (future) OVPsimBackend   ← riscvOVPsim/CORE-V simulation
+//!  └── synth::backends ← external simulator implementations
 //! ```
 //!
 //! # Capability-based design (mirrors Nexus storage traits)
@@ -42,7 +39,7 @@ use crate::spec::VerificationSpec;
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct SimulationResult {
-    /// Tool identifier: "spike", "qemu", "mock", etc.
+    /// Tool identifier supplied by the backend, for example "mock".
     pub tool: String,
     /// Tool version string.
     pub version: String,

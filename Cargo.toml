@@ -7,9 +7,9 @@ license = "Apache-2.0"
 repository = "https://github.com/ssccsorg/ev"
 
 [features]
-default = ["riscv"]
-# RISC-V layouts and the Spike backend. Without it, ev verifies any declared
-# space and carries no architecture-specific code.
+default = []
+# RISC-V layouts and the Spike backend. The default build verifies any
+# declared space and carries no architecture-specific code.
 riscv = []
 
 [dependencies]

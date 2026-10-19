@@ -16,6 +16,9 @@
 //! synth::backends::spike    ← SpikeBackend (RISC-V, feature = "riscv")
 //! synth::backends::yosys    ← YosysBackend (implements RunSynthesis)
 //! ```
+//!
+//! The default build carries only the tool-agnostic abstraction and the
+//! generic backends. A target-specific backend is compiled with its feature.
 
 pub mod backends;
 pub mod sim;

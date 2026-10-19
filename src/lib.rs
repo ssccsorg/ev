@@ -6,22 +6,33 @@
 //! domain, and the constraints between fields. Nothing in the engine names an
 //! instruction set or a core.
 //!
-//! Target families enter through two seams:
+//! Target families enter through three seams:
 //!
 //! - [`profile::LayoutRegistry`] supplies named bit layouts, so a spec can
-//!   select `riscv-r` (with the `riscv` feature) or a layout registered by the
-//!   caller.
+//!   select a built-in profile or a layout registered by the caller.
 //! - [`format::FormatCapable`] parses the spec, and a caller can supply its
 //!   own format or its own registry.
 //! - [`verify::Classify`] lets an engine replace the built-in structural
 //!   enumerator without changing the record.
 //!
+//! # Layer discipline
+//!
+//! The default build is generic: the engine, the reporters, and the synthesis
+//! abstraction carry no target. Two layers are opt-in:
+//!
+//! - a layout profile, which gives a spec a word to pack its fields into;
+//! - a simulator backend, which executes a spec's points on an external tool.
+//!
+//! The built-in RISC-V profiles and the Spike backend sit behind the `riscv`
+//! feature. The default build is the generic engine; `--features riscv` adds
+//! those layers. The CLI exposes the same seam with `ev capabilities`.
+//!
 //! # Architecture
 //!
 //! ```text
-//! lib.rs          ← public API re-exports
+//! lib.rs          ← public API re-exports and the layer discipline
 //! spec/           ← VerificationSpec, FieldSpec, ConstraintSpec, ProjectorSpec, WordLayout
-//! profile/        ← LayoutRegistry; riscv.rs holds the RISC-V layouts (feature = "riscv")
+//! profile/        ← LayoutRegistry; a feature or the caller supplies entries
 //! classification/ ← Classification, Verdict: the engine's output type
 //! verify/         ← compose, evaluate, classifier (Classify trait + engines), registry
 //! report/         ← ReporterCapable trait + Fact envelope + implementations

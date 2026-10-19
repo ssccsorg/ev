@@ -43,8 +43,8 @@ checked where it can be mechanical, and the source is pinned where it cannot
 
 ```text
 src/
-  main.rs           CLI (clap: verify, simulate, synth, fact decode)
-  lib.rs            public re-exports
+  main.rs           CLI (clap: verify, simulate, synth, capabilities, fact decode)
+  lib.rs            public re-exports and the layer discipline
   classification/   Verdict, Classification — the engine's output type
   spec/             VerificationSpec, FieldSpec, ConstraintSpec, ProjectorSpec,
                     WordLayout, FieldBitMapping
@@ -87,17 +87,38 @@ when the layout changes.
   error that lists the known names.
 - `profile::LayoutRegistry` holds the names. `LayoutRegistry::default()`
   registers `riscv-r` and `riscv-r4` (alias `r4`) only with the `riscv`
-  feature, which is in the default feature set. A downstream consumer can
-  register its own profiles and parse with
+  feature. The default feature set is empty, so the default build is generic.
+  A downstream consumer can register its own profiles and parse with
   `VerificationSpec::from_yaml_with`.
-- The `riscv` feature also gates `synth::backends::spike`. A build with
-  `--no-default-features` has neither the RISC-V layouts nor the Spike
-  backend, and `EV_SIM_BACKEND=spike` fails instead of falling back to mock.
+- The `riscv` feature also gates `synth::backends::spike`. A generic build has
+  neither the RISC-V layouts nor the Spike backend, and
+  `EV_SIM_BACKEND=spike` fails instead of falling back to mock.
+- `ev capabilities` prints the layer stack of the binary: classifiers,
+  reporters, layout profiles, simulation backends, and synthesis backends.
+  `--json` emits the same data. This is the CLI surface that keeps the layers
+  visible without naming an architecture in the engine.
 - `hash_spec` includes the layout and covers everything that changes the
   classified space: target, field domains, layout, projector, and constraints.
   A `cross` mapping is a `BTreeMap`, so two runs address the same spec
   identically. The coverage rule is documented at the function, and
   `tests/spec_hash.rs` pins the layout, comment, and cross-order cases.
+
+### Layer discipline
+
+- The default build is generic. The RISC-V layouts and the Spike backend are
+  an opt-in feature, and no engine path names an architecture.
+- `run.sh --code` checks both states: generic clippy, build, and test, then
+  the same with `--features riscv`, and leaves the RISC-V binary for
+  `--verify`. `run.sh --verify` refuses a generic binary and names the
+  rebuild.
+- Integration tests that select a RISC-V profile are feature-gated:
+  `tests/cli_test.rs`, `tests/structural_enum.rs`, and the whole of
+  `tests/cva6_derivation.rs`. The generic suite runs 152 tests; the RISC-V
+  suite runs 163.
+- Benchmarks load the CVA6 fixtures only with the feature, so a generic
+  `cargo bench` runs the generic groups instead of panicking at startup.
+- Coverage runs with `--features riscv`, so the gated backend code stays in
+  the measured set.
 
 ### Record contract
 
@@ -232,17 +253,23 @@ when the layout changes.
 ### Tests and fixtures
 
 ```bash
-cargo test --release          # 161 tests: 80 lib, 31 CLI, 8 structural,
-                              # 5 tagma, 2 golden anchor, 4 derivation, 2 source pin,
-                              # 5 layout, 6 spec hash, 4 classification,
-                              # 3 point identity, 4 run metadata, 3 coordinate space,
-                              # 4 domain size. None ignored.
-cargo bench -- cva6_full      # full-space CVA6 group
-cargo bench -- struct_enum_validity   # correctness guard, must stay green
-./run.sh                      # fmt, clippy, build, test, verify
+cargo test --release          # 152 tests: the generic build. The 11 cases
+                              # that select a RISC-V profile are gated.
+cargo test --release --features riscv   # 163 tests: 80 lib, 33 CLI,
+                              # 8 structural, 5 tagma, 2 golden anchor,
+                              # 4 derivation, 2 source pin, 5 layout,
+                              # 6 spec hash, 4 classification,
+                              # 3 point identity, 4 run metadata,
+                              # 3 coordinate space, 4 domain size. None ignored.
+cargo build --release                    # generic verifier
+cargo build --release --features riscv   # profiles + Spike, used by --verify
+cargo bench --features riscv -- cva6_full   # full-space CVA6 group
+cargo bench --features riscv -- struct_enum_validity   # correctness guard, must stay green
+./run.sh                      # fmt, generic and riscv checks, verify
+./run.sh --code               # fmt, generic and riscv clippy/build/test
 ./run.sh --verify             # Yosys, fixtures, golden anchors, derivation gate, source pin, Spike
 ./run.sh --demo               # channel demo: the ssccs POC assembly golden anchors
-./run.sh --coverage           # coverage gate
+./run.sh --coverage           # coverage gate (--features riscv)
 ```
 
 | Fixture | Raw combinations | Valid |
@@ -310,10 +337,10 @@ Fixture Provenance table; keep the counts in step between the two.
    on the fixture side.
 7. A target family enters through a layout profile, not through the engine.
    `riscv-r` and `riscv-r4` are registry entries compiled under the `riscv`
-   feature, so the default build names no architecture and a build without the
-   feature has no RISC-V profile. The generic default is no word layout; a
-   fixture that models an instruction word declares the profile that makes it
-   one.
+   feature, and the default feature set is empty, so the default build names
+   no architecture and carries no word layout. A fixture that models an
+   instruction word declares the profile that makes it one, which is why the
+   profile-dependent tests and benches are feature-gated.
 8. ev makes no probabilistic claim. A run classifies every point of the
    declared space and nothing else, and identical runs produce identical
    records. Sampling, coverage percentages, and confidence bounds are outside
@@ -346,7 +373,8 @@ Fixture Provenance table; keep the counts in step between the two.
 - New layout profile: implement a builder returning `WordLayout` and register
   it in `LayoutRegistry::default()` (or in the caller's registry). A profile
   that belongs to one architecture goes behind its own feature, as `riscv`
-  does.
+  does. `ev capabilities` picks up a registered profile automatically, and a
+  test or bench that selects it needs the same feature gate.
 - New input format: implement `FormatCapable`. New output format: implement
   `ReporterCapable` and pass the classification through.
 - New classification engine: implement `Classify` and select it in

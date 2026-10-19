@@ -264,9 +264,16 @@ fn ibex_spec() -> VerificationSpec {
 /// bits[26:25], rs3 fixed to 0, sampled registers (rs1, rd in 0..3, rs2 in
 /// 0..31). Accepted custom-3 encodings: funct3=0/func2=00 (NOP) and
 /// funct3=1/func2 in 0..3 (ADD family).
-fn cva6_r4_spec() -> VerificationSpec {
-    let path = std::path::Path::new("tests/fixtures/cva6/xif_ref_r4.xif.yaml");
-    VerificationSpec::from_yaml(path).expect("failed to load cva6 xif ref r4 fixture")
+fn cva6_r4_spec() -> Option<VerificationSpec> {
+    #[cfg(feature = "riscv")]
+    {
+        let path = std::path::Path::new("tests/fixtures/cva6/xif_ref_r4.xif.yaml");
+        Some(VerificationSpec::from_yaml(path).expect("failed to load cva6 xif ref r4 fixture"))
+    }
+    #[cfg(not(feature = "riscv"))]
+    {
+        None
+    }
 }
 
 /// CVA6 XIF ref full spec: 33,554,432 raw combos, 196,608 valid (0.6%
@@ -278,9 +285,16 @@ fn cva6_r4_spec() -> VerificationSpec {
 /// encodings: funct3=0/funct7=0 (NOP) and funct3=1/funct7 in 0..4 (ADD,
 /// DOUBLE_RS1, DOUBLE_RS2, ADD_MULTI, ADD_RS3_R). The 0.6% density makes
 /// this the headline sparse case: ~700x structural speedup.
-fn cva6_full_spec() -> VerificationSpec {
-    let path = std::path::Path::new("tests/fixtures/cva6/xif_ref.xif.yaml");
-    VerificationSpec::from_yaml(path).expect("failed to load cva6 xif ref fixture")
+fn cva6_full_spec() -> Option<VerificationSpec> {
+    #[cfg(feature = "riscv")]
+    {
+        let path = std::path::Path::new("tests/fixtures/cva6/xif_ref.xif.yaml");
+        Some(VerificationSpec::from_yaml(path).expect("failed to load cva6 xif ref fixture"))
+    }
+    #[cfg(not(feature = "riscv"))]
+    {
+        None
+    }
 }
 
 /// Tagma decoder spec: 65,536 raw combos, 11,172 valid (17.0% density).
@@ -564,7 +578,9 @@ fn bench_space_lookup_invalid(c: &mut Criterion) {
 
 /// expand_all on the CVA6 R4 fixture (16,384 combos).
 fn bench_expand_cva6_r4(c: &mut Criterion) {
-    let spec = cva6_r4_spec();
+    let Some(spec) = cva6_r4_spec() else {
+        return;
+    };
     c.bench_function("expand/cva6_r4_16K", |b| {
         b.iter(|| {
             let combos = expand_all(black_box(&spec)).unwrap();
@@ -575,7 +591,9 @@ fn bench_expand_cva6_r4(c: &mut Criterion) {
 
 /// EnumerateIter on the CVA6 R4 fixture (16,384 combos).
 fn bench_enumerate_cva6_r4(c: &mut Criterion) {
-    let spec = cva6_r4_spec();
+    let Some(spec) = cva6_r4_spec() else {
+        return;
+    };
     c.bench_function("enumerate/cva6_r4_16K", |b| {
         b.iter(|| {
             let iter = EnumerateIter::new(black_box(&spec));
@@ -587,7 +605,9 @@ fn bench_enumerate_cva6_r4(c: &mut Criterion) {
 
 /// evaluate_all on the CVA6 R4 fixture: 16,384 combos, ~3.33 ms.
 fn bench_evaluate_cva6_r4(c: &mut Criterion) {
-    let spec = cva6_r4_spec();
+    let Some(spec) = cva6_r4_spec() else {
+        return;
+    };
     c.bench_function("evaluate/cva6_r4_16K", |b| {
         b.iter(|| {
             let combos = expand_all(black_box(&spec)).unwrap();
@@ -605,7 +625,9 @@ fn bench_evaluate_cva6_r4(c: &mut Criterion) {
 
 /// struct_enum on the CVA6 R4 fixture: 2,560 valid combos, ~250 µs (13x).
 fn bench_structural_enum_cva6_r4(c: &mut Criterion) {
-    let spec = cva6_r4_spec();
+    let Some(spec) = cva6_r4_spec() else {
+        return;
+    };
     c.bench_function("struct_enum/cva6_r4_16K", |b| {
         b.iter(|| {
             let count = StructuralEnum::new(black_box(&spec)).count();
@@ -616,7 +638,9 @@ fn bench_structural_enum_cva6_r4(c: &mut Criterion) {
 
 /// validate_into_space on the CVA6 R4 fixture.
 fn bench_validate_cva6_r4(c: &mut Criterion) {
-    let spec = cva6_r4_spec();
+    let Some(spec) = cva6_r4_spec() else {
+        return;
+    };
     c.bench_function("validate/cva6_r4_16K", |b| {
         b.iter(|| {
             let space = validate_into_space(black_box(&spec), &ConstraintRegistry::default());
@@ -638,7 +662,9 @@ fn bench_validate_cva6_r4(c: &mut Criterion) {
 
 /// evaluate_all on the CVA6 full fixture: 33.5M combos, ~13 s, several GB peak.
 fn bench_evaluate_cva6_full(c: &mut Criterion) {
-    let spec = cva6_full_spec();
+    let Some(spec) = cva6_full_spec() else {
+        return;
+    };
     c.bench_function("evaluate/cva6_full_33M", |b| {
         b.iter(|| {
             // Full standard pipeline per iteration: materialize the Vec and
@@ -660,7 +686,9 @@ fn bench_evaluate_cva6_full(c: &mut Criterion) {
 /// struct_enum on the CVA6 full fixture: 196,608 valid combos, ~18.8 ms
 /// (~700x vs evaluate at ~13 s).
 fn bench_structural_enum_cva6_full(c: &mut Criterion) {
-    let spec = cva6_full_spec();
+    let Some(spec) = cva6_full_spec() else {
+        return;
+    };
     c.bench_function("struct_enum/cva6_full_33M", |b| {
         b.iter(|| {
             let count = StructuralEnum::new(black_box(&spec)).count();
@@ -674,7 +702,9 @@ fn bench_structural_enum_cva6_full(c: &mut Criterion) {
 /// 196,608 valid rows). Benched at 36.3 ms; the ~0.2 s end-to-end CLI
 /// number includes YAML parse and process startup.
 fn bench_evaluate_structural_cva6_full(c: &mut Criterion) {
-    let spec = cva6_full_spec();
+    let Some(spec) = cva6_full_spec() else {
+        return;
+    };
     c.bench_function("evaluate_structural/cva6_full_33M", |b| {
         b.iter(|| {
             let classification = evaluate_structural(
@@ -690,7 +720,9 @@ fn bench_evaluate_structural_cva6_full(c: &mut Criterion) {
 
 /// validate_into_space on the CVA6 full fixture.
 fn bench_validate_cva6_full(c: &mut Criterion) {
-    let spec = cva6_full_spec();
+    let Some(spec) = cva6_full_spec() else {
+        return;
+    };
     c.bench_function("validate/cva6_full_33M", |b| {
         b.iter(|| {
             let space = validate_into_space(black_box(&spec), &ConstraintRegistry::default());
@@ -707,7 +739,9 @@ fn bench_validate_cva6_full(c: &mut Criterion) {
 /// and the full-check valid count diverge. The same invariant is guarded in
 /// CI by tests/structural_enum.rs.
 fn bench_structural_enum_validity_cva6_full(c: &mut Criterion) {
-    let spec = cva6_full_spec();
+    let Some(spec) = cva6_full_spec() else {
+        return;
+    };
     let checks = ConstraintRegistry::default().build_all(&spec.constraints, &spec.fields);
     c.bench_function("struct_enum_validity/cva6_full_33M", |b| {
         b.iter(|| {

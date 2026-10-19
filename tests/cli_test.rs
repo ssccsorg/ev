@@ -213,6 +213,7 @@ fn verify_tagma_demo_top_fixture() {
     );
 }
 
+#[cfg(feature = "riscv")]
 #[test]
 fn verify_cva6_xif_ref_r4_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
@@ -501,6 +502,7 @@ fn synth_design_rejects_an_argument_yosys_cannot_carry() {
     );
 }
 
+#[cfg(feature = "riscv")]
 #[test]
 fn verify_cva6_xif_ref_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
@@ -533,6 +535,65 @@ fn version_flag_succeeds() {
     assert!(output.status.success(), "ev --version should exit 0");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("ev"), "version output should contain ev");
+}
+
+#[test]
+fn capabilities_lists_the_layer_stack() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("capabilities")
+        .output()
+        .expect("failed to run ev capabilities");
+    assert!(output.status.success(), "ev capabilities should exit 0");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("formats:     xif"),
+        "the input format layer should be listed: {stdout}"
+    );
+    assert!(
+        stdout.contains("classifiers: structural, naive"),
+        "the classifier layer should be listed: {stdout}"
+    );
+    assert!(
+        stdout.contains("simulation:  mock"),
+        "the mock backend is always present: {stdout}"
+    );
+    #[cfg(feature = "riscv")]
+    {
+        assert!(stdout.contains("riscv-r"), "{stdout}");
+        assert!(stdout.contains("spike"), "{stdout}");
+    }
+    #[cfg(not(feature = "riscv"))]
+    {
+        assert!(
+            stdout.contains("profiles:    (none)"),
+            "a generic build names no layout profile: {stdout}"
+        );
+        assert!(!stdout.contains("riscv-r"), "{stdout}");
+    }
+}
+
+#[test]
+fn capabilities_json_names_each_layer() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("capabilities")
+        .arg("--json")
+        .output()
+        .expect("failed to run ev capabilities --json");
+    assert!(
+        output.status.success(),
+        "ev capabilities --json should exit 0"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for key in [
+        "\"formats\"",
+        "\"classifiers\"",
+        "\"reporters\"",
+        "\"layout_profiles\"",
+        "\"simulation_backends\"",
+        "\"synthesis_backends\"",
+    ] {
+        assert!(stdout.contains(key), "missing {key}: {stdout}");
+    }
 }
 
 #[test]

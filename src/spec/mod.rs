@@ -158,7 +158,7 @@ pub enum ConstraintSpec {
     /// Conditional field activation: when `field` equals `value`,
     /// force the listed `disable` fields to zero.
     ///
-    /// Used for instructions like CUS_NOP where rd/rs1/rs2 are inactive.
+    /// Models a mode in which some fields are inactive.
     #[serde(rename = "enable_mask")]
     EnableMask {
         /// Trigger field name.
@@ -171,7 +171,7 @@ pub enum ConstraintSpec {
     /// Bitmask constraint: `field & mask` must equal `value`.
     ///
     /// Checks that specific bits of a field are set/cleared.
-    /// Used to model bit-field decode conditions (e.g. `funct7[1]=1` for Zbt).
+    /// Models a bit-field decode condition.
     #[serde(rename = "bitmask")]
     Bitmask {
         /// Field name.
@@ -230,8 +230,7 @@ pub enum ProjectorSpec {
     /// are packed at their `shift` positions. A negative reduced value, or an
     /// axis digit that does not fit its `width`, yields no projection.
     ///
-    /// This is the general form of a packed axis layout. The syntagma anchor
-    /// layout `offset[28:15] i[14:10] m[9:5] f[4:0]` is one instance:
+    /// This is the general form of a packed mixed-radix layout. For example:
     ///
     /// ```yaml
     /// projector:

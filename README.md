@@ -9,12 +9,31 @@ identical records; there is no sampling and no probabilistic claim. No
 constraint type or projector carries a target's name or constant.
 
 A bit layout is data, not an engine assumption. A spec either declares a
-layout inline or selects a named profile, and the RISC-V profiles (`riscv-r`,
-`riscv-r4`) and the Spike backend are compiled under the `riscv` feature,
-which is on by default. The cores and designs that appear here, CVA6, Ibex,
-and the Tagma decoder, are samples that exercise the engine and its channels,
-and each one is derived from that project's own source rather than restated
-from memory.
+layout inline or selects a named profile. The default build is generic: it
+carries no layout profile and no architecture-specific backend. The RISC-V
+profiles (`riscv-r`, `riscv-r4`) and the Spike backend are compiled with the
+`riscv` feature, and `ev capabilities` reports what the binary at hand
+carries. The cores and designs that appear here, CVA6, Ibex, and the Tagma
+decoder, are samples that exercise the engine and its channels, and each one
+is derived from that project's own source rather than restated from memory.
+
+## Layers
+
+The engine is the default layer. Everything a target family adds is opt-in.
+
+| Layer | Default build | `--features riscv` |
+|---|---|---|
+| Engine | fields, domains, constraints, projectors | same |
+| Input formats | `xif` (YAML) | same |
+| Layout profiles | none | `riscv-r`, `riscv-r4` (alias `r4`) |
+| Classifiers | `structural`, `naive` | same |
+| Simulation backends | `mock` | `mock`, `spike` |
+| Synthesis backends | `yosys`, `mock` | same |
+| Reporters | `text`, `json`, `csv`, `trace` | same |
+
+`ev capabilities` prints this table for the binary at hand, and
+`ev capabilities --json` emits the same data for a script. A spec that names
+`riscv-r` in a generic build fails with a message that names the rebuild.
 
 33.5 million combinations verified deterministically in about 0.2 s (release)
 through the structural enumeration pipeline, which is the CLI default since
@@ -76,17 +95,19 @@ them), so Spike never executes them.
 ## Quick Start
 
 ```bash
-./run.sh                  # Full pipeline: fmt -> clippy -> build -> test -> verify
+./run.sh                  # Full pipeline: generic and riscv checks, then verify
 ./run.sh --demo           # Channel demo: cross-verify golden anchors
-./run.sh --code           # fmt -> clippy -> build -> test (strict)
-./run.sh --verify         # Full verification including 33M combo fixture
+./run.sh --code           # fmt -> generic and riscv clippy/build/test (strict)
+./run.sh --verify         # Full verification (needs the --features riscv build)
 ./run.sh --coverage       # Code coverage gate (cargo-llvm-cov, 80% thresholds)
 ```
 
 Or step-by-step:
 
 ```bash
-cargo build --release
+cargo build --release                    # generic verifier
+cargo build --release --features riscv   # RISC-V profiles and Spike
+./target/release/ev capabilities
 ev verify --target tests/fixtures/common/all_pass.xif.yaml
 ev verify --target tests/fixtures/common/sample.xif.yaml --json
 ev synth --target tests/fixtures/common/all_pass.xif.yaml
@@ -102,6 +123,7 @@ ev verify    --target <file> [--format <fmt>]  # Static constraint verification
 ev simulate  --target <file> [--format <fmt>]  # C/Rust recheck under Spike/mock
 ev synth     --target <file> [--json]          # Generate RTL from a spec, then synthesize it
 ev synth     --design <file> [--top <mod>]     # Synthesize an RTL file directly
+ev capabilities [--json]                        # Show the layers this build carries
 ev fact decode                                  # Decode Fact JSON from stdin
 ```
 
@@ -163,9 +185,10 @@ layout:
 ```
 
 `profile` is resolved through `LayoutRegistry`. The built-in names are
-`riscv-r` and `riscv-r4` (alias `r4`) with the `riscv` feature. A caller can
-register further profiles and parse with `VerificationSpec::from_yaml_with`.
-`layout` and `profile` are mutually exclusive.
+`riscv-r` and `riscv-r4` (alias `r4`), and they are present only when the
+`riscv` feature is enabled. A caller can register further profiles and parse
+with `VerificationSpec::from_yaml_with`. `layout` and `profile` are mutually
+exclusive.
 
 ### Constraints
 
@@ -316,26 +339,27 @@ claims a pinned source, not a derived mapping (issue #62 decision).
 | SSCCS POC channel demo (`./run.sh --demo`, needs an ssccs checkout) | 5 / 5 channels match the hand-written assembly golden anchors |
 | Constraint types | 13 (range, even, eq, neq, lt, gt, le, ge, oneof, cross, bitmask, enable_mask, enable_set) |
 | Projector types | 4 (sum, identity, parity, decompose) |
-| Tests | 161 (80 lib + 31 CLI + 8 structural + 5 tagma + 2 golden anchor + 4 derivation + 2 source pin + 5 layout + 6 spec hash + 4 classification + 3 point identity + 4 run metadata + 3 coordinate space + 4 domain size), all passing, none ignored |
+| Tests | 163 with `--features riscv` (80 lib + 33 CLI + 8 structural + 5 tagma + 2 golden anchor + 4 derivation + 2 source pin + 5 layout + 6 spec hash + 4 classification + 3 point identity + 4 run metadata + 3 coordinate space + 4 domain size); the generic default runs 152, with the 11 profile-dependent cases gated |
 | Coverage gate | 80% lines / 80% regions (llvm-cov, all modules incl. Spike/Yosys backends) |
 | Simulation backends | Mock (default), Spike (`EV_SIM_BACKEND=spike`) |
 
 Benchmark methodology and reproducibility: the structural pipeline is the
 CLI default; the raw total is computed from the field domains without
 enumeration, and only structurally valid combinations are generated and
-evaluated. Reproduce with `cargo bench -- cva6_full` on the committed
-fixtures, and the two synthetic scaling axes with `cargo bench -- scaling`.
+evaluated. Reproduce the RISC-V fixture groups with
+`cargo bench --features riscv -- cva6_full` on the committed fixtures, and the
+two synthetic scaling axes with `cargo bench -- scaling`.
 
 ## Architecture
 
 ```
 src/
-  main.rs           CLI (clap: verify, simulate, synth, fact decode)
+  main.rs           CLI (clap: verify, simulate, synth, capabilities, fact decode)
   classification/   Verdict, Classification — the engine's output type
   spec/             VerificationSpec, FieldSpec, ConstraintSpec, ProjectorSpec,
                     WordLayout, FieldBitMapping
-  profile/          LayoutRegistry; riscv.rs holds the RISC-V layouts
-                    (feature = "riscv")
+  profile/          LayoutRegistry; the default registry is empty, and
+                    riscv.rs adds the RISC-V layouts (feature = "riscv")
   verify/
     classifier.rs   Classify trait, StructuralClassifier, NaiveClassifier
     compose.rs      Domain expansion, raw_total_combinations, StructuralEnum
@@ -363,16 +387,16 @@ tests/
     tagma/          2 YAML fixture files
     rtl/            1 Verilog design fixture
     yosys/          1 captured Yosys stat report
-  cli_test.rs       31 integration tests
+  cli_test.rs       33 integration tests
   classifier.rs     4 classification capability tests
   coord_space.rs    3 coordinate space tests
   domain_size.rs    4 domain size tests
   point_identity.rs 3 point identity tests
   run_metadata.rs   4 run metadata tests
-  structural_enum.rs 8 structural enumeration regression tests
+  structural_enum.rs 8 structural enumeration regression tests (4 gate the RISC-V profiles)
   tagma_fixture.rs  5 Tagma fixture tests
   golden_anchor.rs  2 tagma golden anchor cross-channel tests
-  cva6_derivation.rs 4 CVA6 fixture derivation gate tests
+  cva6_derivation.rs 4 CVA6 fixture derivation gate tests (feature-gated)
   ibex_source_pin.rs 2 Ibex decoder source pin tests
   profile_registry.rs 5 layout abstraction tests
   spec_hash.rs      6 content-address coverage tests
@@ -402,9 +426,11 @@ Backends are pluggable via environment variables:
 - Yosys (optional, for synthesis)
 - Spike, riscv64-unknown-elf-gcc, riscv-pk (optional, for simulation)
 
-The `riscv` feature is in the default feature set. A build with
-`--no-default-features` carries no RISC-V profile and no Spike backend, and a
-spec that names `riscv-r` fails to parse rather than silently falling back.
+The default feature set is empty: `cargo build --release` produces the
+generic verifier. `cargo build --release --features riscv` adds the RISC-V
+layout profiles and the Spike backend. A spec that names `riscv-r` in the
+generic build fails to parse rather than silently falling back, and
+`EV_SIM_BACKEND=spike` fails with the rebuild named.
 
 ## License
 

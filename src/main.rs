@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand, ValueEnum};
+use ev::profile::LayoutRegistry;
 use ev::report::{
     hash_spec, CsvReporter, Fact, JsonReporter, ReporterCapable, TextReporter, TraceReporter,
 };
@@ -80,6 +81,13 @@ enum Commands {
         #[command(subcommand)]
         command: FactCommands,
     },
+
+    /// Show the verification layers and the implementations this build carries
+    Capabilities {
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -98,7 +106,7 @@ fn resolve_sim_backend() -> anyhow::Result<Box<dyn RunSimulation>> {
             let supported = if cfg!(feature = "riscv") {
                 "`mock` or `spike`"
             } else {
-                "`mock` (this build has no `riscv` feature)"
+                "`mock` (this build has no `riscv` feature; rebuild with `--features riscv`)"
             };
             anyhow::bail!("unknown simulation backend `{other}`; supported: {supported}")
         }
@@ -118,6 +126,51 @@ fn resolve_classifier() -> anyhow::Result<Box<dyn Classify>> {
         "naive" => Ok(Box::new(NaiveClassifier)),
         other => anyhow::bail!("unknown classifier `{other}`; supported: `structural` or `naive`"),
     }
+}
+
+/// Print the layers a caller can combine at run time: the input format, the
+/// engines, the output formats, the layout profiles, and the simulation and
+/// synthesis backends.
+fn print_capabilities(json: bool) -> anyhow::Result<()> {
+    let registry = LayoutRegistry::default();
+    let profiles = registry.names();
+    let formats = ["xif"];
+    let classifiers = ["structural", "naive"];
+    let reporters = ["text", "json", "csv", "trace"];
+    let mut simulation = vec!["mock"];
+    if cfg!(feature = "riscv") {
+        simulation.push("spike");
+    }
+    let synthesis = ["yosys", "mock"];
+
+    if json {
+        let value = serde_json::json!({
+            "engine": { "name": "ev", "version": env!("CARGO_PKG_VERSION") },
+            "features": { "riscv": cfg!(feature = "riscv") },
+            "formats": formats,
+            "classifiers": classifiers,
+            "reporters": reporters,
+            "layout_profiles": profiles,
+            "simulation_backends": simulation,
+            "synthesis_backends": synthesis,
+        });
+        println!("{}", serde_json::to_string_pretty(&value)?);
+        return Ok(());
+    }
+
+    let profiles = if profiles.is_empty() {
+        "(none)".to_string()
+    } else {
+        profiles.join(", ")
+    };
+    println!("engine:      ev {}", env!("CARGO_PKG_VERSION"));
+    println!("formats:     {}", formats.join(", "));
+    println!("classifiers: {}", classifiers.join(", "));
+    println!("reporters:   {}", reporters.join(", "));
+    println!("profiles:    {}", profiles);
+    println!("simulation:  {}", simulation.join(", "));
+    println!("synthesis:   {}", synthesis.join(", "));
+    Ok(())
 }
 
 fn print_synthesis_report(report: &SynthesisMetrics, json: bool) {
@@ -325,6 +378,7 @@ fn main() -> anyhow::Result<()> {
                 std::process::exit(1);
             }
         }
+        Commands::Capabilities { json } => print_capabilities(json)?,
         Commands::Fact { command } => match command {
             FactCommands::Decode => {
                 let mut input = String::new();

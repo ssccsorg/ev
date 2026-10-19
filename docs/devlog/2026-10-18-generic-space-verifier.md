@@ -81,6 +81,10 @@ keep it.
 
 ## Follow-ups
 
+The default feature set changed after this record: the generic build is now
+`default = []`, and the RISC-V profiles and Spike are opt-in. See
+`2026-10-19-riscv-feature-demotion.md`.
+
 `tagma-core` remains a hard dependency for `Coord`, `CoordPath`, and
 `DynCoordSpace` in `verify`. It is not RISC-V-specific, so this change leaves
 it in place, but it is the one domain-named dependency left in the core and

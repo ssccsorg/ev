@@ -205,11 +205,10 @@ struct StatSummary {
 ///
 /// Yosys writes aggregate counts under `design` and per-module counts under
 /// `modules`, keyed by the module name in plain or escaped form (`top` or
-/// `\top`). The aggregate is preferred for the gate count, because it is the
-/// number the syntagma synthesis scripts report for the same RTL. The module
-/// entry is the fallback, and it is the source of the cell types, so
-/// `gate_count` covers the design including cells inside submodules while
-/// `cell_types` lists the top module's own cells.
+/// `\top`). The aggregate is preferred for the gate count because it covers
+/// the whole design, including cells inside submodules. The module entry is
+/// the fallback and the source of the cell types, so `cell_types` lists the
+/// top module's own cells.
 fn parse_stat(stat: Option<&serde_json::Value>, top_module: &str) -> StatSummary {
     let Some(stat) = stat else {
         return StatSummary::default();
@@ -260,7 +259,7 @@ mod tests {
                 "num_cells_by_type": { "$_AND_": 82, "$_XOR_": 71 },
             },
             "modules": {
-                "\\tagma_decoder": {
+                "\\demo_top": {
                     "num_cells": 478,
                     "num_cells_by_type": { "$_AND_": 82, "$_XOR_": 71 },
                 },
@@ -271,7 +270,7 @@ mod tests {
     #[test]
     fn parse_stat_reads_the_aggregate_and_the_cell_types() {
         let report = yosys_stat_report();
-        let summary = parse_stat(Some(&report), "tagma_decoder");
+        let summary = parse_stat(Some(&report), "demo_top");
 
         assert_eq!(summary.gate_count, Some(478));
         assert_eq!(summary.cell_area, None, "area needs -liberty");
@@ -285,13 +284,13 @@ mod tests {
         let mut report = yosys_stat_report();
         report.as_object_mut().expect("object").remove("design");
 
-        let summary = parse_stat(Some(&report), "tagma_decoder");
+        let summary = parse_stat(Some(&report), "demo_top");
         assert_eq!(summary.gate_count, Some(478));
     }
 
     #[test]
     fn parse_stat_handles_a_missing_report() {
-        let summary = parse_stat(None, "tagma_decoder");
+        let summary = parse_stat(None, "demo_top");
         assert_eq!(summary, StatSummary::default());
     }
 

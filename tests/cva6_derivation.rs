@@ -29,6 +29,11 @@
 //!   must match the committed copy. An unavailable checkout is reported.
 //!
 //! `EV_UPDATE_MASK_TABLE=1` rewrites the committed extraction from a checkout.
+//!
+//! The derived fixtures select RISC-V layout profiles, so this gate runs only
+//! with the `riscv` feature.
+
+#![cfg(feature = "riscv")]
 
 use ev::spec::{ConstraintSpec, FieldSpec, ProjectorSpec, VerificationSpec, WordLayout};
 use ev::verify::compose::expand_all;

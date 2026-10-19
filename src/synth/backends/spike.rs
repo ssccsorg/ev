@@ -26,7 +26,7 @@
 //! Spike's proxy kernel (pk) terminates the process on illegal instruction
 //! traps rather than delivering SIGILL to the process. To validate that
 //! instruction words decode correctly at the CPU level, a Spike extension
-//! plugin (e.g., CVA6 cvxif) is required, or a custom signal-handling
+//! plugin (e.g., a custom coprocessor interface) is required, or a custom signal-handling
 //! approach that works within pk's process model.
 //!
 //! # Environment variables
@@ -56,7 +56,7 @@ const DEFAULT_CC: &str = "riscv64-unknown-elf-gcc";
 /// Generates a C program that re-implements the spec's constraint checks and
 /// instruction-word assembly, cross-compiles it, and runs it under Spike + pk.
 /// The program does not execute the custom instruction words: custom opcodes
-/// are illegal in the base ISA by design, which is why CVA6 offloads them.
+/// are illegal in the base ISA by design, which is why a core offloads them.
 /// It validates that the C reimplementation agrees with the Rust pipeline on
 /// both constraint evaluation and word assembly.
 pub struct SpikeBackend;

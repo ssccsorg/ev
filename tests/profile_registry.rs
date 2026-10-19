@@ -73,12 +73,14 @@ fn an_unknown_profile_names_the_known_ones() {
     assert!(error.contains("unknown profile `nope`"), "{error}");
     #[cfg(feature = "riscv")]
     assert!(error.contains("riscv-r"), "{error}");
+    #[cfg(not(feature = "riscv"))]
+    assert!(error.contains("--features riscv"), "{error}");
 }
 
 #[test]
 fn layout_and_profile_are_mutually_exclusive() {
     let error = parse(
-        "target: t\nprofile: riscv-r\nlayout:\n  word_width: 8\nfields:\n  a:\n    range: [0, 1]\n",
+        "target: t\nprofile: demo\nlayout:\n  word_width: 8\nfields:\n  a:\n    range: [0, 1]\n",
     )
     .expect_err("a spec cannot declare both")
     .to_string();

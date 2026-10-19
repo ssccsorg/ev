@@ -125,7 +125,10 @@ fn resolve_profile(profiles: &LayoutRegistry, name: &str) -> anyhow::Result<Word
     profiles.resolve(name).ok_or_else(|| {
         let known = profiles.names();
         if known.is_empty() {
-            anyhow::anyhow!("unknown profile `{name}`: this build has no layout profiles")
+            anyhow::anyhow!(
+                "unknown profile `{name}`: this build has no layout profiles \
+                 (rebuild with `--features riscv` for the RISC-V profiles)"
+            )
         } else {
             anyhow::anyhow!(
                 "unknown profile `{name}`; known profiles: {}",

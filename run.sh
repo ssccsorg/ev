@@ -5,9 +5,9 @@ set -euo pipefail
 #
 # Usage:
 #   ./run.sh              # Full pipeline: fix → code → verify
-#   ./run.sh --code       # fmt → clippy → build → test (strict)
+#   ./run.sh --code       # fmt → generic and riscv clippy/build/test (strict)
 #   ./run.sh --fix        # auto-fix → build → test
-#   ./run.sh --verify     # Yosys synthesis + fixtures (binary must exist)
+#   ./run.sh --verify     # Yosys synthesis + fixtures (binary must be the riscv build)
 #   ./run.sh --coverage   # Code coverage gate (cargo-llvm-cov, 80% thresholds)
 #   ./run.sh --demo       # Channel demo: ev ↔ SSCCS POC golden anchors
 #   ./run.sh --help
@@ -30,6 +30,8 @@ if [[ "${1:-}" != "--help" && "${1:-}" != "-h" && "${1:-}" != "--demo" && "${1:-
 fi
 
 EV=./target/release/ev
+# The default build is generic. The RISC-V binary is built explicitly for
+# --verify and the Spike channel.
 ALL_PASS=tests/fixtures/common/all_pass.xif.yaml
 MIXED=tests/fixtures/common/sample.xif.yaml
 # Sibling syntagma checkout, used for the golden anchor artifact channel.
@@ -40,14 +42,39 @@ SYNTAGMA_DIR="${SYNTAGMA_DIR:-../syntagma}"
 code_checks() {
     echo "=== fmt ==="
     cargo fmt --check
-    echo "=== clippy ==="
+    echo "=== generic build: clippy ==="
     cargo clippy --all-targets
-    echo "=== build ==="
+    echo "=== generic build: build ==="
     cargo build --release
-    echo "=== test ==="
+    echo "=== generic build: test ==="
     cargo test --release
+    echo "=== riscv build: clippy ==="
+    cargo clippy --all-targets --features riscv
+    echo "=== riscv build: test ==="
+    cargo test --release --features riscv
     echo "=== bench (struct_enum) ==="
-    cargo bench --bench bench -- "struct_enum/ibex" 2>&1 | grep -E 'struct_enum|time:' | head -4
+    # Bench with the default feature set. Cargo rebuilds the bin target for
+    # the bench harness, so the RISC-V build must come after this step.
+    cargo bench --bench bench -- "struct_enum/ibex" 2>&1 | grep -E 'time:' | head -2
+    echo "=== riscv build: binary for --verify ==="
+    cargo build --release --features riscv
+}
+
+# The integration gates need the RISC-V profiles and the Spike backend. Refuse
+# a generic binary instead of letting every fixture fail with "unknown profile".
+_require_riscv_build() {
+    local caps
+    caps=$("$EV" capabilities 2>/dev/null) || true
+    if ! echo "$caps" | grep -q 'riscv-r'; then
+        echo "  FAILED: $EV has no RISC-V layout profile."
+        echo "  Rebuild with: cargo build --release --features riscv"
+        return 1
+    fi
+    if ! echo "$caps" | grep -q 'spike'; then
+        echo "  FAILED: $EV has no Spike simulation backend."
+        echo "  Rebuild with: cargo build --release --features riscv"
+        return 1
+    fi
 }
 
 # Run a tool-dependent command inside the CI container.
@@ -111,11 +138,18 @@ check_spike() {
 }
 
 verify_sim() {
+    if ! _require_riscv_build; then
+        VERIFY_FAILED=1
+        return 1
+    fi
     if check_spike; then
-        _sim() { EV_SIM_BACKEND=spike EV_PK_PATH="${EV_PK_PATH:-pk}" "$EV" simulate --target "$1" 2>&1 || true; }
+        _run_sim() {
+            EV_SIM_BACKEND=spike EV_PK_PATH="${EV_PK_PATH:-pk}" \
+                "$EV" simulate --target "$1" 2>&1 || true
+        }
     else
         echo "  spike not found on host, using Docker container..."
-        _sim() {
+        _run_sim() {
             docker run --rm --entrypoint bash \
                 -v "$(pwd):/workspace" \
                 -e EV_SIM_BACKEND=spike \
@@ -124,14 +158,34 @@ verify_sim() {
                 -c "cd /workspace && $EV simulate --target $1" 2>&1 || true
         }
     fi
-    echo "=== spike simulation (all_pass fixture) ==="
-    _sim "$ALL_PASS"
-    echo "=== spike simulation (sample fixture) ==="
-    _sim "$MIXED"
-    echo "=== spike simulation (cva6 xif ref r4) ==="
-    _sim "tests/fixtures/cva6/xif_ref_r4.xif.yaml"
-    echo "=== spike simulation (cva6 xif encoding-only) ==="
-    _sim "tests/fixtures/cva6/xif_encoding.xif.yaml"
+
+    # The simulation channel must agree with the static counts. `ev simulate`
+    # exits 1 when the space has failing points, so the counts are the check.
+    _sim_check() {
+        local label="$1" exp_pass="$2" exp_fail="$3" target="$4"
+        local out pass fail
+        out=$(_run_sim "$target")
+        echo "=== ${label} ==="
+        echo "$out" | grep -E '^(target|engine|claim|total|passed|failed):' || true
+        pass=$(echo "$out" | awk '/^passed:/ {print $2}')
+        fail=$(echo "$out" | awk '/^failed:/ {print $2}')
+        if [ -z "$pass" ] || [ -z "$fail" ]; then
+            echo "  FAILED: could not parse the simulation output"
+            VERIFY_FAILED=1
+            return 1
+        fi
+        if [ "$pass" -ne "$exp_pass" ] || [ "$fail" -ne "$exp_fail" ]; then
+            echo "  FAILED: expected ${exp_pass} passed / ${exp_fail} failed, got ${pass} / ${fail}"
+            VERIFY_FAILED=1
+            return 1
+        fi
+        echo "  passed: ${pass}, failed: ${fail} — ok"
+    }
+
+    _sim_check "spike simulation (all_pass fixture)" 1024 0 "$ALL_PASS"
+    _sim_check "spike simulation (sample fixture)" 12 84 "$MIXED"
+    _sim_check "spike simulation (cva6 xif ref r4)" 2560 13824 "tests/fixtures/cva6/xif_ref_r4.xif.yaml"
+    _sim_check "spike simulation (cva6 xif encoding-only)" 48 8144 "tests/fixtures/cva6/xif_encoding.xif.yaml"
 }
 
 verify_fixtures() {
@@ -210,8 +264,6 @@ verify_large_fixtures() {
     _verify_check "ibex csr access"             49152   0     "tests/fixtures/ibex/csr_access.xif.yaml"
     _verify_check "tagma decoder domain"        11172   54364 "tests/fixtures/tagma/tagma_decoder.xif.yaml"
     _verify_check "tagma demo top outputs"      11172   0     "tests/fixtures/tagma/tagma_demo_top.xif.yaml"
-    echo "=== structural enumeration bench ==="
-    cargo bench --bench bench -- "struct_enum/ibex|struct_enum/cva6" 2>&1 | grep -E 'struct_enum|time:' | head -6
 }
 
 # Cross-channel check of the decompose projector. The reference engine
@@ -238,10 +290,10 @@ verify_golden_anchors() {
     local ec=0
     if [ -n "$anchors" ]; then
         echo "  anchor file: ${anchors}"
-        EV_TAGMA_ANCHORS="$anchors" cargo test --release --test golden_anchor || ec=$?
+        EV_TAGMA_ANCHORS="$anchors" cargo test --release --features riscv --test golden_anchor || ec=$?
     else
         echo "  anchor file: unavailable (set EV_TAGMA_ANCHORS, or SYNTAGMA_DIR with hw/rtl/golden_anchors.hex)"
-        env -u EV_TAGMA_ANCHORS cargo test --release --test golden_anchor || ec=$?
+        env -u EV_TAGMA_ANCHORS cargo test --release --features riscv --test golden_anchor || ec=$?
     fi
     if [ "$ec" -ne 0 ]; then
         echo "  FAILED: the tagma cross-channel check did not pass (see the test output above)"
@@ -265,7 +317,7 @@ verify_cva6_derivation() {
     fi
 
     local ec=0
-    cargo test --release --test cva6_derivation -- --nocapture || ec=$?
+    cargo test --release --features riscv --test cva6_derivation -- --nocapture || ec=$?
     if [ "$ec" -ne 0 ]; then
         echo "  FAILED: the cva6 fixture derivation gate did not pass (see the test output above)"
         VERIFY_FAILED=1
@@ -288,7 +340,7 @@ verify_ibex_source() {
     fi
 
     local ec=0
-    cargo test --release --test ibex_source_pin -- --nocapture || ec=$?
+    cargo test --release --features riscv --test ibex_source_pin -- --nocapture || ec=$?
     if [ "$ec" -ne 0 ]; then
         echo "  FAILED: the ibex source pin did not match (see the test output above)"
         VERIFY_FAILED=1
@@ -320,8 +372,12 @@ case ${1:-} in
         cargo clippy --fix --allow-dirty 2>&1 || true
         cargo fix --allow-dirty 2>&1 || true
         cargo fmt --all
-        cargo build --release
+        cargo clippy --fix --allow-dirty --all-targets --features riscv 2>&1 || true
+        cargo fix --allow-dirty --features riscv 2>&1 || true
+        cargo fmt --all
         cargo test --release
+        cargo test --release --features riscv
+        cargo build --release --features riscv
         echo ""
         echo "  All checks passed (with auto-fix)."
         echo "══════════════════════════════════════"
@@ -329,6 +385,9 @@ case ${1:-} in
     --verify)
         if [ ! -f "$EV" ]; then
             echo "Binary not found. Run './run.sh' first."
+            exit 1
+        fi
+        if ! _require_riscv_build; then
             exit 1
         fi
         echo "══════════════════════════════════════"
@@ -360,9 +419,9 @@ case ${1:-} in
         ;;
     --help|-h)
         echo "Usage: $0 [OPTION]"
-        echo "  (no arg)   Full pipeline: auto-fix → code → verify"
-        echo "  --code     fmt → clippy → build → test (strict)"
-        echo "  --fix      auto-fix → build → test"
+        echo "  (no arg)   Full pipeline: auto-fix → generic/riscv code → verify"
+        echo "  --code     fmt → generic and riscv clippy/build/test (strict)"
+        echo "  --fix      auto-fix → build → test (both feature states)"
         echo "  --verify     Yosys + fixtures (binary needed)"
         echo "  --coverage   Code coverage gate (cargo-llvm-cov)"
         echo "  --demo       Channel demo: ev ↔ SSCCS POC (standalone)"
@@ -379,6 +438,9 @@ case ${1:-} in
         cargo fmt --all
         echo "=== code checks ==="
         code_checks
+        if ! _require_riscv_build; then
+            exit 1
+        fi
         echo "=== integration ==="
         verify_synth || true
         verify_fixtures || true

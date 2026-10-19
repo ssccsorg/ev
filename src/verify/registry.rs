@@ -737,7 +737,7 @@ mod tests {
         Point::new(crate::verify::compose::Coordinates::new(vec![value]))
     }
 
-    fn anchor_axes() -> Vec<AxisSpec> {
+    fn radix_axes() -> Vec<AxisSpec> {
         vec![
             AxisSpec {
                 radix: Some(28),
@@ -773,11 +773,11 @@ mod tests {
             .expect("decompose is registered")
     }
 
-    /// The general projector reproduces the syntagma anchor layout when given
-    /// that layout's parameters.
+    /// The general projector reproduces a mixed-radix packed layout when
+    /// given that layout's parameters.
     #[test]
-    fn decompose_reproduces_the_anchor_layout() {
-        let eval = evaluator(anchor_axes(), Some(15), 0xAC00);
+    fn decompose_reproduces_a_mixed_radix_layout() {
+        let eval = evaluator(radix_axes(), Some(15), 0xAC00);
 
         assert_eq!(eval.evaluate(&point(0xAC00)), Some(0));
         assert_eq!(
@@ -792,19 +792,19 @@ mod tests {
 
     #[test]
     fn decompose_without_an_offset_term_packs_only_the_axes() {
-        let eval = evaluator(anchor_axes(), None, 0xAC00);
+        let eval = evaluator(radix_axes(), None, 0xAC00);
         assert_eq!(eval.evaluate(&point(0xAC00 + 587)), Some((20 << 5) | 27));
     }
 
     #[test]
     fn decompose_returns_none_below_the_base() {
-        let eval = evaluator(anchor_axes(), Some(15), 0xAC00);
+        let eval = evaluator(radix_axes(), Some(15), 0xAC00);
         assert_eq!(eval.evaluate(&point(0xABFF)), None);
     }
 
-    /// The axis width is the only bound the projector enforces. The Tagma
-    /// domain lives in the fixture's constraints, which is why a code point
-    /// above U+D7A3 still projects here.
+    /// The axis width is the only bound the projector enforces. The domain
+    /// lives in the spec's constraints, which is why a value above the
+    /// layout's nominal range still projects here.
     #[test]
     fn decompose_bounds_axes_by_width_only() {
         let eval = evaluator(
@@ -880,7 +880,7 @@ mod tests {
             field: "code".into(),
             base: 0,
             offset_shift: Some(3),
-            axes: anchor_axes(),
+            axes: radix_axes(),
         };
         assert!(overlapping_offset
             .validate()
