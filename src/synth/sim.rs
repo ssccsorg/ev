@@ -1,18 +1,15 @@
 //! Core simulation abstractions — traits and shared types.
 //!
-//! Tool-agnostic layer for ISA simulation backends. Any RISC-V simulator
-//! (Spike, QEMU, riscvOVPsim, custom ISS) can be plugged in by implementing
-//! the `RunSimulation` trait. The core layer knows nothing about any specific
-//! tool.
+//! Tool-agnostic layer for simulation backends. A simulator for any target
+//! can be plugged in by implementing the `RunSimulation` trait; the core
+//! layer knows nothing about a specific tool or architecture.
 //!
 //! # Architecture
 //!
 //! ```text
 //! RunSimulation        ← spec + encodings → evaluations (trait)
 //!  ├── MockSimBackend  ← test/CI: static passthrough
-//!  └── SpikeBackend    ← Spike ISA simulator
-//!       (future) QEMUBackend     ← QEMU system-mode emulation
-//!       (future) OVPsimBackend   ← riscvOVPsim/CORE-V simulation
+//!  └── synth::backends ← external simulator implementations
 //! ```
 //!
 //! # Capability-based design (mirrors Nexus storage traits)
@@ -27,7 +24,7 @@
 //!  └── CoverageCapable  — return coverage data (which encodings exercised)
 //! ```
 
-use crate::classification::{Classification, Verdict};
+use crate::classification::{ClaimClass, Classification, EngineIdentity, Verdict};
 use crate::spec::VerificationSpec;
 
 // ============================================================================
@@ -42,7 +39,7 @@ use crate::spec::VerificationSpec;
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct SimulationResult {
-    /// Tool identifier: "spike", "qemu", "mock", etc.
+    /// Tool identifier supplied by the backend, for example "mock".
     pub tool: String,
     /// Tool version string.
     pub version: String,
@@ -121,6 +118,8 @@ impl From<&SimulationResult> for crate::report::fih::Fact {
         let payload = serde_json::json!({
             "tool": r.tool,
             "version": r.version,
+            "engine": &r.classification.engine,
+            "claim": r.classification.claim,
             "total": r.classification.total,
             "passed": passed,
             "failed": failed,
@@ -147,7 +146,13 @@ impl RunSimulation for MockSimBackend {
         Ok(SimulationResult {
             tool: "mock".into(),
             version: "0.0.0".into(),
-            classification: Classification::new(field_order, total, static_verdicts),
+            classification: Classification::by(
+                EngineIdentity::new("ev/mock", env!("CARGO_PKG_VERSION")),
+                ClaimClass::Exhaustive,
+                field_order,
+                total,
+                static_verdicts,
+            ),
             extra: None,
         })
     }

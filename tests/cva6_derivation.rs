@@ -29,8 +29,13 @@
 //!   must match the committed copy. An unavailable checkout is reported.
 //!
 //! `EV_UPDATE_MASK_TABLE=1` rewrites the committed extraction from a checkout.
+//!
+//! The derived fixtures select RISC-V layout profiles, so this gate runs only
+//! with the `riscv` feature.
 
-use ev::spec::{ConstraintSpec, EncodingLayout, FieldSpec, ProjectorSpec, VerificationSpec};
+#![cfg(feature = "riscv")]
+
+use ev::spec::{ConstraintSpec, FieldSpec, ProjectorSpec, VerificationSpec, WordLayout};
 use ev::verify::compose::expand_all;
 use ev::verify::evaluate::evaluate_all;
 use ev::verify::registry::{ConstraintRegistry, ProjectorRegistry};
@@ -433,13 +438,13 @@ fn constrained_fields(spec: &VerificationSpec) -> BTreeSet<String> {
 /// Place every declared field in the word, checking the domain fits the bits
 /// and that no two fields overlap.
 fn place_fields(spec: &VerificationSpec, fixture: &str) -> Result<Vec<PlacedField>, String> {
-    let layout = spec.encoding.as_ref().ok_or_else(|| {
-        format!("{fixture}: the spec declares no encoding layout, so fields carry no bit positions")
+    let layout = spec.layout.as_ref().ok_or_else(|| {
+        format!("{fixture}: the spec declares no word layout, so fields carry no bit positions")
     })?;
     let mut placed: Vec<PlacedField> = Vec::new();
     for (name, field) in spec.fields.iter() {
         let mapping = layout.field_map.get(name).ok_or_else(|| {
-            format!("{fixture}: field `{name}` has no bit mapping in the encoding layout")
+            format!("{fixture}: field `{name}` has no bit mapping in the word layout")
         })?;
         if mapping.width == 0 || mapping.width >= INSN_WIDTH {
             return Err(format!(
@@ -509,17 +514,17 @@ fn table_accepts(word: u32, entries: &[MaskEntry]) -> bool {
 /// production pipeline on a spec restricted to those axes.
 fn fixture_accepted(spec: &VerificationSpec, axes: &[String]) -> Vec<(Vec<i64>, bool)> {
     let mut fields: BTreeMap<String, FieldSpec> = BTreeMap::new();
-    let mut layout = EncodingLayout {
-        insn_width: spec
-            .encoding
+    let mut layout = WordLayout {
+        word_width: spec
+            .layout
             .as_ref()
-            .map(|l| l.insn_width)
-            .unwrap_or(INSN_WIDTH),
+            .and_then(|l| l.word_width)
+            .or(Some(INSN_WIDTH)),
         field_map: BTreeMap::new(),
     };
     for name in axes {
         fields.insert(name.clone(), spec.fields[name].clone());
-        if let Some(mapping) = spec.encoding.as_ref().and_then(|l| l.field_map.get(name)) {
+        if let Some(mapping) = spec.layout.as_ref().and_then(|l| l.field_map.get(name)) {
             layout.field_map.insert(name.clone(), *mapping);
         }
     }
@@ -528,7 +533,7 @@ fn fixture_accepted(spec: &VerificationSpec, axes: &[String]) -> Vec<(Vec<i64>, 
     let reduced = VerificationSpec {
         target: spec.target.clone(),
         fields,
-        encoding: Some(layout),
+        layout: Some(layout),
         constraints: spec.constraints.clone(),
         projector: ProjectorSpec::Sum,
     };

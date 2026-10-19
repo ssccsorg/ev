@@ -32,6 +32,7 @@
 # the table and fails if an entry masks a bit no declared field covers.
 
 target: cva6_xif_ref
+profile: riscv-r
 fields:
   opcode:
     values: [0x7B]

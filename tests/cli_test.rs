@@ -213,6 +213,7 @@ fn verify_tagma_demo_top_fixture() {
     );
 }
 
+#[cfg(feature = "riscv")]
 #[test]
 fn verify_cva6_xif_ref_r4_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
@@ -501,6 +502,7 @@ fn synth_design_rejects_an_argument_yosys_cannot_carry() {
     );
 }
 
+#[cfg(feature = "riscv")]
 #[test]
 fn verify_cva6_xif_ref_fixture() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
@@ -536,6 +538,71 @@ fn version_flag_succeeds() {
 }
 
 #[test]
+fn capabilities_lists_the_layer_stack() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("capabilities")
+        .output()
+        .expect("failed to run ev capabilities");
+    assert!(output.status.success(), "ev capabilities should exit 0");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("formats:     xif"),
+        "the input format layer should be listed: {stdout}"
+    );
+    assert!(
+        stdout.contains("classifiers: structural, naive"),
+        "the classifier layer should be listed: {stdout}"
+    );
+    assert!(
+        stdout.contains("simulation:  mock"),
+        "the mock backend is always present: {stdout}"
+    );
+    #[cfg(feature = "riscv")]
+    {
+        assert!(stdout.contains("targets:     riscv"), "{stdout}");
+        assert!(stdout.contains("riscv-r"), "{stdout}");
+        assert!(stdout.contains("spike"), "{stdout}");
+    }
+    #[cfg(not(feature = "riscv"))]
+    {
+        assert!(
+            stdout.contains("targets:     (none)"),
+            "the generic core carries no target module: {stdout}"
+        );
+        assert!(
+            stdout.contains("profiles:    (none)"),
+            "the generic core names no layout profile: {stdout}"
+        );
+        assert!(!stdout.contains("riscv-r"), "{stdout}");
+    }
+}
+
+#[test]
+fn capabilities_json_names_each_layer() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("capabilities")
+        .arg("--json")
+        .output()
+        .expect("failed to run ev capabilities --json");
+    assert!(
+        output.status.success(),
+        "ev capabilities --json should exit 0"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for key in [
+        "\"target_modules\"",
+        "\"formats\"",
+        "\"classifiers\"",
+        "\"reporters\"",
+        "\"layout_profiles\"",
+        "\"simulation_backends\"",
+        "\"synthesis_backends\"",
+    ] {
+        assert!(stdout.contains(key), "missing {key}: {stdout}");
+    }
+}
+
+#[test]
 fn simulate_help_succeeds() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .arg("simulate")
@@ -557,4 +624,50 @@ fn synth_help_succeeds() {
     assert!(output.status.success(), "ev synth --help should exit 0");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("--target"), "help should mention --target");
+}
+
+#[test]
+fn verify_default_classifier_names_the_engine() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .arg("verify")
+        .arg("--target")
+        .arg("tests/fixtures/common/all_pass.xif.yaml")
+        .output()
+        .expect("failed to run ev verify");
+    assert!(output.status.success(), "all_pass should exit 0");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("engine: ev/structural"), "{stdout}");
+    assert!(stdout.contains("claim:  exhaustive"), "{stdout}");
+}
+
+#[test]
+fn verify_naive_classifier_names_the_engine() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .env("EV_CLASSIFIER", "naive")
+        .arg("verify")
+        .arg("--target")
+        .arg("tests/fixtures/common/sample.xif.yaml")
+        .output()
+        .expect("failed to run ev verify with the naive classifier");
+    assert!(
+        !output.status.success(),
+        "the mixed fixture has failures, so verify exits 1"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("engine: ev/naive"), "{stdout}");
+    assert!(stdout.contains("claim:  exhaustive"), "{stdout}");
+}
+
+#[test]
+fn verify_unknown_classifier_fails() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ev"))
+        .env("EV_CLASSIFIER", "nope")
+        .arg("verify")
+        .arg("--target")
+        .arg("tests/fixtures/common/all_pass.xif.yaml")
+        .output()
+        .expect("failed to run ev verify with an unknown classifier");
+    assert!(!output.status.success(), "an unknown classifier must fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("unknown classifier `nope`"), "{stderr}");
 }

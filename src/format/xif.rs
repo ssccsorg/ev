@@ -1,12 +1,13 @@
-//! XIF (eXhaustive Instruction Format) — YAML parser implementing FormatCapable.
+//! XIF (eXhaustive Input Format) — YAML parser implementing FormatCapable.
 //!
-//! XIF is the industry-standard YAML input format for ev, compatible with
-//! existing RISC-V verification workflows (RISCV-CTG, RISCV-DV, RISCV-Config).
+//! The format is target-neutral: fields, constraints, and a projector describe
+//! any discrete space. A bit layout is either declared inline under `layout`
+//! or selected by name under `profile`, which the registry resolves. A spec
+//! that declares neither has no word layout.
 
 use crate::format::FormatCapable;
-use crate::spec::{
-    ConstraintSpec, EncodingLayout, FieldBitMapping, FieldSpec, ProjectorSpec, VerificationSpec,
-};
+use crate::profile::LayoutRegistry;
+use crate::spec::{ConstraintSpec, FieldSpec, ProjectorSpec, VerificationSpec, WordLayout};
 use anyhow::Context;
 use serde::Deserialize;
 use std::collections::BTreeMap;
@@ -16,10 +17,14 @@ use std::path::Path;
 pub struct YamlFormat;
 
 impl FormatCapable for YamlFormat {
-    fn parse(&self, path: &Path) -> anyhow::Result<VerificationSpec> {
+    fn parse_with(
+        &self,
+        path: &Path,
+        profiles: &LayoutRegistry,
+    ) -> anyhow::Result<VerificationSpec> {
         let content = std::fs::read_to_string(path).context("Failed to read YAML file")?;
         let raw: RawXif = serde_yaml::from_str(&content).context("Failed to parse YAML")?;
-        let spec = raw.into_spec();
+        let spec = raw.into_spec(profiles)?;
         spec.projector
             .validate()
             .map_err(|message| anyhow::anyhow!("invalid projector: {message}"))?;
@@ -35,12 +40,13 @@ struct RawXif {
     target: String,
     #[serde(default)]
     fields: BTreeMap<String, RawField>,
-    /// Encoding format: "r" (default, R-type), "r4" (R4 with func2), "i" (I-type), etc.
-    #[serde(default)]
-    encoding: Option<String>,
-    /// Optional explicit encoding layout. If absent, derived from `encoding` field.
-    #[serde(default)]
-    encoding_layout: Option<EncodingLayout>,
+    /// Named layout profile, resolved through the registry. `encoding` is the
+    /// key older fixtures use.
+    #[serde(default, alias = "encoding")]
+    profile: Option<String>,
+    /// Explicit bit layout. Mutually exclusive with `profile`.
+    #[serde(default, alias = "encoding_layout")]
+    layout: Option<WordLayout>,
     #[serde(default)]
     constraints: Vec<ConstraintSpec>,
     #[serde(default = "default_projector")]
@@ -65,7 +71,7 @@ enum RawField {
 }
 
 impl RawXif {
-    fn into_spec(self) -> VerificationSpec {
+    fn into_spec(self, profiles: &LayoutRegistry) -> anyhow::Result<VerificationSpec> {
         let fields: BTreeMap<String, FieldSpec> = self
             .fields
             .into_iter()
@@ -96,58 +102,50 @@ impl RawXif {
             })
             .collect();
 
-        // Resolve encoding layout: explicit layout > named format > default R-type.
-        let encoding = self
-            .encoding_layout
-            .or_else(|| match self.encoding.as_deref() {
-                Some("r4") => Some(default_r4_encoding()),
-                _ => Some(default_rtype_encoding()),
-            });
+        let layout = match (self.layout, self.profile) {
+            (Some(_), Some(_)) => {
+                anyhow::bail!("declare either `layout` or `profile`, not both")
+            }
+            (Some(layout), None) => Some(layout),
+            (None, Some(name)) => Some(resolve_profile(profiles, &name)?),
+            (None, None) => None,
+        };
 
-        VerificationSpec {
+        Ok(VerificationSpec {
             target: self.target,
             fields,
-            encoding,
+            layout,
             constraints: self.constraints,
             projector: self.projector,
+        })
+    }
+}
+
+fn resolve_profile(profiles: &LayoutRegistry, name: &str) -> anyhow::Result<WordLayout> {
+    profiles.resolve(name).ok_or_else(|| {
+        let known = profiles.names();
+        if known.is_empty() {
+            anyhow::anyhow!(
+                "unknown profile `{name}`: this build has no layout profiles \
+                 (rebuild with the default target set, or with `--features riscv`)"
+            )
+        } else {
+            anyhow::anyhow!(
+                "unknown profile `{name}`; known profiles: {}",
+                known.join(", ")
+            )
         }
-    }
-}
-
-/// Default R-type encoding layout for RISC-V.
-fn default_rtype_encoding() -> EncodingLayout {
-    let mut field_map = BTreeMap::new();
-    field_map.insert("opcode".into(), FieldBitMapping { pos: 0, width: 7 });
-    field_map.insert("rd".into(), FieldBitMapping { pos: 7, width: 5 });
-    field_map.insert("funct3".into(), FieldBitMapping { pos: 12, width: 3 });
-    field_map.insert("rs1".into(), FieldBitMapping { pos: 15, width: 5 });
-    field_map.insert("rs2".into(), FieldBitMapping { pos: 20, width: 5 });
-    field_map.insert("funct7".into(), FieldBitMapping { pos: 25, width: 7 });
-    EncodingLayout {
-        insn_width: 32,
-        field_map,
-    }
-}
-
-/// R4 encoding layout (R-type with func2 replacing funct7 bits).
-fn default_r4_encoding() -> EncodingLayout {
-    let mut field_map = BTreeMap::new();
-    field_map.insert("opcode".into(), FieldBitMapping { pos: 0, width: 7 });
-    field_map.insert("rd".into(), FieldBitMapping { pos: 7, width: 5 });
-    field_map.insert("funct3".into(), FieldBitMapping { pos: 12, width: 3 });
-    field_map.insert("rs1".into(), FieldBitMapping { pos: 15, width: 5 });
-    field_map.insert("rs2".into(), FieldBitMapping { pos: 20, width: 5 });
-    field_map.insert("func2".into(), FieldBitMapping { pos: 25, width: 2 });
-    field_map.insert("rs3".into(), FieldBitMapping { pos: 27, width: 5 });
-    EncodingLayout {
-        insn_width: 32,
-        field_map,
-    }
+    })
 }
 
 /// Convenience: parse a YAML file directly (without going through the trait).
 impl VerificationSpec {
     pub fn from_yaml(path: &Path) -> anyhow::Result<Self> {
         YamlFormat.parse(path)
+    }
+
+    /// Parse with a caller-supplied layout registry.
+    pub fn from_yaml_with(path: &Path, profiles: &LayoutRegistry) -> anyhow::Result<Self> {
+        YamlFormat.parse_with(path, profiles)
     }
 }

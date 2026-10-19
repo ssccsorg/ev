@@ -6,9 +6,10 @@
 # digest and the assumed configuration are pinned in
 # tests/fixtures/ibex/decoder_pin.json.
 #
-# The transcription is not compared with the decoder by a gate; issue #62
-# records deriving the accepted pairs from the decoder's case statement.
-# tests/ibex_source_pin.rs checks the pin when a checkout is at hand.
+# The mapping is a hand transcription. The source pin checks the decoder file
+# and this fixture's digest; it does not derive the pairs. Deriving them would
+# require elaborating the behavioural casez decoder, which ev does not do
+# (issue #62).
 #
 # Assumes RV32BFull is enabled.
 # I-type format: imm[11:0] | rs1[4:0] | funct3[2:0] | rd[4:0] | opcode[6:0]

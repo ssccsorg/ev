@@ -4,26 +4,22 @@
 use serde::Deserialize;
 use std::collections::BTreeMap;
 
-/// Describes how instruction fields map to bits in the encoded instruction word.
+/// Describes how fields map to bits in an encoded word.
 ///
-/// Each entry maps a field name to its bit position (0 = LSB) and width.
-/// This is format-agnostic: R-type, R4, I-type, S-type, etc. are all
-/// just different field-to-bit mappings.
+/// The word can be an instruction, a frame header, a register, or a record
+/// prefix. Each entry maps a field name to its bit position (0 = LSB) and
+/// width; the engine reads the layout as data.
 #[derive(Debug, Clone, Deserialize)]
-pub struct EncodingLayout {
-    /// Total width in bits (typically 32 for RISC-V).
-    #[serde(default = "default_insn_width")]
-    pub insn_width: u32,
+pub struct WordLayout {
+    /// Total width in bits, when the word has a fixed width.
+    #[serde(default, alias = "insn_width")]
+    pub word_width: Option<u32>,
     /// Field-to-bit mapping: field_name -> (bit_position, bit_width).
     #[serde(default)]
     pub field_map: BTreeMap<String, FieldBitMapping>,
 }
 
-fn default_insn_width() -> u32 {
-    32
-}
-
-/// Bit position and width for a single field in the instruction word.
+/// Bit position and width for a single field in the encoded word.
 #[derive(Debug, Clone, Copy, Deserialize)]
 pub struct FieldBitMapping {
     /// Bit position (0 = LSB).
@@ -39,12 +35,12 @@ pub struct FieldBitMapping {
 /// then resolves named constraint and projector types via registries.
 #[derive(Debug, Clone)]
 pub struct VerificationSpec {
-    /// Target name (instruction, accelerator, or module identifier).
+    /// Target name (instruction, accelerator, frame, or module identifier).
     pub target: String,
     /// Ordered field definitions (deterministic: BTreeMap iteration order).
     pub fields: BTreeMap<String, FieldSpec>,
-    /// Instruction word encoding layout (field -> bit position/width).
-    pub encoding: Option<EncodingLayout>,
+    /// Bit layout of the encoded word, when the target packs its fields into one.
+    pub layout: Option<WordLayout>,
     /// Named constraint specifications to resolve via ConstraintRegistry.
     pub constraints: Vec<ConstraintSpec>,
     /// Named projector specification to resolve via ProjectorRegistry.
@@ -63,6 +59,34 @@ pub struct FieldSpec {
 }
 
 impl FieldSpec {
+    /// Number of values in this field's domain, without materializing it.
+    ///
+    /// Matches [`FieldSpec::expand`] for a positive alignment. A zero or
+    /// negative alignment has no meaningful step, so the size is reported as
+    /// zero rather than dividing by zero.
+    pub fn len(&self) -> usize {
+        if let Some(ref values) = self.values {
+            return values.len();
+        }
+        let (min, max) = self.range.unwrap_or((0, 255));
+        let step = self.alignment.unwrap_or(1);
+        if step <= 0 || min > max {
+            return 0;
+        }
+        let first = min + (step - min % step) % step;
+        let last = max - (max % step + step) % step;
+        if first > last {
+            0
+        } else {
+            ((last - first) / step + 1) as usize
+        }
+    }
+
+    /// Whether this field's domain has no values.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     /// All values this field can take (domain expansion).
     pub fn expand(&self) -> Vec<i64> {
         if let Some(ref values) = self.values {
@@ -129,12 +153,12 @@ pub enum ConstraintSpec {
     Cross {
         field_a: String,
         field_b: String,
-        mapping: std::collections::HashMap<i64, Vec<i64>>,
+        mapping: std::collections::BTreeMap<i64, Vec<i64>>,
     },
     /// Conditional field activation: when `field` equals `value`,
     /// force the listed `disable` fields to zero.
     ///
-    /// Used for instructions like CUS_NOP where rd/rs1/rs2 are inactive.
+    /// Models a mode in which some fields are inactive.
     #[serde(rename = "enable_mask")]
     EnableMask {
         /// Trigger field name.
@@ -147,7 +171,7 @@ pub enum ConstraintSpec {
     /// Bitmask constraint: `field & mask` must equal `value`.
     ///
     /// Checks that specific bits of a field are set/cleared.
-    /// Used to model bit-field decode conditions (e.g. funct7[1]=1 for Zbt).
+    /// Models a bit-field decode condition.
     #[serde(rename = "bitmask")]
     Bitmask {
         /// Field name.
@@ -206,8 +230,7 @@ pub enum ProjectorSpec {
     /// are packed at their `shift` positions. A negative reduced value, or an
     /// axis digit that does not fit its `width`, yields no projection.
     ///
-    /// This is the general form of a packed axis layout. The syntagma anchor
-    /// layout `offset[28:15] i[14:10] m[9:5] f[4:0]` is one instance:
+    /// This is the general form of a packed mixed-radix layout. For example:
     ///
     /// ```yaml
     /// projector:

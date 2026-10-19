@@ -2,10 +2,12 @@
 
 ## Project Identity
 
-Exhaustive verification CLI for RISC-V custom instruction extensions. Given
-a YAML spec describing instruction fields and constraints, `ev` generates
-every structurally valid combination, evaluates the constraints, and reports
-pass/fail deterministically and exhaustively.
+Exhaustive verification of a declared discrete space. Given a YAML spec
+naming fields and constraints, `ev` generates every structurally valid
+combination, evaluates the constraints, and reports pass/fail deterministically
+and exhaustively. A bit-packed word is optional: a spec selects a named layout
+profile or declares one inline, and the RISC-V profiles are one feature of the
+build.
 
 - Repository: `github.com/ssccsorg/ev`
 - Language: Rust (edition 2021), Apache 2.0
@@ -24,7 +26,8 @@ ExaSpec, which consumes ev's Facts; the FIH field alignment waits for nexus
 classification that is reproducible and correctly addressed, which is what
 issues #64, #65, and #68 are about, and to keep its engine one implementation
 behind a capability interface (#67) so a more specialized verifier can be
-routed in without changing what ev emits.
+routed in without changing what ev emits. That capability now exists as
+`verify::Classify`.
 
 The engine is a vessel rather than the differentiator. The classification
 behind the capability seam (#67) may be imported: an engine with different
@@ -40,12 +43,15 @@ checked where it can be mechanical, and the source is pinned where it cannot
 
 ```text
 src/
-  main.rs           CLI (clap: verify, simulate, synth, fact decode)
-  lib.rs            public re-exports
+  main.rs           CLI (clap: verify, simulate, synth, capabilities, fact decode)
+  lib.rs            public re-exports and the layer discipline
   classification/   Verdict, Classification — the engine's output type
   spec/             VerificationSpec, FieldSpec, ConstraintSpec, ProjectorSpec,
-                    EncodingLayout, FieldBitMapping
+                    WordLayout, FieldBitMapping
+  profile/          LayoutRegistry; riscv.rs holds the RISC-V layouts
+                    (feature = "riscv")
   verify/
+    classifier.rs   Classify trait, StructuralClassifier, NaiveClassifier
     compose.rs      domain expansion, raw_total_combinations, StructuralEnum
     evaluate.rs     evaluate_all, evaluate_structural, validate_into_space,
                     build_runtime_checks
@@ -59,7 +65,8 @@ src/
   synth/
     mod.rs          GenerateRtl, RunSynthesis, SvGenerator, MockSynthesisBackend
     sim.rs          RunSimulation, MockSimBackend
-    backends/       spike.rs (SpikeBackend), yosys.rs (YosysBackend)
+    backends/       yosys.rs (YosysBackend); spike.rs (SpikeBackend,
+                    feature = "riscv")
 benches/bench.rs    criterion reference, fixture table in the module doc
 tests/              integration tests, fixtures under tests/fixtures/
 docs/               private devlog only (see Documentation)
@@ -69,6 +76,100 @@ The README carries the same tree in user-facing form. Keep the two in step
 when the layout changes.
 
 ## Current State
+
+### Space and layout abstraction
+
+- The engine operates on fields and domains alone. A target may pack its
+  fields into a bit word, but that is data: `VerificationSpec.layout` is
+  `Option<WordLayout>`, and a spec that omits it has no word.
+- A spec selects a layout by name with `profile`, or declares it inline with
+  `layout`. The two are mutually exclusive, and an unknown profile is an
+  error that lists the known names.
+- `profile::LayoutRegistry` holds the names. `LayoutRegistry::default()`
+  registers `riscv-r` and `riscv-r4` (alias `r4`) only with the `riscv`
+  feature. The default feature set is `targets`, whose only member today is
+  `riscv`, so the default build includes the RISC-V profiles. The generic
+  core is `--no-default-features`. A downstream consumer can register its own
+  profiles and parse with `VerificationSpec::from_yaml_with`.
+- The `riscv` feature also gates `synth::backends::spike`. A generic core has
+  neither the RISC-V layouts nor the Spike backend, and
+  `EV_SIM_BACKEND=spike` fails instead of falling back to mock.
+- `ev capabilities` prints the target modules and the layer stack of the
+  binary: classifiers, reporters, layout profiles, simulation backends, and
+  synthesis backends. `--json` emits the same data. This is the CLI surface
+  that keeps the layers visible without naming an architecture in the engine.
+- `hash_spec` includes the layout and covers everything that changes the
+  classified space: target, field domains, layout, projector, and constraints.
+  A `cross` mapping is a `BTreeMap`, so two runs address the same spec
+  identically. The coverage rule is documented at the function, and
+  `tests/spec_hash.rs` pins the layout, comment, and cross-order cases.
+
+### Layer discipline
+
+- The default build includes the target modules that exist, and `targets` is
+  the aggregate that selects them. RISC-V is the only member today. The pure
+  generic core is `--no-default-features`, and no engine path names an
+  architecture.
+- `run.sh --code` checks the generic core and the default target set: clippy,
+  build, and test in both, plus an explicit `--features riscv` selection, and
+  leaves the default binary for `--verify`. `run.sh --verify` refuses a binary
+  without the RISC-V module and names the rebuild.
+- Integration tests that select a RISC-V profile are feature-gated:
+  `tests/cli_test.rs`, `tests/structural_enum.rs`, and the whole of
+  `tests/cva6_derivation.rs`. The generic core runs 152 tests; the default
+  target set runs 163.
+- Benchmarks load the CVA6 fixtures only with the target module, so the
+  generic core skips those groups instead of panicking at startup.
+- Coverage runs the default target set, so the gated backend code stays in
+  the measured set.
+
+### Record contract
+
+- `VerificationReport` is the stable content of a verification run. It carries
+  `spec_hash`, `target`, `engine`, `claim`, `total`, `passed`, `failed`,
+  `field_order`, and one result per emitted point. It does not carry a
+  timestamp; the Fact envelope does.
+- A result carries `point_id` (SHA256 of the spec address and the field-value
+  vector, verdict excluded) and `id` (the observation, verdict and projection
+  included). The coordinate is the field vector in `field_order`, not the
+  packed word, because a layout is optional.
+- The payload is a pointer to the spec: domains, layout, and projector stay in
+  the spec addressed by `spec_hash`. The rejected set is `total - passed` and
+  is re-derived rather than emitted.
+- `SvGenerator` names generated RTL `<target>_<spec_hash[..16]>.sv`, so the
+  synthesis `source` is a function of the spec. The Yosys `extra` no longer
+  carries the temporary DOT and netlist paths.
+
+### Classification capability
+
+- `verify::Classify` is the seam. `StructuralClassifier` is the default
+  (`ev/structural`), and `NaiveClassifier` (`ev/naive`) is the reference
+  full-expansion implementation. `EV_CLASSIFIER=structural|naive` selects one,
+  and an unknown value fails instead of falling back.
+- `Classification` carries `engine: EngineIdentity` and `claim: ClaimClass`.
+  The built-in engines claim `Exhaustive`; `Partial` is the class an imported
+  engine must set when it samples or truncates. Every reporter emits both
+  fields, so a partial record cannot be read as a complete classification.
+- `tests/classifier.rs` compares the two engines at each emitted coordinate.
+
+### Enumeration property
+
+- The structural iterator is index-free: it visits the structurally valid
+  points and each emitted point costs O(k) in the field count. Growing the
+  field count at fixed V is linear, not exponential.
+- `raw_total_combinations` is O(k) and flat in the raw product size, because
+  `FieldSpec::len` computes a domain's cardinality without materializing it.
+- The structural filter setup is O(sum of domain sizes), not O(k). It
+  dominates the end-to-end time when one field carries a large domain, so the
+  end-to-end pipeline cost is `O(sum domains + V*k)`, not `O(V)` alone. The
+  committed fixtures keep the domains small (8..128), so the 33M CVA6 raw
+  product does not mean a 33M setup.
+- Memory is O(V): `evaluate_structural` collects the valid combinations and
+  the verdicts. The largest committed valid set is 196,608 points. A
+  streaming path is deferred until a consumer needs a valid set that does not
+  fit memory (issue #68 decision).
+- `benches/bench.rs` carries the scaling group and the medians; `cargo bench --
+  scaling` reproduces them.
 
 ### Constraint and projector surface
 
@@ -113,12 +214,12 @@ when the layout changes.
   with a generated `hw/rtl/golden_anchors.hex` when `EV_TAGMA_ANCHORS` points
   at one.
   `run.sh --verify` reports the artifact channel as checked or unavailable.
-- Spike backend: `src/synth/backends/spike.rs` generates a C program that
-  re-implements the constraint model and the instruction-word assembly,
+- Spike backend (feature `riscv`): `src/synth/backends/spike.rs` generates a
+  C program that re-implements the constraint model and the word assembly,
   cross-compiles it, and runs it under Spike plus pk. The C assembler is
-  checked against Rust-computed reference words. This is not ISA-level
-  execution: custom-3 opcodes are illegal in the base RISC-V ISA, so Spike
-  never executes the custom words.
+  checked against Rust-computed reference words when the spec declares a
+  layout. This is not ISA-level execution: custom-3 opcodes are illegal in the
+  base RISC-V ISA, so Spike never executes the custom words.
 - CVA6 fixture derivation gate: `tests/cva6_derivation.rs` re-derives
   `cva6/xif_ref.xif.yaml`, `cva6/xif_ref_r4.xif.yaml`, and
   `cva6/xif_madd.xif.yaml` from `tests/fixtures/cva6/mask_table.json`, the
@@ -136,9 +237,11 @@ when the layout changes.
   fixture files it covers). The digest is the hard check and the revision is
   reported, so a checkout at another commit describing the same decoder passes
   with a note. The fixture digests are checked wherever the tests run, so a
-  fixture edit has to restate the pin. No gate compares the fixtures'
-  `(funct7, funct3)` mapping with the decoder yet, which is why issue #62
-  exists and why the fixture headers say `transcribed from`.
+  fixture edit has to restate the pin. The mapping itself is a hand
+  transcription. Deriving it would require elaborating the decoder's
+  behavioural `casez` code, which is an RTL reader and a separate capability;
+  ev's scope is the atomic verifier, so the fixture claims a pinned source, not
+  a derived mapping (issue #62 decision).
 - Coverage gate: `scripts/coverage.sh` (cargo-llvm-cov, 80% lines and 80%
   regions) exercises the Spike, Yosys, and simulation backends with the
   instrumented binary.
@@ -153,15 +256,19 @@ when the layout changes.
 ### Tests and fixtures
 
 ```bash
-cargo test --release          # 132 tests: 83 lib, 28 CLI, 8 structural,
-                              # 5 tagma, 2 golden anchor, 4 derivation, 2 source pin.
-                              # None ignored.
-cargo bench -- cva6_full      # full-space CVA6 group
+cargo test --release          # 163 tests: the default target set.
+cargo test --release --no-default-features   # 152 tests: the generic core.
+                              # The 11 cases that select a RISC-V profile are gated.
+cargo test --release --no-default-features --features riscv   # explicit target
+cargo build --release                    # default target set, used by --verify
+cargo build --release --no-default-features   # generic core
+cargo bench -- cva6_full      # full-space CVA6 group (default targets)
 cargo bench -- struct_enum_validity   # correctness guard, must stay green
-./run.sh                      # fmt, clippy, build, test, verify
+./run.sh                      # fmt, generic core and default-target checks, verify
+./run.sh --code               # fmt, generic core and default-target clippy/build/test
 ./run.sh --verify             # Yosys, fixtures, golden anchors, derivation gate, source pin, Spike
 ./run.sh --demo               # channel demo: the ssccs POC assembly golden anchors
-./run.sh --coverage           # coverage gate
+./run.sh --coverage           # coverage gate (default target set)
 ```
 
 | Fixture | Raw combinations | Valid |
@@ -193,7 +300,8 @@ Fixture Provenance table; keep the counts in step between the two.
 
 | Variable | Values | Effect |
 |---|---|---|
-| `EV_SIM_BACKEND` | `mock` (default), `spike` | Simulation backend |
+| `EV_SIM_BACKEND` | `mock` (default), `spike` (`riscv` feature) | Simulation backend |
+| `EV_CLASSIFIER` | `structural` (default), `naive` | Classification engine |
 | `EV_SYNTH_BACKEND` | `mock`, `yosys` (default) | Synthesis backend |
 | `EV_SPIKE_BIN` | path | Spike binary |
 | `EV_PK_PATH` | path | Proxy kernel |
@@ -206,9 +314,9 @@ Fixture Provenance table; keep the counts in step between the two.
 
 ## Key Design Decisions
 
-1. Capability traits: `FormatCapable`, `ReporterCapable`, `GenerateRtl`,
-   `RunSimulation`, `RunSynthesis`. New formats and backends require no
-   pipeline change.
+1. Capability traits: `FormatCapable`, `ReporterCapable`, `Classify`,
+   `GenerateRtl`, `RunSimulation`, `RunSynthesis`. New formats, engines, and
+   backends require no pipeline change.
 2. Constraints reference fields by name string, never by numeric axis, so
    YAML declaration order does not matter.
 3. `ConstraintRegistry` and `ProjectorRegistry` use a builder pattern over
@@ -226,13 +334,35 @@ Fixture Provenance table; keep the counts in step between the two.
    a field free that the decoder pins (#56). A projector or engine path that
    names a core is a regression, and `tests/cva6_derivation.rs` is the guard
    on the fixture side.
-7. ev makes no probabilistic claim. A run classifies every point of the
+7. A target family enters through a module, not through the engine. `riscv-r`
+   and `riscv-r4` are registry entries compiled under the `riscv` feature,
+   and `targets` is the default aggregate whose only member today is `riscv`.
+   The default build therefore includes the target modules that exist, while
+   the generic core (`--no-default-features`) names no architecture and
+   carries no word layout. A fixture that models an instruction word declares
+   the profile that makes it one, which is why the profile-dependent tests
+   and benches are feature-gated.
+8. ev makes no probabilistic claim. A run classifies every point of the
    declared space and nothing else, and identical runs produce identical
    records. Sampling, coverage percentages, and confidence bounds are outside
    the concept: a claim that rests on a sample belongs to a different tool, and
    comparing against such a tool measures that tool. The one percentage here is
    the code-coverage gate, which measures this repository's test suite and
    never a verification claim.
+9. A classification record names its engine and claim class. The built-in
+   engines are exhaustive; an imported engine that samples or truncates sets
+   `Partial`. The point coordinates stay independent of the engine, so verdicts
+   from two engines are comparable at the same point.
+10. A record separates stable content from run metadata. The payload is the
+    content and is a function of the spec and the observation; the Fact
+    envelope carries the timestamp and origin. A point's `point_id` is the
+    coordinate (spec address plus field values) and excludes the verdict. The
+    payload stays a pointer to the spec, and the rejected set is
+    `total - passed`, re-derivable rather than emitted.
+11. ev classifies encoding spaces, not compile-time configuration spaces. A
+    configuration selects which instructions exist; it is not a field of an
+    instruction. A spec models one configuration, and the fixture states the
+    parameter binding it assumes (issue #36 decision).
 
 ## How to Extend
 
@@ -241,12 +371,19 @@ Fixture Provenance table; keep the counts in step between the two.
   `sv_constraint_assertion` in `synth/mod.rs`.
 - New projector type: add a variant to `ProjectorSpec`, a builder in
   `ProjectorRegistry::default()`, and an arm in `sv_projector`.
+- New layout profile: implement a builder returning `WordLayout` and register
+  it in `LayoutRegistry::default()` (or in the caller's registry). A profile
+  that belongs to one architecture goes behind its own feature, as `riscv`
+  does. Add that feature to `targets` so the default build includes it, or
+  select it explicitly with `--no-default-features --features <name>`.
+  `ev capabilities` picks up a registered profile automatically, and a test
+  or bench that selects it needs the same feature gate.
 - New input format: implement `FormatCapable`. New output format: implement
   `ReporterCapable` and pass the classification through.
-- New classification engine: produce a `Classification` from a spec. The
-  built-in engine is `verify::evaluate_structural`, reached in one call in
-  `Commands::Verify`; #67 turns that call into a selectable capability with the
-  naive pipeline (`expand_all` + `evaluate_all`) as the second implementation.
+- New classification engine: implement `Classify` and select it in
+  `resolve_classifier`. The built-in engine is `verify::evaluate_structural`
+  (`StructuralClassifier`), and the naive pipeline is the second in-repo
+  implementation; keep both comparable at the coordinate level.
 
 ## Documentation
 
@@ -257,11 +394,12 @@ Published numbers live in the corpus, not here.
 
 ## Dependency Note
 
-`tagma-core` is a git dependency on `github.com/ssccsorg/tagma`, used by
-`src/verify/compose.rs` (`Coord`, `CoordPath`) and `src/verify/evaluate.rs`
-(`DynCoordSpace`). `Cargo.lock` pins the revision; `Cargo.toml` does not.
-Syntagma plans to publish it to crates.io, at which point the dependency can
-become a version.
+`tagma-core` is a dev-dependency on `github.com/ssccsorg/tagma`, used only by
+`tests/golden_anchor.rs` to compare the `decompose` projection with the
+syntagma reference engine. The library has no domain-named runtime dependency:
+`verify::CoordSpace` holds the engine's field-value vectors. `Cargo.lock` pins
+the revision; `Cargo.toml` does not. Syntagma plans to publish it to crates.io,
+at which point the dev-dependency can become a version.
 
 ## Git and Workflow
 
@@ -274,11 +412,6 @@ become a version.
 
 ## Open Work
 
-- Issue #62: derive the Ibex fixture mapping from the decoder's `case`
-  statement. The decoder is behavioural code rather than a table, so this is a
-  reader for an RTL subset and a capability decision, not fixture hygiene. The
-  alternative, if the reader is not wanted, is to restate what the fixtures'
-  claim actually rests on.
 - Issue #44: execute the accepted CVA6 custom-3 encodings through the
   standard CVA6 tandem flow, which needs the external CVA6 repository. A
   sample's DV environment stays a sample concern: the encoding contract is

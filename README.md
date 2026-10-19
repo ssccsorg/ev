@@ -1,16 +1,45 @@
 # ev — ExaVerif
 
-Exhaustive verification CLI for RISC-V custom instruction extensions.
-Apache 2.0.
+Exhaustive verification for a declared discrete space. Apache 2.0.
 
-ev verifies instruction encoding spaces, and a target is described by its
-spec alone: the fields, their bit positions in the word, and the constraints
-between them. A run classifies every point of that space and nothing else, and
-identical runs produce identical records; there is no sampling and no
-probabilistic claim. No constraint type or projector carries a target's name
-or constant. The cores and designs that appear here, CVA6, Ibex, and the Tagma
-decoder, are samples that exercise the engine and its channels, and each one
-is derived from that project's own source rather than restated from memory.
+A target is whatever its spec declares: named fields, a finite domain per
+field, constraints between them, and an optional projection. ev classifies
+every point of that space and nothing else, and identical runs produce
+identical records; there is no sampling and no probabilistic claim. No
+constraint type or projector carries a target's name or constant.
+
+A bit layout is data, not an engine assumption. A spec either declares a
+layout inline or selects a named profile. The default build includes one or
+more target modules; RISC-V is the only one today. Its profiles (`riscv-r`,
+`riscv-r4`) and the Spike backend are compiled with the `riscv` feature, and
+the `targets` aggregate enables it in the default set. `ev capabilities`
+reports the modules the binary at hand carries. The cores and designs that
+appear here, CVA6, Ibex, and the Tagma decoder, are samples that exercise the
+engine and its channels, and each one is derived from that project's own
+source rather than restated from memory.
+
+## Layers
+
+The engine is always present. A target module adds its profiles and
+backends to the build, and the default set includes the modules that exist.
+
+| Layer | Generic core (`--no-default-features`) | Default build (`targets`) |
+|---|---|---|
+| Engine | fields, domains, constraints, projectors | same |
+| Target modules | none | `riscv` |
+| Input formats | `xif` (YAML) | same |
+| Layout profiles | none | `riscv-r`, `riscv-r4` (alias `r4`) |
+| Classifiers | `structural`, `naive` | same |
+| Simulation backends | `mock` | `mock`, `spike` |
+| Synthesis backends | `yosys`, `mock` | same |
+| Reporters | `text`, `json`, `csv`, `trace` | same |
+
+`targets` is the aggregate the default enables, and `riscv` is its only
+member today. A new target adds its feature to `targets`, so the default set
+grows without making any one target the engine's identity. `ev capabilities`
+prints this table for the binary at hand, and `ev capabilities --json` emits
+the same data for a script. A spec that names `riscv-r` in the generic core
+fails with a message that names the rebuild.
 
 33.5 million combinations verified deterministically in about 0.2 s (release)
 through the structural enumeration pipeline, which is the CLI default since
@@ -21,14 +50,19 @@ backend cross-checks the constraint model and instruction-word assembly in C.
 
 ## What It Does
 
-Given a YAML file describing instruction fields and constraints, ev enumerates
-and evaluates every valid combination, reports exactly which encodings are valid
-and which are not — deterministically and exhaustively.
+Given a YAML file describing fields and constraints, ev enumerates and
+evaluates every valid combination, reports exactly which points are valid and
+which are not, deterministically and exhaustively.
 
 Constraint types are split between structural constraints (oneof, range, bitmask,
 cross, enable_mask, enable_set) that are encoded directly into the enumeration
 space, and runtime constraints (eq, neq, lt, gt, le, ge, even) that are checked
 per combination. Only structurally valid combinations are ever generated.
+
+The default classifier is the structural enumerator. `EV_CLASSIFIER=naive`
+selects the full-expansion reference, which emits every point and is used to
+compare records at the same coordinates. Every record names the engine and
+whether its claim is exhaustive or partial.
 
 A single command verifies the 33.5 million combination CVA6 CV-X-IF encoding
 space derived from the hardware decoder mask table
@@ -44,6 +78,8 @@ Output:
 
 ```
 target: cva6_xif_ref
+engine: ev/structural 0.1.0
+claim:  exhaustive
 total:  33554432
 passed: 196608
 failed: 33357824
@@ -65,17 +101,19 @@ them), so Spike never executes them.
 ## Quick Start
 
 ```bash
-./run.sh                  # Full pipeline: fmt -> clippy -> build -> test -> verify
+./run.sh                  # Full pipeline: generic core and default targets, then verify
 ./run.sh --demo           # Channel demo: cross-verify golden anchors
-./run.sh --code           # fmt -> clippy -> build -> test (strict)
-./run.sh --verify         # Full verification including 33M combo fixture
+./run.sh --code           # fmt -> generic core and default-target clippy/build/test (strict)
+./run.sh --verify         # Full verification (needs the default target build)
 ./run.sh --coverage       # Code coverage gate (cargo-llvm-cov, 80% thresholds)
 ```
 
 Or step-by-step:
 
 ```bash
-cargo build --release
+cargo build --release                         # default target set (RISC-V today)
+cargo build --release --no-default-features   # generic core
+./target/release/ev capabilities
 ev verify --target tests/fixtures/common/all_pass.xif.yaml
 ev verify --target tests/fixtures/common/sample.xif.yaml --json
 ev synth --target tests/fixtures/common/all_pass.xif.yaml
@@ -91,10 +129,24 @@ ev verify    --target <file> [--format <fmt>]  # Static constraint verification
 ev simulate  --target <file> [--format <fmt>]  # C/Rust recheck under Spike/mock
 ev synth     --target <file> [--json]          # Generate RTL from a spec, then synthesize it
 ev synth     --design <file> [--top <mod>]     # Synthesize an RTL file directly
+ev capabilities [--json]                        # Show the layers this build carries
 ev fact decode                                  # Decode Fact JSON from stdin
 ```
 
 Output formats: `text` (default), `json`, `csv`, `trace`.
+
+## Record Shape
+
+`ev verify --json` emits a Fact envelope. The payload is the stable content of
+the run and carries `spec_hash`, `target`, `engine`, `claim`, `total`,
+`passed`, `failed`, `field_order`, and one result per emitted point. Each
+result has `point_id` (the coordinate, excluding the verdict) and `id` (the
+observation, including the verdict).
+
+The payload is a pointer to the spec: domains, layout, and projector stay in
+the spec addressed by `spec_hash`. The rejected set is `total - passed` and is
+re-derived from the spec. The Fact envelope, not the payload, carries the
+timestamp and origin.
 
 ## Input Format
 
@@ -112,6 +164,38 @@ fields:
 projector:
   type: sum
 ```
+
+### Word layout
+
+A spec that models a bit-packed word selects a profile or declares the layout
+inline. A spec that does not model one omits both, and the engine carries no
+word.
+
+```yaml
+target: cva6_xif_ref
+profile: riscv-r
+fields:
+  opcode:
+    values: [0x7B]
+  funct3:
+    range: [0, 7]
+```
+
+```yaml
+target: frame_demo
+layout:
+  word_width: 16
+  field_map:
+    kind: { pos: 0, width: 4 }
+    payload: { pos: 4, width: 12 }
+```
+
+`profile` is resolved through `LayoutRegistry`. The built-in names are
+`riscv-r` and `riscv-r4` (alias `r4`), and they are present when the `riscv`
+target module is enabled, which the default `targets` set does today. A
+caller can register further profiles and parse with
+`VerificationSpec::from_yaml_with`. `layout` and `profile` are mutually
+exclusive.
 
 ### Constraints
 
@@ -203,8 +287,8 @@ committed fixtures in a release build.
 | `cva6/xif_madd.xif.yaml` | The same table and revision, the MADD-family entries (`0x43`, `0x47`, `0x4B`, `0x4F`) | Mask table re-expressed as R4 fields | 32,768 | 1,024 | Derivation gate, count assertion |
 | `cva6/xif_encoding.xif.yaml` | The same table, plus `verif/env/corev-dv/custom/cvxif_custom_instr.sv`, at `6544a714c` | DV-class encodings on a register-reduced space, including encodings the decoder rejects | 8,192 | 48 | Count assertion, Spike recheck |
 | `cva6/xif_mac.xif.yaml` | None | Hand-written multiply-accumulate accelerator model | 32,768 | 28,672 | Count assertion, CLI output |
-| `ibex/rv32imcb.xif.yaml` | Ibex `rtl/ibex_decoder.sv`, `OPCODE_OP`, RV32BFull and RV32MFast, at `f4540774` | Hand transcription of the decoder case statement; not compared with the decoder by a gate (issue #62) | 524,288 | 92,160 | Count assertion, source pin |
-| `ibex/rv32imcb_imm.xif.yaml` | Ibex `rtl/ibex_decoder.sv`, `OPCODE_OP_IMM`, RV32BFull, at `f4540774` | Hand transcription of the decoder case statement; not compared with the decoder by a gate (issue #62) | 65,536 | 55,616 | Count assertion, source pin |
+| `ibex/rv32imcb.xif.yaml` | Ibex `rtl/ibex_decoder.sv`, `OPCODE_OP`, RV32BFull and RV32MFast, at `f4540774` | Hand transcription of the decoder case statement; the source pin checks the decoder and this file, not the mapping | 524,288 | 92,160 | Count assertion, source pin |
+| `ibex/rv32imcb_imm.xif.yaml` | Ibex `rtl/ibex_decoder.sv`, `OPCODE_OP_IMM`, RV32BFull, at `f4540774` | Hand transcription of the decoder case statement; the source pin checks the decoder and this file, not the mapping | 65,536 | 55,616 | Count assertion, source pin |
 | `ibex/csr_access.xif.yaml` | The RISC-V Zicsr specification | Hand-written standard encoding domain, with no illegal combination | 49,152 | 49,152 | Count assertion, CLI output |
 | `tagma/tagma_decoder.xif.yaml` | syntagma `hw/rtl/tagma_decoder.v` and the Tagma whitepaper (`10.5281/zenodo.21302508`); the reference engine is `tagma-core` at `205e3a0` | Input-domain contract of the decoder, projected into the golden-anchor layout | 65,536 | 11,172 | Count assertion, Tagma fixture tests, golden anchor cross-channel |
 | `tagma/tagma_demo_top.xif.yaml` | syntagma `hw/rtl/tagma_demo_top.v` | Registered output space of the three decoder axes | 11,172 | 11,172 | Count assertion, Tagma fixture tests |
@@ -237,10 +321,12 @@ specs:
 | `yosys/stat_decode_demo.json` | Captured Yosys 0.65 `stat -json` report for `decode_demo.v` | `parse_stat_reads_a_captured_report` |
 
 One limitation is recorded here rather than smoothed over. The CVA6 fixtures are
-re-derived from their source by a gate, and the Ibex pair is pinned to its
-decoder, but no gate compares the Ibex mapping with the decoder that states it:
-that decoder is behavioural code rather than a table, so deriving the accepted
-pairs from it is its own subject (issue #62).
+re-derived from their source by a gate. The Ibex pair is pinned to its decoder,
+and the pin checks the decoder file and the fixture digests, but the mapping
+itself is a hand transcription. Deriving it mechanically would require
+elaborating the decoder's behavioural `casez` code, which is an RTL reader and a
+separate capability; ev's scope is the atomic verifier. The fixture therefore
+claims a pinned source, not a derived mapping (issue #62 decision).
 
 ## Validation Results
 
@@ -252,32 +338,38 @@ pairs from it is its own subject (issue #62).
 | Previous CLI time (expand_all, release) | 13.1 s (benched evaluate) |
 | struct_enum benchmark (same machine, release) | 18.8 ms |
 | CVA6 fixture derivation | the three decoder-derived fixtures match a re-extraction of the mask table at `6544a714c`: 6 `(funct3, funct7)` pairs for `xif_ref`, 5 `(funct3, func2)` pairs for `xif_ref_r4`, 1 for `xif_madd` |
-| Ibex source pin | the two RV32IMCB fixtures are pinned to `ibex_decoder.sv` at `f4540774` (digest `ba04566d`), compared when `IBEX_DIR` is set; the mapping itself is not yet derived from the decoder (issue #62) |
+| Ibex source pin | the two RV32IMCB fixtures are pinned to `ibex_decoder.sv` at `f4540774` (digest `ba04566d`), compared when `IBEX_DIR` is set; the mapping is a hand transcription, not a derived artifact (issue #62 decision) |
+| Enumeration property | the iterator visits V points at O(k) per point, flat from 64k to 6.4M raw at fixed V; the raw total is O(k) and flat (37 ns); the structural filter setup is O(sum domains), so end to end is `O(sum domains + V*k)`; memory is O(V) |
 | Spike backend | C/Rust recheck: 196,608 / 196,608 agree |
 | Tagma decoder cross-channel | 11,172 / 11,172 projections equal `tagma_core::Coord::to_axes`; the generated `golden_anchors.hex` matches line by line when `EV_TAGMA_ANCHORS` is set |
 | Synthesis channel | `--design` on the syntagma Tagma decoder reports 478 cells, the number the syntagma generic Yosys flow reports for the same RTL; `--target` on `all_pass` reports 28 (both with Yosys 0.65) |
 | SSCCS POC channel demo (`./run.sh --demo`, needs an ssccs checkout) | 5 / 5 channels match the hand-written assembly golden anchors |
 | Constraint types | 13 (range, even, eq, neq, lt, gt, le, ge, oneof, cross, bitmask, enable_mask, enable_set) |
 | Projector types | 4 (sum, identity, parity, decompose) |
-| Tests | 132 (83 lib + 28 CLI + 8 structural + 5 tagma + 2 golden anchor + 4 derivation + 2 source pin), all passing, none ignored |
+| Tests | 163 in the default build (80 lib + 33 CLI + 8 structural + 5 tagma + 2 golden anchor + 4 derivation + 2 source pin + 5 layout + 6 spec hash + 4 classification + 3 point identity + 4 run metadata + 3 coordinate space + 4 domain size); the generic core (`--no-default-features`) runs 152, with the 11 profile-dependent cases gated |
 | Coverage gate | 80% lines / 80% regions (llvm-cov, all modules incl. Spike/Yosys backends) |
 | Simulation backends | Mock (default), Spike (`EV_SIM_BACKEND=spike`) |
 
 Benchmark methodology and reproducibility: the structural pipeline is the
 CLI default; the raw total is computed from the field domains without
 enumeration, and only structurally valid combinations are generated and
-evaluated. Reproduce with `cargo bench -- cva6_full` on the committed
-fixtures.
+evaluated. Reproduce the target fixture groups with `cargo bench -- cva6_full`
+on the committed fixtures, and the two synthetic scaling axes with
+`cargo bench -- scaling`. The generic core skips the target groups, and the
+synthetic axes run in both builds.
 
 ## Architecture
 
 ```
 src/
-  main.rs           CLI (clap: verify, simulate, synth, fact decode)
+  main.rs           CLI (clap: verify, simulate, synth, capabilities, fact decode)
   classification/   Verdict, Classification — the engine's output type
   spec/             VerificationSpec, FieldSpec, ConstraintSpec, ProjectorSpec,
-                    EncodingLayout, FieldBitMapping
+                    WordLayout, FieldBitMapping
+  profile/          LayoutRegistry; the generic core has no entries, and
+                    riscv.rs adds the RISC-V layouts (feature = "riscv")
   verify/
+    classifier.rs   Classify trait, StructuralClassifier, NaiveClassifier
     compose.rs      Domain expansion, raw_total_combinations, StructuralEnum
     evaluate.rs     evaluate_all, evaluate_structural, validate_into_space,
                     build_runtime_checks
@@ -292,7 +384,7 @@ src/
   synth/
     mod.rs          GenerateRtl, RunSynthesis, SvGenerator, MockSynthesisBackend
     sim.rs          RunSimulation trait + MockSimBackend
-    backends/       SpikeBackend, YosysBackend
+    backends/       YosysBackend; SpikeBackend with feature = "riscv"
 benches/
   bench.rs          Performance reference (fixtures, methodology, groups)
 tests/
@@ -303,19 +395,27 @@ tests/
     tagma/          2 YAML fixture files
     rtl/            1 Verilog design fixture
     yosys/          1 captured Yosys stat report
-  cli_test.rs       28 integration tests
-  structural_enum.rs 8 structural enumeration regression tests
+  cli_test.rs       33 integration tests
+  classifier.rs     4 classification capability tests
+  coord_space.rs    3 coordinate space tests
+  domain_size.rs    4 domain size tests
+  point_identity.rs 3 point identity tests
+  run_metadata.rs   4 run metadata tests
+  structural_enum.rs 8 structural enumeration regression tests (4 gate the RISC-V profiles)
   tagma_fixture.rs  5 Tagma fixture tests
   golden_anchor.rs  2 tagma golden anchor cross-channel tests
-  cva6_derivation.rs 4 CVA6 fixture derivation gate tests
+  cva6_derivation.rs 4 CVA6 fixture derivation gate tests (feature-gated)
   ibex_source_pin.rs 2 Ibex decoder source pin tests
+  profile_registry.rs 5 layout abstraction tests
+  spec_hash.rs      6 content-address coverage tests
 ```
 
 Backends are pluggable via environment variables:
 
 | Variable | Values | Effect |
 |----------|--------|--------|
-| `EV_SIM_BACKEND` | `mock` (default), `spike` | Simulation backend |
+| `EV_SIM_BACKEND` | `mock` (default), `spike` (`riscv` feature) | Simulation backend |
+| `EV_CLASSIFIER` | `structural` (default), `naive` | Classification engine |
 | `EV_SYNTH_BACKEND` | `mock`, `yosys` (default) | Synthesis backend |
 | `EV_SPIKE_BIN` | path | Spike binary location |
 | `EV_PK_PATH` | path | Proxy kernel for Spike |
@@ -333,6 +433,13 @@ Backends are pluggable via environment variables:
 - Python 3 (for channel demo)
 - Yosys (optional, for synthesis)
 - Spike, riscv64-unknown-elf-gcc, riscv-pk (optional, for simulation)
+
+The default build includes the target set, which currently contains RISC-V.
+`cargo build --release --no-default-features` produces the generic core;
+`cargo build --release --no-default-features --features riscv` selects one
+target explicitly. A spec that names `riscv-r` in the generic core fails to
+parse rather than silently falling back, and `EV_SIM_BACKEND=spike` fails
+with the rebuild named.
 
 ## License
 

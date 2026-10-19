@@ -4,9 +4,7 @@
 
 use crate::classification::{Classification, Verdict};
 use crate::spec::{ConstraintSpec, VerificationSpec};
-use crate::verify::compose::{
-    coords_to_coord_vec, raw_total_combinations, Combination, StructuralEnum,
-};
+use crate::verify::compose::{raw_total_combinations, Combination, CoordSpace, StructuralEnum};
 use crate::verify::registry::{Check, ConstraintRegistry, ProjectorRegistry};
 
 /// Build a list of checks from the spec, excluding enable_mask constraints.
@@ -143,7 +141,7 @@ pub fn evaluate_structural(
     ))
 }
 
-/// Validate all combinations into a DynCoordSpace.
+/// Validate all combinations into a `CoordSpace`.
 ///
 /// Uses StructuralEnum to generate only structurally valid combinations.
 /// Runtime-only constraints (eq, neq, lt, gt, le, ge, even) are evaluated
@@ -151,11 +149,9 @@ pub fn evaluate_structural(
 pub fn validate_into_space(
     spec: &VerificationSpec,
     constraint_registry: &ConstraintRegistry,
-) -> tagma_core::DynCoordSpace<()> {
-    use tagma_core::DynCoordSpace;
-
+) -> CoordSpace {
     let runtime_checks = build_runtime_checks(spec, constraint_registry);
-    let mut space: DynCoordSpace<()> = DynCoordSpace::new();
+    let mut space = CoordSpace::new();
 
     for combo in StructuralEnum::new(spec) {
         let mut passes = true;
@@ -166,9 +162,7 @@ pub fn validate_into_space(
             }
         }
         if passes {
-            if let Some(path) = coords_to_coord_vec(&combo.coordinates.raw) {
-                let _ = space.place(&path, ());
-            }
+            space.place(&combo.coordinates.raw);
         }
     }
 
@@ -243,7 +237,7 @@ mod tests {
             fields,
             constraints,
             projector,
-            encoding: None,
+            layout: None,
         }
     }
 
@@ -769,7 +763,7 @@ mod tests {
                 values: Some(vec![0, 1, 2, 3]),
             },
         );
-        let mapping: std::collections::HashMap<i64, Vec<i64>> =
+        let mapping: std::collections::BTreeMap<i64, Vec<i64>> =
             [(0, vec![0]), (1, vec![0, 1, 2])].into();
         let spec = make_spec(
             fields,
@@ -828,7 +822,7 @@ mod tests {
                 values: Some(vec![0, 1, 2, 3]),
             },
         );
-        let mapping: std::collections::HashMap<i64, Vec<i64>> =
+        let mapping: std::collections::BTreeMap<i64, Vec<i64>> =
             [(0, vec![0]), (1, vec![0, 1, 2])].into();
         let spec = make_spec(
             fields,

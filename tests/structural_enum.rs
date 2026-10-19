@@ -10,7 +10,9 @@ use std::collections::BTreeMap;
 
 use ev::spec::{ConstraintSpec, FieldSpec, ProjectorSpec, VerificationSpec};
 use ev::verify::compose::{expand_all, StructuralEnum};
-use ev::verify::evaluate::{evaluate_all, evaluate_structural, validate_into_space};
+#[cfg(feature = "riscv")]
+use ev::verify::evaluate::validate_into_space;
+use ev::verify::evaluate::{evaluate_all, evaluate_structural};
 use ev::verify::registry::{Check, ConstraintRegistry, ProjectorRegistry};
 
 fn evaluate_valid_count(spec: &VerificationSpec) -> usize {
@@ -40,7 +42,7 @@ fn make_spec(
     VerificationSpec {
         target: "structural_enum_test".into(),
         fields,
-        encoding: None,
+        layout: None,
         constraints,
         projector: ProjectorSpec::Sum,
     }
@@ -75,7 +77,7 @@ fn structural_enum_cross_wrap_regression() {
             values: None,
         },
     );
-    let mapping: std::collections::HashMap<i64, Vec<i64>> =
+    let mapping: std::collections::BTreeMap<i64, Vec<i64>> =
         [(0, vec![0, 1]), (1, vec![0, 1]), (2, vec![5])].into();
     let spec = make_spec(
         fields,
@@ -119,7 +121,7 @@ fn structural_enum_skips_invalid_initial_state() {
             values: None,
         },
     );
-    let mapping: std::collections::HashMap<i64, Vec<i64>> = [(0, vec![5]), (1, vec![0, 1])].into();
+    let mapping: std::collections::BTreeMap<i64, Vec<i64>> = [(0, vec![5]), (1, vec![0, 1])].into();
     let spec = make_spec(
         fields,
         vec![ConstraintSpec::Cross {
@@ -148,6 +150,7 @@ fn load_fixture(path: &str) -> VerificationSpec {
 /// is the `evaluate_all` result measured on the committed fixture; running
 /// the full 33.5M evaluation here would add ~20 s to the suite. The space is
 /// derived from the CVA6 hardware decoder mask table at commit 6544a714c.
+#[cfg(feature = "riscv")]
 #[test]
 fn structural_enum_matches_evaluate_cva6_full() {
     let spec = load_fixture("tests/fixtures/cva6/xif_ref.xif.yaml");
@@ -167,6 +170,7 @@ fn structural_enum_matches_evaluate_cva6_full() {
 
 /// CVA6 R4 fixture: struct_enum must emit exactly the 2,560 valid
 /// combinations.
+#[cfg(feature = "riscv")]
 #[test]
 fn structural_enum_matches_evaluate_cva6_r4() {
     let spec = load_fixture("tests/fixtures/cva6/xif_ref_r4.xif.yaml");
@@ -185,6 +189,7 @@ fn structural_enum_matches_evaluate_cva6_r4() {
 /// use no enable_mask constraints, so every combination is a distinct path.
 /// The expected counts are the distinct-path counts measured on the
 /// committed fixtures.
+#[cfg(feature = "riscv")]
 #[test]
 fn validate_into_space_matches_evaluate_cva6_fixtures() {
     for (path, expected_distinct) in [
@@ -243,6 +248,7 @@ fn evaluate_structural_matches_evaluate_all_for_runtime_only() {
 /// For a structurally constrained fixture the raw total and the valid count
 /// must match the committed numbers, and the evaluation list holds only the
 /// structurally valid subset.
+#[cfg(feature = "riscv")]
 #[test]
 fn evaluate_structural_reports_raw_total_with_valid_subset() {
     let regs = (ConstraintRegistry::default(), ProjectorRegistry::default());

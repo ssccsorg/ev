@@ -7,9 +7,10 @@
 //! - `evaluate_all` (standard): materializes the full Cartesian product of
 //!   field domains (O(N)) and runs every constraint check on every
 //!   combination.
-//! - `struct_enum` (structural, synTagma): encodes the constraints into the
-//!   enumeration space and visits only the valid combinations (O(V)),
-//!   lazily, with O(1) memory.
+//! - `struct_enum` (structural): encodes the constraints into the
+//!   enumeration space and visits only the structurally valid combinations
+//!   (O(V) visits). Memory is the restricted domains plus the emitted set, not
+//!   the raw product.
 //!
 //! Methodology
 //! -----------
@@ -32,13 +33,55 @@
 //!
 //! The Tagma row is excluded from the speedup comparison. The fixture is
 //! the Tagma hardware contract itself (the input domain of the syntagma
-//! 3-axis decoder), and the structural enumeration is the Tagma engine, so
-//! comparing the two on this fixture is not a demonstration of the
-//! enumeration-strategy gain. Its ge/le constraints are runtime-only, its
-//! structural density is 100%, and the evaluate vs struct_enum ratio is the
-//! enumeration overhead floor, not a sparse-space effect; the table density
-//! (17%) is the valid/raw ratio, not a structural filter ratio. The rows
-//! remain as reference measurements only.
+//! 3-axis decoder), its ge/le constraints are runtime-only, its structural
+//! density is 100%, and the evaluate vs struct_enum ratio is the enumeration
+//! overhead floor, not a sparse-space effect; the table density (17%) is the
+//! valid/raw ratio, not a structural filter ratio. The rows remain as
+//! reference measurements only.
+//!
+//! Scaling
+//! -------
+//! Two synthetic axes isolate the enumeration property. Both live in the
+//! `scaling` group. Medians from a release run with a 1 s warm-up and a 2 s
+//! measurement window; absolute times are machine-specific.
+//!
+//! Fixed V, growing raw N: `a,b` in 0..7 with `cross a -> [a]`, and `c` in
+//! 0..C-1 restricted to `[0]` by `oneof`. V stays 8 while N is 64C.
+//!
+//! | Raw N | filters | raw_total | iterator | end to end |
+//! |------:|--------:|----------:|---------:|-----------:|
+//! | 64,000 | 3.7 µs | 37 ns | 1.64 µs | 5.6 µs |
+//! | 640,000 | 38.6 µs | 37 ns | 1.70 µs | 40.0 µs |
+//! | 6,400,000 | 272 µs | 37 ns | 1.93 µs | 319 µs |
+//!
+//! Growing k at fixed V: k two-value fields with all but the first fixed by
+//! `oneof`. V stays 2 while N is 2^k.
+//!
+//! | k | raw_total | end to end |
+//! |--:|----------:|-----------:|
+//! | 4 | 65 ns | 0.97 µs |
+//! | 8 | 213 ns | 1.91 µs |
+//! | 16 | 486 ns | 3.69 µs |
+//! | 32 | n/a (N > MAX_COMBINATIONS) | 8.15 µs |
+//!
+//! What they show:
+//!
+//! - The iterator cost is flat as the raw domain grows at fixed V (1.64 to
+//!   1.93 µs for a 100x raw increase). The enumeration is index-free.
+//! - `raw_total_combinations` is O(k) and flat in N (37 ns at all three
+//!   sizes), because `FieldSpec::len` computes the domain size without
+//!   materializing it.
+//! - The structural filter setup is O(sum of domain sizes), not O(k). It
+//!   dominates the end-to-end time when one field carries a large domain
+//!   (3.7 µs to 272 µs for a 100x domain). The cost tracks the declared
+//!   domains, not only the valid set.
+//! - Growing the field count at fixed V is linear in k, not exponential
+//!   (0.97 to 8.15 µs for 4 to 32 fields).
+//!
+//! The memory boundary is O(V): `evaluate_structural` collects the valid
+//! combinations and the verdicts. The largest committed valid set is 196,608
+//! points (CVA6 full). A streaming path would need a sink-based record API;
+//! it is deferred until a consumer needs a valid set that does not fit memory.
 //!
 //! The CLI verify path (`evaluate_structural`: raw total + structural
 //! subset + evaluate_all on the valid rows) measures 36.3 ms on the CVA6
@@ -70,14 +113,17 @@
 //! cargo bench -- cva6_full    # full-space CVA6 group only
 //! cargo bench -- expand       # expand/enumerate group only
 //! cargo bench -- "struct_enum/cva6"   # structural enumeration only
+//! cargo bench -- scaling     # the two synthetic scaling axes
 //! cargo bench -- struct_enum_validity # correctness guard (must stay green)
 //! ```
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
 use std::collections::BTreeMap;
 
 use ev::spec::{ConstraintSpec, FieldSpec, ProjectorSpec, VerificationSpec};
-use ev::verify::compose::{coords_to_coord_vec, expand_all, EnumerateIter, StructuralEnum};
+use ev::verify::compose::{
+    expand_all, raw_total_combinations, structural_filters, EnumerateIter, StructuralEnum,
+};
 use ev::verify::evaluate::{evaluate_all, evaluate_structural, validate_into_space};
 use ev::verify::registry::{Check, ConstraintRegistry, ProjectorRegistry};
 
@@ -125,7 +171,7 @@ fn small_spec() -> VerificationSpec {
     VerificationSpec {
         target: "bench_small".into(),
         fields,
-        encoding: None,
+        layout: None,
         constraints: vec![],
         projector: ProjectorSpec::Sum,
     }
@@ -180,7 +226,7 @@ fn medium_spec() -> VerificationSpec {
             values: None,
         },
     );
-    let mapping: std::collections::HashMap<i64, Vec<i64>> = [
+    let mapping: std::collections::BTreeMap<i64, Vec<i64>> = [
         (0, vec![0, 1, 2, 3, 4, 5, 6, 7]),
         (4, vec![1, 4, 5, 6, 7]),
         (5, vec![1, 2, 3, 4, 5, 6, 7]),
@@ -189,7 +235,7 @@ fn medium_spec() -> VerificationSpec {
     VerificationSpec {
         target: "bench_medium".into(),
         fields,
-        encoding: None,
+        layout: None,
         constraints: vec![ConstraintSpec::Cross {
             field_a: "funct7".into(),
             field_b: "funct3".into(),
@@ -218,9 +264,16 @@ fn ibex_spec() -> VerificationSpec {
 /// bits[26:25], rs3 fixed to 0, sampled registers (rs1, rd in 0..3, rs2 in
 /// 0..31). Accepted custom-3 encodings: funct3=0/func2=00 (NOP) and
 /// funct3=1/func2 in 0..3 (ADD family).
-fn cva6_r4_spec() -> VerificationSpec {
-    let path = std::path::Path::new("tests/fixtures/cva6/xif_ref_r4.xif.yaml");
-    VerificationSpec::from_yaml(path).expect("failed to load cva6 xif ref r4 fixture")
+fn cva6_r4_spec() -> Option<VerificationSpec> {
+    #[cfg(feature = "riscv")]
+    {
+        let path = std::path::Path::new("tests/fixtures/cva6/xif_ref_r4.xif.yaml");
+        Some(VerificationSpec::from_yaml(path).expect("failed to load cva6 xif ref r4 fixture"))
+    }
+    #[cfg(not(feature = "riscv"))]
+    {
+        None
+    }
 }
 
 /// CVA6 XIF ref full spec: 33,554,432 raw combos, 196,608 valid (0.6%
@@ -232,9 +285,16 @@ fn cva6_r4_spec() -> VerificationSpec {
 /// encodings: funct3=0/funct7=0 (NOP) and funct3=1/funct7 in 0..4 (ADD,
 /// DOUBLE_RS1, DOUBLE_RS2, ADD_MULTI, ADD_RS3_R). The 0.6% density makes
 /// this the headline sparse case: ~700x structural speedup.
-fn cva6_full_spec() -> VerificationSpec {
-    let path = std::path::Path::new("tests/fixtures/cva6/xif_ref.xif.yaml");
-    VerificationSpec::from_yaml(path).expect("failed to load cva6 xif ref fixture")
+fn cva6_full_spec() -> Option<VerificationSpec> {
+    #[cfg(feature = "riscv")]
+    {
+        let path = std::path::Path::new("tests/fixtures/cva6/xif_ref.xif.yaml");
+        Some(VerificationSpec::from_yaml(path).expect("failed to load cva6 xif ref fixture"))
+    }
+    #[cfg(not(feature = "riscv"))]
+    {
+        None
+    }
 }
 
 /// Tagma decoder spec: 65,536 raw combos, 11,172 valid (17.0% density).
@@ -332,11 +392,11 @@ fn bench_enumerate_ibex(c: &mut Criterion) {
 // ===========================================================================
 //
 // `evaluate_all` is the standard pipeline: expand + per-combination
-// constraint checks (O(N)). `struct_enum` is the Tagma-based structural
-// pipeline: it emits only the valid combinations (O(V)). `validate_into_space`
-// places every structurally valid combination into a DynCoordSpace,
-// deduplicating identical coordinate paths. The trio is benchmarked on each
-// fixture to expose the O(N) vs O(V) gap.
+// constraint checks (O(N)). `struct_enum` is the structural pipeline: it
+// emits only the valid combinations (O(V)). `validate_into_space` places
+// every structurally valid combination into a `CoordSpace`, deduplicating
+// identical coordinate paths. The trio is benchmarked on each fixture to
+// expose the O(N) vs O(V) gap.
 
 /// evaluate_all on the small spec: 27 combos through the full check set.
 fn bench_evaluate_small(c: &mut Criterion) {
@@ -488,10 +548,10 @@ fn bench_space_lookup_valid(c: &mut Criterion) {
     let spec = ibex_spec();
     let space = validate_into_space(&spec, &ConstraintRegistry::default());
     // A known valid combination: funct7=4, funct3=4 (PACK), rs1=0, rs2=0, rd=0
-    let valid_path = coords_to_coord_vec(&[4, 4, 0, 0, 0]).unwrap();
+    let valid_path = [4, 4, 0, 0, 0];
     c.bench_function("coordspace/lookup_valid", |b| {
         b.iter(|| {
-            let result = space.at(black_box(&valid_path));
+            let result = space.contains(black_box(&valid_path));
             black_box(result);
         })
     });
@@ -503,10 +563,10 @@ fn bench_space_lookup_invalid(c: &mut Criterion) {
     let spec = ibex_spec();
     let space = validate_into_space(&spec, &ConstraintRegistry::default());
     // A known invalid combination: funct7=4, funct3=0 (not in mapping)
-    let invalid_path = coords_to_coord_vec(&[4, 0, 0, 0, 0]).unwrap();
+    let invalid_path = [4, 0, 0, 0, 0];
     c.bench_function("coordspace/lookup_invalid", |b| {
         b.iter(|| {
-            let result = space.at(black_box(&invalid_path));
+            let result = space.contains(black_box(&invalid_path));
             black_box(result);
         })
     });
@@ -518,7 +578,9 @@ fn bench_space_lookup_invalid(c: &mut Criterion) {
 
 /// expand_all on the CVA6 R4 fixture (16,384 combos).
 fn bench_expand_cva6_r4(c: &mut Criterion) {
-    let spec = cva6_r4_spec();
+    let Some(spec) = cva6_r4_spec() else {
+        return;
+    };
     c.bench_function("expand/cva6_r4_16K", |b| {
         b.iter(|| {
             let combos = expand_all(black_box(&spec)).unwrap();
@@ -529,7 +591,9 @@ fn bench_expand_cva6_r4(c: &mut Criterion) {
 
 /// EnumerateIter on the CVA6 R4 fixture (16,384 combos).
 fn bench_enumerate_cva6_r4(c: &mut Criterion) {
-    let spec = cva6_r4_spec();
+    let Some(spec) = cva6_r4_spec() else {
+        return;
+    };
     c.bench_function("enumerate/cva6_r4_16K", |b| {
         b.iter(|| {
             let iter = EnumerateIter::new(black_box(&spec));
@@ -541,7 +605,9 @@ fn bench_enumerate_cva6_r4(c: &mut Criterion) {
 
 /// evaluate_all on the CVA6 R4 fixture: 16,384 combos, ~3.33 ms.
 fn bench_evaluate_cva6_r4(c: &mut Criterion) {
-    let spec = cva6_r4_spec();
+    let Some(spec) = cva6_r4_spec() else {
+        return;
+    };
     c.bench_function("evaluate/cva6_r4_16K", |b| {
         b.iter(|| {
             let combos = expand_all(black_box(&spec)).unwrap();
@@ -559,7 +625,9 @@ fn bench_evaluate_cva6_r4(c: &mut Criterion) {
 
 /// struct_enum on the CVA6 R4 fixture: 2,560 valid combos, ~250 µs (13x).
 fn bench_structural_enum_cva6_r4(c: &mut Criterion) {
-    let spec = cva6_r4_spec();
+    let Some(spec) = cva6_r4_spec() else {
+        return;
+    };
     c.bench_function("struct_enum/cva6_r4_16K", |b| {
         b.iter(|| {
             let count = StructuralEnum::new(black_box(&spec)).count();
@@ -570,7 +638,9 @@ fn bench_structural_enum_cva6_r4(c: &mut Criterion) {
 
 /// validate_into_space on the CVA6 R4 fixture.
 fn bench_validate_cva6_r4(c: &mut Criterion) {
-    let spec = cva6_r4_spec();
+    let Some(spec) = cva6_r4_spec() else {
+        return;
+    };
     c.bench_function("validate/cva6_r4_16K", |b| {
         b.iter(|| {
             let space = validate_into_space(black_box(&spec), &ConstraintRegistry::default());
@@ -592,7 +662,9 @@ fn bench_validate_cva6_r4(c: &mut Criterion) {
 
 /// evaluate_all on the CVA6 full fixture: 33.5M combos, ~13 s, several GB peak.
 fn bench_evaluate_cva6_full(c: &mut Criterion) {
-    let spec = cva6_full_spec();
+    let Some(spec) = cva6_full_spec() else {
+        return;
+    };
     c.bench_function("evaluate/cva6_full_33M", |b| {
         b.iter(|| {
             // Full standard pipeline per iteration: materialize the Vec and
@@ -614,7 +686,9 @@ fn bench_evaluate_cva6_full(c: &mut Criterion) {
 /// struct_enum on the CVA6 full fixture: 196,608 valid combos, ~18.8 ms
 /// (~700x vs evaluate at ~13 s).
 fn bench_structural_enum_cva6_full(c: &mut Criterion) {
-    let spec = cva6_full_spec();
+    let Some(spec) = cva6_full_spec() else {
+        return;
+    };
     c.bench_function("struct_enum/cva6_full_33M", |b| {
         b.iter(|| {
             let count = StructuralEnum::new(black_box(&spec)).count();
@@ -628,7 +702,9 @@ fn bench_structural_enum_cva6_full(c: &mut Criterion) {
 /// 196,608 valid rows). Benched at 36.3 ms; the ~0.2 s end-to-end CLI
 /// number includes YAML parse and process startup.
 fn bench_evaluate_structural_cva6_full(c: &mut Criterion) {
-    let spec = cva6_full_spec();
+    let Some(spec) = cva6_full_spec() else {
+        return;
+    };
     c.bench_function("evaluate_structural/cva6_full_33M", |b| {
         b.iter(|| {
             let classification = evaluate_structural(
@@ -644,7 +720,9 @@ fn bench_evaluate_structural_cva6_full(c: &mut Criterion) {
 
 /// validate_into_space on the CVA6 full fixture.
 fn bench_validate_cva6_full(c: &mut Criterion) {
-    let spec = cva6_full_spec();
+    let Some(spec) = cva6_full_spec() else {
+        return;
+    };
     c.bench_function("validate/cva6_full_33M", |b| {
         b.iter(|| {
             let space = validate_into_space(black_box(&spec), &ConstraintRegistry::default());
@@ -661,7 +739,9 @@ fn bench_validate_cva6_full(c: &mut Criterion) {
 /// and the full-check valid count diverge. The same invariant is guarded in
 /// CI by tests/structural_enum.rs.
 fn bench_structural_enum_validity_cva6_full(c: &mut Criterion) {
-    let spec = cva6_full_spec();
+    let Some(spec) = cva6_full_spec() else {
+        return;
+    };
     let checks = ConstraintRegistry::default().build_all(&spec.constraints, &spec.fields);
     c.bench_function("struct_enum_validity/cva6_full_33M", |b| {
         b.iter(|| {
@@ -770,6 +850,120 @@ fn bench_constraint_check(c: &mut Criterion) {
 }
 
 // ===========================================================================
+// Scaling: the enumeration property
+// ===========================================================================
+//
+// Two synthetic axes, both with a fixed valid count:
+//
+// - Fixed V, growing raw N: an unconstrained-looking field `c` carries a
+//   large domain but a `oneof` restricts it to one value. The raw total grows
+//   with `c`; the valid set stays at 8. The iterator is index-free, but the
+//   structural filters expand the domain, so the end-to-end cost grows with
+//   the raw domain size while the iterator alone stays flat. The two
+//   measurements are reported separately so the boundary is visible.
+// - Growing field count k at fixed V: k two-value fields with all but the
+//   first fixed by `oneof`. V stays at 2, N is 2^k, and each emitted point has
+//   k fields, so the cost should be linear in k rather than exponential.
+
+fn scaling_field(min: i64, max: i64) -> FieldSpec {
+    FieldSpec {
+        range: Some((min, max)),
+        alignment: None,
+        values: None,
+    }
+}
+
+fn fixed_valid_growing_raw_spec(c_domain: i64) -> VerificationSpec {
+    let mut fields = BTreeMap::new();
+    fields.insert("a".to_string(), scaling_field(0, 7));
+    fields.insert("b".to_string(), scaling_field(0, 7));
+    fields.insert("c".to_string(), scaling_field(0, c_domain - 1));
+
+    let mapping: BTreeMap<i64, Vec<i64>> = (0..8).map(|value| (value, vec![value])).collect();
+    let constraints = vec![
+        ConstraintSpec::Cross {
+            field_a: "a".into(),
+            field_b: "b".into(),
+            mapping,
+        },
+        ConstraintSpec::Oneof {
+            field: "c".into(),
+            values: vec![0],
+        },
+    ];
+
+    VerificationSpec {
+        target: format!("scaling_fixed_v_{c_domain}"),
+        fields,
+        layout: None,
+        constraints,
+        projector: ProjectorSpec::Sum,
+    }
+}
+
+fn growing_fields_fixed_valid_spec(k: usize) -> VerificationSpec {
+    let mut fields = BTreeMap::new();
+    let mut constraints = Vec::new();
+    for index in 0..k {
+        let name = format!("f{index}");
+        fields.insert(name.clone(), scaling_field(0, 1));
+        if index > 0 {
+            constraints.push(ConstraintSpec::Oneof {
+                field: name,
+                values: vec![0],
+            });
+        }
+    }
+
+    VerificationSpec {
+        target: format!("scaling_k_{k}"),
+        fields,
+        layout: None,
+        constraints,
+        projector: ProjectorSpec::Sum,
+    }
+}
+
+fn bench_fixed_valid_growing_raw(c: &mut Criterion) {
+    for c_domain in [1_000i64, 10_000, 100_000] {
+        let spec = fixed_valid_growing_raw_spec(c_domain);
+        let raw = 64 * c_domain as usize;
+
+        c.bench_function(&format!("scaling/fixed_v/end_to_end/raw_{raw}"), |b| {
+            b.iter(|| StructuralEnum::new(black_box(&spec)).count())
+        });
+        c.bench_function(&format!("scaling/fixed_v/iter/raw_{raw}"), |b| {
+            b.iter_batched(
+                || StructuralEnum::new(black_box(&spec)),
+                |iter| iter.count(),
+                BatchSize::LargeInput,
+            )
+        });
+        c.bench_function(&format!("scaling/fixed_v/filters/raw_{raw}"), |b| {
+            b.iter(|| black_box(structural_filters(black_box(&spec))))
+        });
+        c.bench_function(&format!("scaling/fixed_v/raw_total/raw_{raw}"), |b| {
+            b.iter(|| raw_total_combinations(black_box(&spec)).expect("raw total"))
+        });
+    }
+}
+
+fn bench_growing_fields_fixed_valid(c: &mut Criterion) {
+    for k in [4usize, 8, 16, 32] {
+        let spec = growing_fields_fixed_valid_spec(k);
+
+        c.bench_function(&format!("scaling/growing_k/end_to_end/k_{k}"), |b| {
+            b.iter(|| StructuralEnum::new(black_box(&spec)).count())
+        });
+        if k <= 20 {
+            c.bench_function(&format!("scaling/growing_k/raw_total/k_{k}"), |b| {
+                b.iter(|| raw_total_combinations(black_box(&spec)).expect("raw total"))
+            });
+        }
+    }
+}
+
+// ===========================================================================
 // Criterion configuration
 // ===========================================================================
 
@@ -821,4 +1015,11 @@ criterion_group!(
               bench_structural_enum_validity_cva6_full
 );
 
-criterion_main!(coordspace, expand, eval_light, eval_heavy, cva6_full);
+// Scaling: the enumeration property, synthetic and fast.
+criterion_group!(
+    name = scaling;
+    config = Criterion::default().sample_size(30);
+    targets = bench_fixed_valid_growing_raw, bench_growing_fields_fixed_valid
+);
+
+criterion_main!(coordspace, expand, eval_light, eval_heavy, cva6_full, scaling);

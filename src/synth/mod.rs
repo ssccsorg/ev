@@ -13,15 +13,21 @@
 //! synth::SvGenerator        ← default GenerateRtl impl
 //! synth::MockSynthesisBackend ← test/CI synthesis backend
 //! synth::MockSimBackend     ← test/CI simulation backend
-//! synth::backends::spike    ← SpikeBackend (implements RunSimulation)
+//! synth::backends::spike    ← SpikeBackend (RISC-V, feature = "riscv")
 //! synth::backends::yosys    ← YosysBackend (implements RunSynthesis)
 //! ```
+//!
+//! A target module supplies its architecture-specific backends, and the
+//! default target set includes the modules that exist. The generic core
+//! carries only the tool-agnostic abstraction and the generic backends.
 
 pub mod backends;
 pub mod sim;
 
+use crate::report::hash_spec;
 use crate::spec::VerificationSpec;
 use serde::{Deserialize, Serialize};
+use std::io::Write;
 
 /// Tool-agnostic synthesis metrics.
 ///
@@ -37,7 +43,7 @@ pub struct SynthesisMetrics {
     pub gate_count: Option<u64>,
     pub cell_area: Option<f64>,
     /// Backend-specific opaque data (opaque to core).
-    /// YosysBackend populates this with dot_path, cell_types, warnings, etc.
+    /// YosysBackend populates this with cell_types and warnings.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub extra: Option<serde_json::Value>,
     pub status: String,
@@ -105,8 +111,11 @@ impl GenerateRtl for SvGenerator {
 fn generate_sv(spec: &VerificationSpec) -> anyhow::Result<std::path::PathBuf> {
     let tmp_dir = std::env::temp_dir().join("ev-synth");
     std::fs::create_dir_all(&tmp_dir)?;
-    let unique_suffix: String = std::iter::repeat_with(fast_random_char).take(8).collect();
-    let sv_path = tmp_dir.join(format!("{}_{}.sv", spec.target, unique_suffix));
+    // The generated RTL is a pure function of the spec, so a stable name keeps
+    // the source path out of the run-scoped values; concurrent runs write the
+    // same bytes.
+    let spec_hash = hash_spec(spec);
+    let sv_path = tmp_dir.join(format!("{}_{}.sv", spec.target, &spec_hash[..16]));
 
     if spec.fields.is_empty() {
         anyhow::bail!("Cannot generate SystemVerilog: spec has no fields");
@@ -147,7 +156,11 @@ fn generate_sv(spec: &VerificationSpec) -> anyhow::Result<std::path::PathBuf> {
     }
 
     sv.push_str("\nendmodule\n");
-    std::fs::write(&sv_path, sv)?;
+    // Concurrent runs generate the same path; write through a unique temporary
+    // file and rename it into place so a reader never sees a partial file.
+    let mut temp = tempfile::NamedTempFile::new_in(&tmp_dir)?;
+    temp.write_all(sv.as_bytes())?;
+    temp.persist(&sv_path).map_err(|error| error.error)?;
     Ok(sv_path)
 }
 
@@ -177,14 +190,6 @@ fn bits_for(value: u64) -> u32 {
         return 1;
     }
     64 - value.leading_zeros()
-}
-
-/// Fast non-crypto random char for temp file suffixes.
-fn fast_random_char() -> char {
-    use std::collections::hash_map::RandomState;
-    use std::hash::{BuildHasher, Hasher};
-    let h = RandomState::new().build_hasher().finish();
-    (b'a' + (h % 26) as u8) as char
 }
 
 /// Generate the right-hand side expression for the projector.
@@ -396,7 +401,7 @@ mod tests {
         VerificationSpec {
             target: "test_module".into(),
             fields,
-            encoding: None,
+            layout: None,
             constraints: vec![],
             projector,
         }

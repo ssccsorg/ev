@@ -8,11 +8,11 @@
   "fixtures": [
     {
       "path": "tests/fixtures/ibex/rv32imcb.xif.yaml",
-      "sha256": "4075b158fe374417954e088f969df6036f4edd9f6e07392197d66ef68d559834"
+      "sha256": "09bb49fbfc32659749a9556f09a16f2aa7a4ca3afeb51631c07bbb55537fd6b4"
     },
     {
       "path": "tests/fixtures/ibex/rv32imcb_imm.xif.yaml",
-      "sha256": "e511c4e98786c4655851322091769c8c169007126d8f1e32fc9a9d80b8192404"
+      "sha256": "d1aec3bb52a1d8208a269981689aed3c168d10900bb6c452a4f54ccbd969815d"
     }
   ]
 }

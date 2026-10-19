@@ -2,9 +2,17 @@
 name = "ev"
 version = "0.1.0"
 edition = "2021"
-description = "exhaustive verification CLI for RISC‑V custom instructions"
+description = "exhaustive verification for declared discrete design spaces"
 license = "Apache-2.0"
 repository = "https://github.com/ssccsorg/ev"
+
+[features]
+# The default build includes every target module that exists. RISC-V is the
+# only one today; a new target adds its feature to this set.
+default = ["targets"]
+targets = ["riscv"]
+# RISC-V layouts and the Spike backend.
+riscv = []
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
@@ -16,7 +24,6 @@ tracing = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
 sha2 = "0.10"
 tempfile = "3"
-tagma-core = { git = "https://github.com/ssccsorg/tagma", package = "tagma-core" }
 indicatif = "0.17"
 colored = "2"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
@@ -24,6 +31,9 @@ hex = "0.4"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
+# The golden-anchor test compares the decompose projection with the syntagma
+# reference engine. The library itself has no domain-named dependency.
+tagma-core = { git = "https://github.com/ssccsorg/tagma", package = "tagma-core" }
 
 [[bench]]
 name = "bench"

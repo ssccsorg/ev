@@ -4,5 +4,6 @@
 //! Only the files here know about external CLIs. Adding a new tool means
 //! adding a new file here — nothing else changes.
 
+#[cfg(feature = "riscv")]
 pub mod spike;
 pub mod yosys;

@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand, ValueEnum};
+use ev::profile::LayoutRegistry;
 use ev::report::{
     hash_spec, CsvReporter, Fact, JsonReporter, ReporterCapable, TextReporter, TraceReporter,
 };
@@ -6,15 +7,17 @@ use ev::spec::VerificationSpec;
 use ev::synth::backends::yosys::YosysBackend;
 use ev::synth::sim::{MockSimBackend, RunSimulation, SimulationResult};
 use ev::synth::{GenerateRtl, MockSynthesisBackend, RunSynthesis, SvGenerator, SynthesisMetrics};
-use ev::verify::{evaluate_all, evaluate_structural, expand_all};
-use ev::verify::{ConstraintRegistry, ProjectorRegistry};
+use ev::verify::{evaluate_all, expand_all};
+use ev::verify::{
+    Classify, ConstraintRegistry, NaiveClassifier, ProjectorRegistry, StructuralClassifier,
+};
 use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(
     name = "ev",
     version,
-    about = "Exhaustive verification for custom instruction extensions"
+    about = "Exhaustive verification for declared discrete design spaces"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -60,7 +63,7 @@ enum Commands {
         json: bool,
     },
 
-    /// ISA simulation verification via Spike
+    /// Simulation verification through a backend
     Simulate {
         /// Path to the YAML constraint file
         #[arg(short, long)]
@@ -78,6 +81,13 @@ enum Commands {
         #[command(subcommand)]
         command: FactCommands,
     },
+
+    /// Show the verification layers and the implementations this build carries
+    Capabilities {
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -86,10 +96,20 @@ enum FactCommands {
     Decode,
 }
 
-fn resolve_sim_backend() -> Box<dyn RunSimulation> {
-    match std::env::var("EV_SIM_BACKEND").unwrap_or_default().as_str() {
-        "spike" => Box::new(ev::synth::backends::spike::SpikeBackend),
-        _ => Box::new(MockSimBackend),
+fn resolve_sim_backend() -> anyhow::Result<Box<dyn RunSimulation>> {
+    let name = std::env::var("EV_SIM_BACKEND").unwrap_or_default();
+    match name.as_str() {
+        "" | "mock" => Ok(Box::new(MockSimBackend)),
+        #[cfg(feature = "riscv")]
+        "spike" => Ok(Box::new(ev::synth::backends::spike::SpikeBackend)),
+        other => {
+            let supported = if cfg!(feature = "riscv") {
+                "`mock` or `spike`"
+            } else {
+                "`mock` (this build has no `riscv` feature; rebuild with the default target set or `--features riscv`)"
+            };
+            anyhow::bail!("unknown simulation backend `{other}`; supported: {supported}")
+        }
     }
 }
 
@@ -98,6 +118,73 @@ fn resolve_synth_backend() -> Box<dyn RunSynthesis> {
         return Box::new(MockSynthesisBackend);
     }
     Box::new(YosysBackend)
+}
+
+fn resolve_classifier() -> anyhow::Result<Box<dyn Classify>> {
+    match std::env::var("EV_CLASSIFIER").unwrap_or_default().as_str() {
+        "" | "structural" => Ok(Box::new(StructuralClassifier)),
+        "naive" => Ok(Box::new(NaiveClassifier)),
+        other => anyhow::bail!("unknown classifier `{other}`; supported: `structural` or `naive`"),
+    }
+}
+
+/// Print the layers a caller can combine at run time: the target modules, the
+/// input format, the engines, the output formats, the layout profiles, and the
+/// simulation and synthesis backends.
+fn print_capabilities(json: bool) -> anyhow::Result<()> {
+    let registry = LayoutRegistry::default();
+    let profiles = registry.names();
+    let mut targets = Vec::new();
+    if cfg!(feature = "riscv") {
+        targets.push("riscv");
+    }
+    let formats = ["xif"];
+    let classifiers = ["structural", "naive"];
+    let reporters = ["text", "json", "csv", "trace"];
+    let mut simulation = vec!["mock"];
+    if cfg!(feature = "riscv") {
+        simulation.push("spike");
+    }
+    let synthesis = ["yosys", "mock"];
+
+    if json {
+        let value = serde_json::json!({
+            "engine": { "name": "ev", "version": env!("CARGO_PKG_VERSION") },
+            "features": {
+                "targets": cfg!(feature = "targets"),
+                "riscv": cfg!(feature = "riscv"),
+            },
+            "target_modules": targets,
+            "formats": formats,
+            "classifiers": classifiers,
+            "reporters": reporters,
+            "layout_profiles": profiles,
+            "simulation_backends": simulation,
+            "synthesis_backends": synthesis,
+        });
+        println!("{}", serde_json::to_string_pretty(&value)?);
+        return Ok(());
+    }
+
+    let profiles = if profiles.is_empty() {
+        "(none)".to_string()
+    } else {
+        profiles.join(", ")
+    };
+    let targets = if targets.is_empty() {
+        "(none)".to_string()
+    } else {
+        targets.join(", ")
+    };
+    println!("engine:      ev {}", env!("CARGO_PKG_VERSION"));
+    println!("targets:     {}", targets);
+    println!("formats:     {}", formats.join(", "));
+    println!("classifiers: {}", classifiers.join(", "));
+    println!("reporters:   {}", reporters.join(", "));
+    println!("profiles:    {}", profiles);
+    println!("simulation:  {}", simulation.join(", "));
+    println!("synthesis:   {}", synthesis.join(", "));
+    Ok(())
 }
 
 fn print_synthesis_report(report: &SynthesisMetrics, json: bool) {
@@ -135,7 +222,7 @@ fn run_sim(target: &std::path::Path) -> anyhow::Result<SimulationResult> {
         &constraint_registry,
         &projector_registry,
     );
-    let backend = resolve_sim_backend();
+    let backend = resolve_sim_backend()?;
     backend.run(&spec, verdicts)
 }
 
@@ -212,9 +299,12 @@ fn main() -> anyhow::Result<()> {
             // Structural pipeline: enumerate only the structurally valid
             // combinations (O(V) instead of O(N)); the raw total is computed
             // without expanding the space and reconciles the counts.
-            let classification =
-                evaluate_structural(&spec, &constraint_registry, &projector_registry)
-                    .map_err(|e| anyhow::anyhow!("structural evaluation failed: {}", e))?;
+            let classifier = resolve_classifier()?;
+            let classification = classifier
+                .classify(&spec, &constraint_registry, &projector_registry)
+                .map_err(|e| {
+                    anyhow::anyhow!("{} classification failed: {}", classifier.name(), e)
+                })?;
 
             if json {
                 eprintln!("warning: --json is deprecated, use --format json instead");
@@ -288,6 +378,11 @@ fn main() -> anyhow::Result<()> {
                 }
                 OutputFormat::Text => {
                     println!("target: simulation ({} backend)", result.tool);
+                    println!(
+                        "engine: {} {}",
+                        result.classification.engine.name, result.classification.engine.version
+                    );
+                    println!("claim:  {}", result.classification.claim);
                     println!("total:  {}", result.classification.total);
                     println!("passed: {}", passed);
                     println!("failed: {}", failed);
@@ -297,6 +392,7 @@ fn main() -> anyhow::Result<()> {
                 std::process::exit(1);
             }
         }
+        Commands::Capabilities { json } => print_capabilities(json)?,
         Commands::Fact { command } => match command {
             FactCommands::Decode => {
                 let mut input = String::new();

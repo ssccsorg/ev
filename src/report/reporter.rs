@@ -40,6 +40,11 @@ impl ReporterCapable for CsvReporter {
 
         // Print metadata as comments
         println!("# target: {}", target);
+        println!(
+            "# engine: {} {}",
+            classification.engine.name, classification.engine.version
+        );
+        println!("# claim:  {}", classification.claim);
         println!("# total:  {}", classification.total);
         println!("# passed: {}", passed_count);
         println!("# failed: {}", failed_count);
@@ -85,9 +90,11 @@ impl ReporterCapable for TraceReporter {
         let started_at = chrono::Utc::now();
 
         println!(
-            "[{}] TRACE  verification_started  target={}",
+            "[{}] TRACE  verification_started  target={} engine={} claim={}",
             started_at.to_rfc3339(),
-            target
+            target,
+            classification.engine.name,
+            classification.claim
         );
         println!(
             "[{}] INFO   total_combinations={}",
@@ -154,6 +161,11 @@ impl ReporterCapable for TextReporter {
         let (passed_count, failed_count) = classification.counts();
 
         println!("target: {}", target);
+        println!(
+            "engine: {} {}",
+            classification.engine.name, classification.engine.version
+        );
+        println!("claim:  {}", classification.claim);
         println!("total:  {}", classification.total);
         println!("passed: {}", passed_count);
         println!("failed: {}", failed_count);
@@ -203,7 +215,11 @@ use std::collections::BTreeMap;
 
 #[derive(Debug, Serialize)]
 struct EvaluationEntry {
-    /// Content-addressable ID: SHA256(spec_hash || values || passed || projection).
+    /// Identity of the coordinate: SHA256(spec_hash || values). The verdict
+    /// and projection are excluded, so the same point keeps its identity when
+    /// a verdict changes.
+    point_id: String,
+    /// Identity of this observation: SHA256(spec_hash || values || passed || projection).
     id: String,
     combination: Vec<i64>,
     fields: BTreeMap<String, i64>,
@@ -213,16 +229,25 @@ struct EvaluationEntry {
     reason: String,
 }
 
+/// The stable content of a verification run.
+///
+/// The payload is a pointer to the spec: `spec_hash` addresses it and
+/// `field_order` fixes the coordinate order; domains, layout, and projector
+/// stay in the spec. `failed` is `total - passed`, so the rejected set is
+/// accounted for by count and re-derivable from the spec, not emitted as rows.
+/// The Fact envelope, not this payload, carries the run timestamp.
 #[derive(Debug, Serialize)]
 struct VerificationReport {
     /// Origin: "ev/{version}".
     origin: String,
     /// Target module identifier.
     target: String,
-    /// ISO 8601 timestamp of this verification run.
-    timestamp: String,
     /// Content-addressable hash of the specification (parent reference).
     spec_hash: String,
+    /// Engine that produced this classification.
+    engine: crate::classification::EngineIdentity,
+    /// What the engine claims about the space.
+    claim: crate::classification::ClaimClass,
     total: usize,
     passed: usize,
     failed: usize,
@@ -236,14 +261,14 @@ impl ReporterCapable for JsonReporter {
     fn report(&self, target: &str, spec_hash: &str, classification: &Classification) -> bool {
         let (passed_count, failed_count) = classification.counts();
         let origin = format!("ev/{}", env!("CARGO_PKG_VERSION"));
-        let timestamp = chrono::Utc::now().to_rfc3339();
         let spec_hash = spec_hash.to_string();
 
         let report = VerificationReport {
             origin: origin.clone(),
             target: target.to_string(),
-            timestamp,
             spec_hash: spec_hash.clone(),
+            engine: classification.engine.clone(),
+            claim: classification.claim,
             total: classification.total,
             passed: passed_count,
             failed: failed_count,
@@ -259,7 +284,9 @@ impl ReporterCapable for JsonReporter {
                         .filter_map(|(i, name)| e.values.get(i).map(|v| (name.clone(), *v)))
                         .collect();
                     let id = hash_evaluation(&spec_hash, &e.values, e.passed, e.projection);
+                    let point_id = hash_point(&spec_hash, &e.values);
                     EvaluationEntry {
+                        point_id,
                         id,
                         combination: e.values.clone(),
                         fields,
@@ -291,6 +318,12 @@ impl ReporterCapable for JsonReporter {
 
 /// Hash a spec into a deterministic content ID.
 ///
+/// The hash covers everything that changes the classified space: the target,
+/// each field's domain, the word layout (bit positions and width), the
+/// projector, and the constraints. A new `VerificationSpec` field belongs here
+/// when it changes which points pass or how they project; presentation-only
+/// data does not.
+///
 /// Public so the caller can compute this once and pass to the reporter
 /// trait, keeping the trait free of `&VerificationSpec` dependencies.
 pub fn hash_spec(spec: &crate::spec::VerificationSpec) -> String {
@@ -302,9 +335,26 @@ pub fn hash_spec(spec: &crate::spec::VerificationSpec) -> String {
         h.update(format!("{:?}", field.alignment).as_bytes());
         h.update(format!("{:?}", field.values).as_bytes());
     }
+    // The bit layout is part of the space: the same fields mapped to different
+    // bits describe different targets.
+    h.update(format!("{:?}", spec.layout).as_bytes());
     h.update(format!("{:?}", spec.projector).as_bytes());
     for c in &spec.constraints {
         h.update(format!("{:?}", c).as_bytes());
+    }
+    format!("{:x}", h.finalize())
+}
+
+/// Hash a point's coordinate. Tied to its parent spec via spec_hash.
+///
+/// The verdict, the projection, and the reason are excluded: a point keeps
+/// its identity across engines and across a changed verdict. The coordinate
+/// is the field-value vector in the spec's field order, not the packed word.
+pub fn hash_point(spec_hash: &str, values: &[i64]) -> String {
+    let mut h = Sha256::new();
+    h.update(spec_hash.as_bytes());
+    for v in values {
+        h.update(v.to_le_bytes());
     }
     format!("{:x}", h.finalize())
 }
@@ -355,7 +405,7 @@ mod tests {
         VerificationSpec {
             target: "test".into(),
             fields,
-            encoding: None,
+            layout: None,
             constraints: vec![ConstraintSpec::Eq {
                 field_a: "op".into(),
                 field_b: "rs1".into(),
