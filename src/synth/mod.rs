@@ -17,8 +17,9 @@
 //! synth::backends::yosys    ← YosysBackend (implements RunSynthesis)
 //! ```
 //!
-//! The default build carries only the tool-agnostic abstraction and the
-//! generic backends. A target-specific backend is compiled with its feature.
+//! A target module supplies its architecture-specific backends, and the
+//! default target set includes the modules that exist. The generic core
+//! carries only the tool-agnostic abstraction and the generic backends.
 
 pub mod backends;
 pub mod sim;

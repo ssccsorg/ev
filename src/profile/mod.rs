@@ -3,8 +3,8 @@
 //! A profile is the bit layout a target family uses, selected by name in a
 //! spec. The registry holds the names and the engine itself names no
 //! architecture: a built-in profile is compiled only when its feature is
-//! enabled, and a caller can register its own. The default registry is empty
-//! in a generic build.
+//! enabled, and a caller can register its own. The generic core has no
+//! entries; the default target set adds the modules that exist.
 
 use crate::spec::WordLayout;
 use std::collections::BTreeMap;

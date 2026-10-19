@@ -559,14 +559,19 @@ fn capabilities_lists_the_layer_stack() {
     );
     #[cfg(feature = "riscv")]
     {
+        assert!(stdout.contains("targets:     riscv"), "{stdout}");
         assert!(stdout.contains("riscv-r"), "{stdout}");
         assert!(stdout.contains("spike"), "{stdout}");
     }
     #[cfg(not(feature = "riscv"))]
     {
         assert!(
+            stdout.contains("targets:     (none)"),
+            "the generic core carries no target module: {stdout}"
+        );
+        assert!(
             stdout.contains("profiles:    (none)"),
-            "a generic build names no layout profile: {stdout}"
+            "the generic core names no layout profile: {stdout}"
         );
         assert!(!stdout.contains("riscv-r"), "{stdout}");
     }
@@ -585,6 +590,7 @@ fn capabilities_json_names_each_layer() {
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     for key in [
+        "\"target_modules\"",
         "\"formats\"",
         "\"classifiers\"",
         "\"reporters\"",

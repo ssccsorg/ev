@@ -106,7 +106,7 @@ fn resolve_sim_backend() -> anyhow::Result<Box<dyn RunSimulation>> {
             let supported = if cfg!(feature = "riscv") {
                 "`mock` or `spike`"
             } else {
-                "`mock` (this build has no `riscv` feature; rebuild with `--features riscv`)"
+                "`mock` (this build has no `riscv` feature; rebuild with the default target set or `--features riscv`)"
             };
             anyhow::bail!("unknown simulation backend `{other}`; supported: {supported}")
         }
@@ -128,12 +128,16 @@ fn resolve_classifier() -> anyhow::Result<Box<dyn Classify>> {
     }
 }
 
-/// Print the layers a caller can combine at run time: the input format, the
-/// engines, the output formats, the layout profiles, and the simulation and
-/// synthesis backends.
+/// Print the layers a caller can combine at run time: the target modules, the
+/// input format, the engines, the output formats, the layout profiles, and the
+/// simulation and synthesis backends.
 fn print_capabilities(json: bool) -> anyhow::Result<()> {
     let registry = LayoutRegistry::default();
     let profiles = registry.names();
+    let mut targets = Vec::new();
+    if cfg!(feature = "riscv") {
+        targets.push("riscv");
+    }
     let formats = ["xif"];
     let classifiers = ["structural", "naive"];
     let reporters = ["text", "json", "csv", "trace"];
@@ -146,7 +150,11 @@ fn print_capabilities(json: bool) -> anyhow::Result<()> {
     if json {
         let value = serde_json::json!({
             "engine": { "name": "ev", "version": env!("CARGO_PKG_VERSION") },
-            "features": { "riscv": cfg!(feature = "riscv") },
+            "features": {
+                "targets": cfg!(feature = "targets"),
+                "riscv": cfg!(feature = "riscv"),
+            },
+            "target_modules": targets,
             "formats": formats,
             "classifiers": classifiers,
             "reporters": reporters,
@@ -163,7 +171,13 @@ fn print_capabilities(json: bool) -> anyhow::Result<()> {
     } else {
         profiles.join(", ")
     };
+    let targets = if targets.is_empty() {
+        "(none)".to_string()
+    } else {
+        targets.join(", ")
+    };
     println!("engine:      ev {}", env!("CARGO_PKG_VERSION"));
+    println!("targets:     {}", targets);
     println!("formats:     {}", formats.join(", "));
     println!("classifiers: {}", classifiers.join(", "));
     println!("reporters:   {}", reporters.join(", "));

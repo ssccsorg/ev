@@ -81,8 +81,9 @@ keep it.
 
 ## Follow-ups
 
-The default feature set changed after this record: the generic build is now
-`default = []`, and the RISC-V profiles and Spike are opt-in. See
+The default feature set changed after this record: the default build now
+includes the `targets` aggregate (`targets = ["riscv"]`), and the pure generic
+core is `--no-default-features`. See
 `2026-10-19-riscv-feature-demotion.md`.
 
 `tagma-core` remains a hard dependency for `Coord`, `CoordPath`, and

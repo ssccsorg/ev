@@ -17,22 +17,23 @@
 //!
 //! # Layer discipline
 //!
-//! The default build is generic: the engine, the reporters, and the synthesis
-//! abstraction carry no target. Two layers are opt-in:
+//! The engine is always present. A target module can contribute two layers:
 //!
 //! - a layout profile, which gives a spec a word to pack its fields into;
 //! - a simulator backend, which executes a spec's points on an external tool.
 //!
-//! The built-in RISC-V profiles and the Spike backend sit behind the `riscv`
-//! feature. The default build is the generic engine; `--features riscv` adds
-//! those layers. The CLI exposes the same seam with `ev capabilities`.
+//! `targets` is the aggregate that selects the target modules for the default
+//! build, and RISC-V is its only member today. The pure generic core is
+//! `--no-default-features`; `--no-default-features --features riscv` selects
+//! one module explicitly. The CLI exposes the same seam with
+//! `ev capabilities`.
 //!
 //! # Architecture
 //!
 //! ```text
 //! lib.rs          ← public API re-exports and the layer discipline
 //! spec/           ← VerificationSpec, FieldSpec, ConstraintSpec, ProjectorSpec, WordLayout
-//! profile/        ← LayoutRegistry; a feature or the caller supplies entries
+//! profile/        ← LayoutRegistry; the generic core has no entries
 //! classification/ ← Classification, Verdict: the engine's output type
 //! verify/         ← compose, evaluate, classifier (Classify trait + engines), registry
 //! report/         ← ReporterCapable trait + Fact envelope + implementations

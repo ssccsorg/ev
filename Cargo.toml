@@ -7,9 +7,11 @@ license = "Apache-2.0"
 repository = "https://github.com/ssccsorg/ev"
 
 [features]
-default = []
-# RISC-V layouts and the Spike backend. The default build verifies any
-# declared space and carries no architecture-specific code.
+# The default build includes every target module that exists. RISC-V is the
+# only one today; a new target adds its feature to this set.
+default = ["targets"]
+targets = ["riscv"]
+# RISC-V layouts and the Spike backend.
 riscv = []
 
 [dependencies]

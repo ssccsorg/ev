@@ -127,7 +127,7 @@ fn resolve_profile(profiles: &LayoutRegistry, name: &str) -> anyhow::Result<Word
         if known.is_empty() {
             anyhow::anyhow!(
                 "unknown profile `{name}`: this build has no layout profiles \
-                 (rebuild with `--features riscv` for the RISC-V profiles)"
+                 (rebuild with the default target set, or with `--features riscv`)"
             )
         } else {
             anyhow::anyhow!(

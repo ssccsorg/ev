@@ -87,16 +87,17 @@ when the layout changes.
   error that lists the known names.
 - `profile::LayoutRegistry` holds the names. `LayoutRegistry::default()`
   registers `riscv-r` and `riscv-r4` (alias `r4`) only with the `riscv`
-  feature. The default feature set is empty, so the default build is generic.
-  A downstream consumer can register its own profiles and parse with
-  `VerificationSpec::from_yaml_with`.
-- The `riscv` feature also gates `synth::backends::spike`. A generic build has
+  feature. The default feature set is `targets`, whose only member today is
+  `riscv`, so the default build includes the RISC-V profiles. The generic
+  core is `--no-default-features`. A downstream consumer can register its own
+  profiles and parse with `VerificationSpec::from_yaml_with`.
+- The `riscv` feature also gates `synth::backends::spike`. A generic core has
   neither the RISC-V layouts nor the Spike backend, and
   `EV_SIM_BACKEND=spike` fails instead of falling back to mock.
-- `ev capabilities` prints the layer stack of the binary: classifiers,
-  reporters, layout profiles, simulation backends, and synthesis backends.
-  `--json` emits the same data. This is the CLI surface that keeps the layers
-  visible without naming an architecture in the engine.
+- `ev capabilities` prints the target modules and the layer stack of the
+  binary: classifiers, reporters, layout profiles, simulation backends, and
+  synthesis backends. `--json` emits the same data. This is the CLI surface
+  that keeps the layers visible without naming an architecture in the engine.
 - `hash_spec` includes the layout and covers everything that changes the
   classified space: target, field domains, layout, projector, and constraints.
   A `cross` mapping is a `BTreeMap`, so two runs address the same spec
@@ -105,19 +106,21 @@ when the layout changes.
 
 ### Layer discipline
 
-- The default build is generic. The RISC-V layouts and the Spike backend are
-  an opt-in feature, and no engine path names an architecture.
-- `run.sh --code` checks both states: generic clippy, build, and test, then
-  the same with `--features riscv`, and leaves the RISC-V binary for
-  `--verify`. `run.sh --verify` refuses a generic binary and names the
-  rebuild.
+- The default build includes the target modules that exist, and `targets` is
+  the aggregate that selects them. RISC-V is the only member today. The pure
+  generic core is `--no-default-features`, and no engine path names an
+  architecture.
+- `run.sh --code` checks the generic core and the default target set: clippy,
+  build, and test in both, plus an explicit `--features riscv` selection, and
+  leaves the default binary for `--verify`. `run.sh --verify` refuses a binary
+  without the RISC-V module and names the rebuild.
 - Integration tests that select a RISC-V profile are feature-gated:
   `tests/cli_test.rs`, `tests/structural_enum.rs`, and the whole of
-  `tests/cva6_derivation.rs`. The generic suite runs 152 tests; the RISC-V
-  suite runs 163.
-- Benchmarks load the CVA6 fixtures only with the feature, so a generic
-  `cargo bench` runs the generic groups instead of panicking at startup.
-- Coverage runs with `--features riscv`, so the gated backend code stays in
+  `tests/cva6_derivation.rs`. The generic core runs 152 tests; the default
+  target set runs 163.
+- Benchmarks load the CVA6 fixtures only with the target module, so the
+  generic core skips those groups instead of panicking at startup.
+- Coverage runs the default target set, so the gated backend code stays in
   the measured set.
 
 ### Record contract
@@ -253,23 +256,19 @@ when the layout changes.
 ### Tests and fixtures
 
 ```bash
-cargo test --release          # 152 tests: the generic build. The 11 cases
-                              # that select a RISC-V profile are gated.
-cargo test --release --features riscv   # 163 tests: 80 lib, 33 CLI,
-                              # 8 structural, 5 tagma, 2 golden anchor,
-                              # 4 derivation, 2 source pin, 5 layout,
-                              # 6 spec hash, 4 classification,
-                              # 3 point identity, 4 run metadata,
-                              # 3 coordinate space, 4 domain size. None ignored.
-cargo build --release                    # generic verifier
-cargo build --release --features riscv   # profiles + Spike, used by --verify
-cargo bench --features riscv -- cva6_full   # full-space CVA6 group
-cargo bench --features riscv -- struct_enum_validity   # correctness guard, must stay green
-./run.sh                      # fmt, generic and riscv checks, verify
-./run.sh --code               # fmt, generic and riscv clippy/build/test
+cargo test --release          # 163 tests: the default target set.
+cargo test --release --no-default-features   # 152 tests: the generic core.
+                              # The 11 cases that select a RISC-V profile are gated.
+cargo test --release --no-default-features --features riscv   # explicit target
+cargo build --release                    # default target set, used by --verify
+cargo build --release --no-default-features   # generic core
+cargo bench -- cva6_full      # full-space CVA6 group (default targets)
+cargo bench -- struct_enum_validity   # correctness guard, must stay green
+./run.sh                      # fmt, generic core and default-target checks, verify
+./run.sh --code               # fmt, generic core and default-target clippy/build/test
 ./run.sh --verify             # Yosys, fixtures, golden anchors, derivation gate, source pin, Spike
 ./run.sh --demo               # channel demo: the ssccs POC assembly golden anchors
-./run.sh --coverage           # coverage gate (--features riscv)
+./run.sh --coverage           # coverage gate (default target set)
 ```
 
 | Fixture | Raw combinations | Valid |
@@ -335,12 +334,14 @@ Fixture Provenance table; keep the counts in step between the two.
    a field free that the decoder pins (#56). A projector or engine path that
    names a core is a regression, and `tests/cva6_derivation.rs` is the guard
    on the fixture side.
-7. A target family enters through a layout profile, not through the engine.
-   `riscv-r` and `riscv-r4` are registry entries compiled under the `riscv`
-   feature, and the default feature set is empty, so the default build names
-   no architecture and carries no word layout. A fixture that models an
-   instruction word declares the profile that makes it one, which is why the
-   profile-dependent tests and benches are feature-gated.
+7. A target family enters through a module, not through the engine. `riscv-r`
+   and `riscv-r4` are registry entries compiled under the `riscv` feature,
+   and `targets` is the default aggregate whose only member today is `riscv`.
+   The default build therefore includes the target modules that exist, while
+   the generic core (`--no-default-features`) names no architecture and
+   carries no word layout. A fixture that models an instruction word declares
+   the profile that makes it one, which is why the profile-dependent tests
+   and benches are feature-gated.
 8. ev makes no probabilistic claim. A run classifies every point of the
    declared space and nothing else, and identical runs produce identical
    records. Sampling, coverage percentages, and confidence bounds are outside
@@ -373,8 +374,10 @@ Fixture Provenance table; keep the counts in step between the two.
 - New layout profile: implement a builder returning `WordLayout` and register
   it in `LayoutRegistry::default()` (or in the caller's registry). A profile
   that belongs to one architecture goes behind its own feature, as `riscv`
-  does. `ev capabilities` picks up a registered profile automatically, and a
-  test or bench that selects it needs the same feature gate.
+  does. Add that feature to `targets` so the default build includes it, or
+  select it explicitly with `--no-default-features --features <name>`.
+  `ev capabilities` picks up a registered profile automatically, and a test
+  or bench that selects it needs the same feature gate.
 - New input format: implement `FormatCapable`. New output format: implement
   `ReporterCapable` and pass the classification through.
 - New classification engine: implement `Classify` and select it in

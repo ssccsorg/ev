@@ -41,9 +41,9 @@ COVERAGE_MIN="${COVERAGE_MIN:-80}"
 
 echo "=== coverage: instrumented test suite ==="
 rm -rf "$PROFRAW_DIR"
-# The gate covers the RISC-V paths as well, so the instrumented build selects
-# the feature explicitly. The default build is generic.
-cargo llvm-cov --release --features riscv --no-report
+# The gate covers the default target set, which currently includes RISC-V.
+# The generic core is --no-default-features.
+cargo llvm-cov --release --no-report
 
 echo "=== coverage: external backend runs (instrumented binary) ==="
 
