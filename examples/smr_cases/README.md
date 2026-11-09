@@ -191,13 +191,28 @@ uploaded cast is readable by anyone with the link, so inspect it with
 The payload is identical across runs. The envelope adds a timestamp and an
 origin, which is why two `--json` runs differ and two `--record` runs do not.
 
-## What this does not claim
+## What the four screens establish
 
-- No allowable is evaluated. The verdict is admissibility per the declared
-  rules, not a stress or temperature check.
-- Nothing here replaces an FEM solve. The admissible set is the case list.
-- Whether each admissible case was run and met its allowables is a separate
-  input. A second spec over assessment results would carry it.
+- The admissible set follows from the declared rules, so the case list is
+  derived rather than hand-kept.
+- The raw product is counted from the domain cardinalities without enumeration,
+  so the cost follows the emitted set.
+- The record is addressed by `spec_hash` and reproduces byte for byte; the
+  counts are re-derivable from the spec the hash names.
+- An axis subset is read from the key, so no index is stored and the index count
+  for arbitrary subsets is zero.
+
+## What they do not establish
+
+- That the rules match a design basis. A wrong rule gives a confident wrong
+  count, and no test in this repository can catch it, because the truth is
+  outside the spec.
+- That any case was run, or that it met an allowable. No allowable is
+  evaluated; the verdict is admissibility, not a stress or temperature check.
+- That the comparison matches another workflow. It is one baseline, SQLite on
+  one machine, with Python's call overhead included.
+- Whether each admissible case met its allowables is a separate input. A second
+  spec over assessment results would carry it.
 
 ## Using it on a real case list
 
