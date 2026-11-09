@@ -1,13 +1,14 @@
-# Design-basis case space
+# Exhaustive verification by coordinate
 
-An example of `ev verify` on a design-basis matrix. The space is declared, the
-combination rules are declared, and the record states how many points the rules
-reject and which spec produced the result.
+An example of exhaustive state-space verification read as coordinates instead of
+scanned. The space is declared (fields and domains), the rules are declared, and
+each admissible point is classified from its own coordinates; a rejected
+combination is never generated. The record states the counts and the address of
+the spec that produced them.
 
-The field values and the rules are synthetic. They model no code, component, or
-plant. What is real is the shape: a full matrix of load cases against regions,
-materials, and methods, narrowed by rules that state which combinations the
-design basis admits.
+The axis values are placeholders. They are named after a design-basis matrix so
+the space reads like a familiar one, and they model no code, component, or
+plant. Any declared space is read the same way.
 
 ## The space
 
@@ -105,6 +106,27 @@ Both hashes are tied to the spec: a change to a domain, a rule, or the
 projector changes `spec_hash` and therefore the payload hash. The stamps differ
 by construction.
 
+## Scan or coordinate
+
+`ev` carries both readers of one spec. `EV_CLASSIFIER=naive` enumerates the
+declared product and tests every combination; the default walks the admissible
+set. The counts are identical and the cost is not.
+
+| Space | Declared | Admitted | naive | default |
+|---|---|---|---|---|
+| `space.xif.yaml` | 1,080 | 594 | 0.00 s, 4 MB | 0.00 s, 4 MB |
+| `study.xif.yaml` | 1,440,000 | 828,000 | 0.3 s, 400 MB | 0.15 s, 200 MB |
+| `enable_mask_demo` fixture | 524,288 | 4,096 | 0.1 s, 144 MB | 0.00 s, 5 MB |
+
+The scan pays the declared product; the coordinate reader pays the admitted set.
+The two converge where the rules admit most of the space, as in the first two
+rows. The third row admits 0.8 percent and is the point: the scan holds 144 MB
+to reach 4,096 points, and the coordinate reader holds 5 MB.
+
+The third row is a repository fixture, `tests/fixtures/common/enable_mask_demo.xif.yaml`,
+not part of this example. It declares a space whose rules reject 99.2 percent of
+it. Figures are one run and move a little.
+
 ## Scale
 
 `study.xif.yaml` applies the same two rules to a design-of-experiments space:
@@ -191,18 +213,18 @@ uploaded cast is readable by anyone with the link, so inspect it with
 The payload is identical across runs. The envelope adds a timestamp and an
 origin, which is why two `--json` runs differ and two `--record` runs do not.
 
-## What the four screens establish
+## What the demo establishes
 
 - The admissible set follows from the declared rules, so the case list is
   derived rather than hand-kept.
-- The raw product is counted from the domain cardinalities without enumeration,
-  so the cost follows the emitted set.
+- The scan pays the declared product and the coordinate reader pays the admitted
+  set; the raw product is counted without enumeration.
 - The record is addressed by `spec_hash` and reproduces byte for byte; the
   counts are re-derivable from the spec the hash names.
 - An axis subset is read from the key, so no index is stored and the index count
   for arbitrary subsets is zero.
 
-## What they do not establish
+## What it does not establish
 
 - That the rules match a design basis. A wrong rule gives a confident wrong
   count, and no test in this repository can catch it, because the truth is

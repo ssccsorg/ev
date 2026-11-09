@@ -1,12 +1,13 @@
-# Synthetic parametric study space for an NSSS component set.
+# Synthetic study space, read as coordinates instead of scanned.
 #
 # Role: the same two rules as `space.xif.yaml`, applied to a space large enough
 # to look like a design-of-experiments study rather than a single component's
-# case list. The point is not the size by itself: it is that `ev verify`
-# reports the raw product without enumerating it and visits only the admissible
-# points, so the cost is set by the admissible count, not by the raw product.
+# case list. The point is not the size by itself: it is that `ev verify` reports
+# the raw product without enumerating it and visits only the admissible points,
+# so the cost is set by the admissible count, not by the raw product.
 #
-# The field values and the rules model no code, component, or plant.
+# The axis values are placeholders and the rules model no code, component, or
+# plant.
 #
 # Space: variant x load_case x region x material x method.
 #   variant    0..1999  parametric geometry variants from a sweep

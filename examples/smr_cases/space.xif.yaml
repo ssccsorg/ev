@@ -1,9 +1,10 @@
-# Synthetic design-basis case space for an NSSS component set.
+# Synthetic case space, read as coordinates instead of scanned.
 #
-# Role: show what `ev verify` produces on a design-basis matrix. The space is
-# declared, the combination rules are declared, and the record states the raw
-# count, the admissible count, and the identity of the spec that produced both.
-# The admissible set is the analysis case list.
+# Role: an example of exhaustive verification over a declared space. The fields
+# and their domains are declared, the rules are declared, and the record states
+# the raw count, the admissible count, and the identity of the spec. The axis
+# values are placeholders: they are named after a design-basis matrix so the
+# space reads like a familiar one, and they model no code, component, or plant.
 #
 # The field values and the rules model no code, component, or plant. The load
 # case names follow the Section III convention (Design, Service Levels A to D,
