@@ -55,9 +55,12 @@ Admissible: 3 x (2 + 2 + 2 + 1 + 2) x (10 x 2 + 2 x 1) = 594. Rejected: 486.
 
 ```bash
 ./run.sh              # summary, exit status, and the record identity
+./run.sh --raw        # the engine's own text output
 ./run.sh --json       # the Fact envelope
 ./run.sh --record     # the stable payload
 ./run.sh --reproduce  # payload identical across runs, envelope stamp moves
+python3 compare.py    # the same points in a coordinate row and in SQLite
+./demo.sh             # all of the above in order, the recording script
 ```
 
 `ev verify` exits 1 when the declared space contains a rejected combination.
@@ -65,22 +68,27 @@ That is a verdict on the space, so `run.sh` prints the status as a value.
 
 ## Expected output
 
-For the spec in this directory:
-
 ```text
-target: smr_nsss_case_space
-engine: ev/structural 0.1.0
-claim:  exhaustive
-total:  1080
-passed: 594
-failed: 486
+smr_nsss_case_space
 
-exit:   1 (1 means the space contains a rejected combination)
+  spec       space.xif.yaml
+  spec_hash  dd108e8924cb308f5af9e0eca930358fd3b1487f42fa5127d026100a3f3a910a
+  engine     ev/structural 0.1.0
+  claim      exhaustive
 
-record
-  spec_hash: dd108e8924cb308f5af9e0eca930358fd3b1487f42fa5127d026100a3f3a910a
-  points:    594
+  declared           1,080   combinations the spec declares
+  admissible           594   combinations the rules admit, emitted and classified
+  rejected             486   combinations the rules exclude, never generated
+
+  exit                   1   1 means the space has rejected combinations
+
+The admissible set is the case list. No allowable is evaluated.
 ```
+
+The record carries the summary and the spec address. The per-point rows are
+opt-in (`--rows`, or `--sample N` for the first N), because they are what cost:
+the 828,000-point study space writes 361 bytes without them and 317 MB with
+them.
 
 `./run.sh --reproduce` prints the payload hash twice and the envelope stamp for
 each run:
@@ -102,32 +110,66 @@ by construction.
 `study.xif.yaml` applies the same two rules to a design-of-experiments space:
 2,000 geometry variants, 24 load cases, 5 regions, 3 materials, 2 methods.
 
-| Spec | Declared | Admissible | Wall | Peak RSS |
-|---|---|---|---|---|
-| `space.xif.yaml` | 1,080 | 594 | 0.00 s | 4 MB |
-| `study.xif.yaml` | 1,440,000 | 828,000 | 0.13 s | 188 MB |
+| Spec | Declared | Admissible | Wall | Peak RSS | Record |
+|---|---|---|---|---|---|
+| `space.xif.yaml` | 1,080 | 594 | 0.00 s | 4 MB | 658 B |
+| `study.xif.yaml` | 1,440,000 | 828,000 | 0.13 s | 188 MB | 675 B |
 
 `total` is the size of the declared product, computed from the domain
 cardinalities without enumerating it. `passed` is the number of points the
 engine emitted and classified. Memory follows the emitted count at roughly 230
 bytes a point, so a space with tens of millions of admissible points does not
-fit this pipeline; the streaming path is a separate, open item.
+fit this pipeline; the streaming path is a separate, open item. The record
+above is the summary: `--rows` on the study space writes 317 MB instead.
 
 ```bash
 SPEC=study.xif.yaml ./run.sh
 ```
 
+## Against an indexed database
+
+`compare.py` builds the same 828,000-point set and measures three stores on the
+same machine, in one process.
+
+| | Coordinate store | SQLite | SQLite, 2 indexes |
+|---|---|---|---|
+| Size | 8.7 MiB | 12.5 MiB | 35.9 MiB |
+| Load | sequential write | 0.5 s | 0.9 s |
+| Query, five axes | key (0.4 ns) | 22 ms | 7 us |
+| Query, region and material | key (1.4 ns) | 41 ms | 42 ms |
+
+The index count is arithmetic, not measurement: five axes have 31 non-empty
+subsets, and a store that answers any subset at O(1) needs one index per subset.
+The two indexes above cover three of those subsets. The query they did not
+anticipate is the one that stays a scan.
+
+Read the numbers with four caveats, because a reader will ask.
+
+- Figures are one run of `compare.py`; they move a little between runs, so the
+  table rounds them.
+- SQLite is timed through Python, so 7 us is an upper bound that includes call
+  overhead.
+- The coordinate size is the row width, five u16 and one flag. The two query
+  figures in that column are the Rust benches in the primitive paper, 0.38 to
+  0.40 ns for a dense lookup and 1.44 ns for an axis decode, not measurements
+  from this script.
+- A workload that always queries the same subset is served well by one index.
+  The difference appears when the queried subset changes.
+
 ## Recording the demo
 
 `asciinema` records a terminal session as text with real timing, so the
-recording replays what was typed and the commands stay copyable. It is not
-installed on this machine.
+recording replays what was typed and the commands stay copyable.
+
+`demo.sh` is the recording script: the case space, the same rules at study
+scale, the reproducible record, and the comparison with an indexed database.
+Four screens, about four seconds of compute.
 
 ```bash
-brew install asciinema
-asciinema rec --title "smr_cases" -c "./run.sh && ./run.sh --reproduce" demo.cast
-asciinema play demo.cast     # local replay
-asciinema upload demo.cast   # prints a URL
+brew install asciinema        # if it is missing
+asciinema rec --title "smr_cases" -c "./demo.sh" demo.cast
+asciinema play demo.cast      # local replay
+asciinema upload demo.cast    # prints a URL
 ```
 
 Check `asciinema rec --help` for the flag names in the installed version. An
@@ -141,6 +183,8 @@ uploaded cast is readable by anyone with the link, so inspect it with
 | `spec_hash` | identity of the spec; a change to a domain, a rule, or the projector changes it |
 | `engine`, `claim` | which engine classified, and what it claims (`exhaustive`) |
 | `total`, `passed`, `failed` | declared points, admissible points, rejected points |
+| `emitted` | points the engine generated and classified |
+| `row_policy` | `omitted`, `sample`, or `all`; the rows are a function of the spec, so the summary addresses it and leaves them to a re-run |
 | `point_id` | identity of a coordinate, verdict excluded |
 | `id` | identity of the observation, verdict and projection included |
 

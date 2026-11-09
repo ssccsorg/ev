@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand, ValueEnum};
 use ev::profile::LayoutRegistry;
 use ev::report::{
-    hash_spec, CsvReporter, Fact, JsonReporter, ReporterCapable, TextReporter, TraceReporter,
+    hash_spec, CsvReporter, Fact, JsonReporter, ReporterCapable, Rows, TextReporter, TraceReporter,
 };
 use ev::spec::VerificationSpec;
 use ev::synth::backends::yosys::YosysBackend;
@@ -45,6 +45,12 @@ enum Commands {
         /// Output format: text, json, csv, or trace (default: text)
         #[arg(long, value_enum)]
         format: Option<OutputFormat>,
+        /// Include every emitted point in the JSON payload
+        #[arg(long, conflicts_with = "sample")]
+        rows: bool,
+        /// Include the first N emitted points in the JSON payload
+        #[arg(long, value_name = "N")]
+        sample: Option<usize>,
     },
 
     /// SystemVerilog RTL generation and synthesis
@@ -290,6 +296,8 @@ fn main() -> anyhow::Result<()> {
             target,
             json,
             format,
+            rows,
+            sample,
         } => {
             let spec = VerificationSpec::from_yaml(&target)?;
 
@@ -315,7 +323,11 @@ fn main() -> anyhow::Result<()> {
                 OutputFormat::Text
             });
             let reporter: Box<dyn ReporterCapable> = match fmt {
-                OutputFormat::Json => Box::new(JsonReporter),
+                OutputFormat::Json => Box::new(JsonReporter::new(match (rows, sample) {
+                    (true, _) => Rows::All,
+                    (false, Some(n)) => Rows::Sample(n),
+                    (false, None) => Rows::Omitted,
+                })),
                 OutputFormat::Csv => Box::new(CsvReporter),
                 OutputFormat::Trace => Box::new(TraceReporter),
                 OutputFormat::Text => Box::new(TextReporter),

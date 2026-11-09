@@ -37,3 +37,5 @@ debug
 !/.github/
 !**/.devcontainer/
 !**/.dockerignore
+
+**/*.cast

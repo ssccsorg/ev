@@ -11,21 +11,45 @@ const SAMPLE: &str = "tests/fixtures/common/sample.xif.yaml";
 fn run(args: &[&str], envs: &[(&str, &str)]) -> std::process::Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_ev"));
     command.args(args);
+    // The per-point rows are opt-in, and every test here reads them.
+    if args.first() == Some(&"verify") {
+        command.arg("--rows");
+    }
     for (key, value) in envs {
         command.env(key, value);
     }
     command.output().expect("run ev")
 }
 
+/// The envelope's payload is base64.
+fn decode_base64(text: &str) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut buffer: u32 = 0;
+    let mut bits = 0;
+    for byte in text.bytes() {
+        let value = match byte {
+            b'A'..=b'Z' => byte - b'A',
+            b'a'..=b'z' => byte - b'a' + 26,
+            b'0'..=b'9' => byte - b'0' + 52,
+            b'+' => 62,
+            b'/' => 63,
+            b'=' => break,
+            _ => continue,
+        };
+        buffer = (buffer << 6) | value as u32;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((buffer >> bits) as u8);
+        }
+    }
+    out
+}
+
 /// Decode the Fact envelope and return the JSON payload.
 fn payload(output: &std::process::Output) -> Value {
     let fact: Value = serde_json::from_slice(&output.stdout).expect("Fact JSON");
-    let bytes: Vec<u8> = fact["payload"]
-        .as_array()
-        .expect("payload bytes")
-        .iter()
-        .map(|value| value.as_u64().expect("byte") as u8)
-        .collect();
+    let bytes = decode_base64(fact["payload"].as_str().expect("payload string"));
     serde_json::from_slice(&bytes).expect("payload JSON")
 }
 

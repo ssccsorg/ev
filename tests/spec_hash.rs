@@ -81,6 +81,31 @@ fn the_address_is_stable_across_processes() {
     );
 }
 
+/// The envelope's payload is base64.
+fn decode_base64(text: &str) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut buffer: u32 = 0;
+    let mut bits = 0;
+    for byte in text.bytes() {
+        let value = match byte {
+            b'A'..=b'Z' => byte - b'A',
+            b'a'..=b'z' => byte - b'a' + 26,
+            b'0'..=b'9' => byte - b'0' + 52,
+            b'+' => 62,
+            b'/' => 63,
+            b'=' => break,
+            _ => continue,
+        };
+        buffer = (buffer << 6) | value as u32;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((buffer >> bits) as u8);
+        }
+    }
+    out
+}
+
 fn run_spec_hash(fixture: &str) -> String {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
         .args(["verify", "--target", fixture, "--json"])
@@ -89,11 +114,7 @@ fn run_spec_hash(fixture: &str) -> String {
     assert!(!output.stdout.is_empty(), "the report is on stdout");
 
     let fact: serde_json::Value = serde_json::from_slice(&output.stdout).expect("Fact JSON");
-    let payload = fact["payload"].as_array().expect("payload bytes");
-    let bytes: Vec<u8> = payload
-        .iter()
-        .map(|value| value.as_u64().expect("byte") as u8)
-        .collect();
+    let bytes = decode_base64(fact["payload"].as_str().expect("payload string"));
     let report: serde_json::Value = serde_json::from_slice(&bytes).expect("report JSON");
     report["spec_hash"].as_str().expect("spec_hash").to_string()
 }

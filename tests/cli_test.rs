@@ -1,5 +1,30 @@
 use std::process::Command;
 
+/// The envelope's payload is base64.
+fn decode_base64(text: &str) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut buffer: u32 = 0;
+    let mut bits = 0;
+    for byte in text.bytes() {
+        let value = match byte {
+            b'A'..=b'Z' => byte - b'A',
+            b'a'..=b'z' => byte - b'a' + 26,
+            b'0'..=b'9' => byte - b'0' + 52,
+            b'+' => 62,
+            b'/' => 63,
+            b'=' => break,
+            _ => continue,
+        };
+        buffer = (buffer << 6) | value as u32;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((buffer >> bits) as u8);
+        }
+    }
+    out
+}
+
 #[test]
 fn verify_help_succeeds() {
     let output = Command::new(env!("CARGO_BIN_EXE_ev"))
@@ -363,15 +388,10 @@ fn synth_design_json_names_the_design_source() {
         "the fact target is the resolved top module"
     );
 
-    // The payload is an opaque byte vector in the envelope, so decode it the
-    // way a consumer would and check that it names the design file rather
-    // than RTL generated from a spec.
-    let payload_bytes = fact["payload"]
-        .as_array()
-        .expect("the payload should be a byte array")
-        .iter()
-        .map(|byte| byte.as_u64().expect("payload bytes are numbers") as u8)
-        .collect::<Vec<u8>>();
+    // The payload is an opaque byte vector in the envelope, base64 on the
+    // wire, so decode it the way a consumer would and check that it names the
+    // design file rather than RTL generated from a spec.
+    let payload_bytes = decode_base64(fact["payload"].as_str().expect("payload string"));
     let payload: serde_json::Value =
         serde_json::from_slice(&payload_bytes).expect("the payload should be JSON");
     let source = payload["source"].as_str().expect("payload source");

@@ -126,7 +126,7 @@ cargo test --release
 ## CLI Reference
 
 ```
-ev verify    --target <file> [--format <fmt>]  # Static constraint verification
+ev verify    --target <file> [--format <fmt>] [--rows | --sample N]  # Static constraint verification
 ev simulate  --target <file> [--format <fmt>]  # C/Rust recheck under Spike/mock
 ev synth     --target <file> [--json]          # Generate RTL from a spec, then synthesize it
 ev synth     --design <file> [--top <mod>]     # Synthesize an RTL file directly
@@ -138,11 +138,16 @@ Output formats: `text` (default), `json`, `csv`, `trace`.
 
 ## Record Shape
 
-`ev verify --json` emits a Fact envelope. The payload is the stable content of
-the run and carries `spec_hash`, `target`, `engine`, `claim`, `total`,
-`passed`, `failed`, `field_order`, and one result per emitted point. Each
-result has `point_id` (the coordinate, excluding the verdict) and `id` (the
-observation, including the verdict).
+`ev verify --json` emits a Fact envelope whose payload is the stable content of
+the run. The payload is base64 in the envelope, one and a third characters a
+byte, because a JSON array of byte values spends six.
+
+The payload carries `spec_hash`, `target`, `engine`, `claim`, `total`,
+`passed`, `failed`, `emitted`, `row_policy`, `field_order`, and, when asked for,
+rows. `--rows` includes every emitted point and `--sample N` the first N; the
+default is `row_policy: omitted`, because the rows are a function of the spec
+and a re-run reproduces them. Each row has `point_id` (the coordinate,
+excluding the verdict) and `id` (the observation, including the verdict).
 
 The payload is a pointer to the spec: domains, layout, and projector stay in
 the spec addressed by `spec_hash`. The rejected set is `total - passed` and is

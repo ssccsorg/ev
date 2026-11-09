@@ -229,6 +229,22 @@ struct EvaluationEntry {
     reason: String,
 }
 
+/// How much of the emitted set the payload carries.
+///
+/// A point is a function of the spec, so the payload can address the spec and
+/// leave the points to a re-run. That is the shape the record already uses for
+/// the rejected set, and it is what keeps the output usable at a million
+/// points.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Rows {
+    /// The summary and the spec pointer. No point rows.
+    Omitted,
+    /// The first N emitted points.
+    Sample(usize),
+    /// Every emitted point.
+    All,
+}
+
 /// The stable content of a verification run.
 ///
 /// The payload is a pointer to the spec: `spec_hash` addresses it and
@@ -251,17 +267,65 @@ struct VerificationReport {
     total: usize,
     passed: usize,
     failed: usize,
+    /// Points the engine generated and classified. `results` carries at most
+    /// this many rows, and `row_policy` says how many were asked for.
+    emitted: usize,
+    /// "omitted", "sample", or "all".
+    row_policy: &'static str,
     field_order: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     results: Vec<EvaluationEntry>,
 }
 
-pub struct JsonReporter;
+pub struct JsonReporter {
+    rows: Rows,
+}
+
+impl JsonReporter {
+    pub fn new(rows: Rows) -> Self {
+        Self { rows }
+    }
+}
 
 impl ReporterCapable for JsonReporter {
     fn report(&self, target: &str, spec_hash: &str, classification: &Classification) -> bool {
         let (passed_count, failed_count) = classification.counts();
         let origin = format!("ev/{}", env!("CARGO_PKG_VERSION"));
         let spec_hash = spec_hash.to_string();
+
+        let selected: Vec<&Verdict> = match self.rows {
+            Rows::Omitted => Vec::new(),
+            Rows::Sample(n) => classification.verdicts.iter().take(n).collect(),
+            Rows::All => classification.verdicts.iter().collect(),
+        };
+        let row_policy = match self.rows {
+            Rows::Omitted => "omitted",
+            Rows::Sample(_) => "sample",
+            Rows::All => "all",
+        };
+
+        let results: Vec<EvaluationEntry> = selected
+            .into_iter()
+            .map(|e| {
+                let fields: BTreeMap<String, i64> = classification
+                    .field_order
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, name)| e.values.get(i).map(|v| (name.clone(), *v)))
+                    .collect();
+                let id = hash_evaluation(&spec_hash, &e.values, e.passed, e.projection);
+                let point_id = hash_point(&spec_hash, &e.values);
+                EvaluationEntry {
+                    point_id,
+                    id,
+                    combination: e.values.clone(),
+                    fields,
+                    passed: e.passed,
+                    projection: e.projection,
+                    reason: e.reason.clone(),
+                }
+            })
+            .collect();
 
         let report = VerificationReport {
             origin: origin.clone(),
@@ -272,30 +336,10 @@ impl ReporterCapable for JsonReporter {
             total: classification.total,
             passed: passed_count,
             failed: failed_count,
+            emitted: classification.verdicts.len(),
+            row_policy,
             field_order: classification.field_order.clone(),
-            results: classification
-                .verdicts
-                .iter()
-                .map(|e| {
-                    let fields: BTreeMap<String, i64> = classification
-                        .field_order
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(i, name)| e.values.get(i).map(|v| (name.clone(), *v)))
-                        .collect();
-                    let id = hash_evaluation(&spec_hash, &e.values, e.passed, e.projection);
-                    let point_id = hash_point(&spec_hash, &e.values);
-                    EvaluationEntry {
-                        point_id,
-                        id,
-                        combination: e.values.clone(),
-                        fields,
-                        passed: e.passed,
-                        projection: e.projection,
-                        reason: e.reason.clone(),
-                    }
-                })
-                .collect(),
+            results,
         };
 
         let fact = crate::report::fih::Fact::new(
