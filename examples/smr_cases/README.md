@@ -60,8 +60,13 @@ Admissible: 3 x (2 + 2 + 2 + 1 + 2) x (10 x 2 + 2 x 1) = 594. Rejected: 486.
 ./run.sh --json       # the Fact envelope
 ./run.sh --record     # the stable payload
 ./run.sh --reproduce  # payload identical across runs, envelope stamp moves
-python3 compare.py    # the same points in a coordinate row and in SQLite
-./demo.sh             # all of the above in order, the recording script
+./demo.sh             # records demo.cast, then plays the steps
+```
+
+The comparison with SQLite is a Rust example in the parent crate:
+
+```bash
+cargo run --release --example store_compare --features store-compare
 ```
 
 `ev verify` exits 1 when the declared space contains a rejected combination.
@@ -150,53 +155,67 @@ SPEC=study.xif.yaml ./run.sh
 
 ## Against an indexed database
 
-`compare.py` builds the same 828,000-point set and measures three stores on the
-same machine, in one process.
+`store_compare` holds the same 828,000 points twice, in one process: a
+coordinate array addressed by arithmetic, and SQLite. Both sides are Rust, so
+neither pays another language's overhead.
 
-| | Coordinate store | SQLite | SQLite, 2 indexes |
-|---|---|---|---|
-| Size | 8.7 MiB | 12.5 MiB | 35.9 MiB |
-| Load | sequential write | 0.5 s | 0.9 s |
-| Query, five axes | key (0.4 ns) | 22 ms | 7 us |
-| Query, region and material | key (1.4 ns) | 41 ms | 42 ms |
+```bash
+cargo run --release --example store_compare --features store-compare
+```
 
-The index count is arithmetic, not measurement: five axes have 31 non-empty
-subsets, and a store that answers any subset at O(1) needs one index per subset.
-The two indexes above cover three of those subsets. The query they did not
-anticipate is the one that stays a scan.
+| | coordinate | sqlite | sqlite, 2 indexes | sqlite, 3 indexes |
+|---|---|---|---|---|
+| size | 2.7 MiB | 15.3 MiB | 38.7 MiB | 47.3 MiB |
+| load, insert | 1 ms | 0.2 s | 0.2 s | 0.2 s |
+| load, build indexes | none | none | 0.4 s | 0.7 s |
+| query, five axes | 1.4 ns | 22.5 ms | 8.9 us | 8.9 us |
+| query, region and material | 1.4 ms | 27.0 ms | 27.0 ms | 9.4 us |
 
-Read the numbers with four caveats, because a reader will ask.
+Read the rows in this order.
 
-- Figures are one run of `compare.py`; they move a little between runs, so the
-  table rounds them.
-- SQLite is timed through Python, so 7 us is an upper bound that includes call
-  overhead.
-- The coordinate size is the row width, five u16 and one flag. The two query
-  figures in that column are the Rust benches in the primitive paper, 0.38 to
-  0.40 ns for a dense lookup and 1.44 ns for an axis decode, not measurements
-  from this script.
-- A workload that always queries the same subset is served well by one index.
-  The difference appears when the queried subset changes.
+- The keyed lookup is arithmetic on the address: 1.4 ns, against 8.9 us once
+  the index exists.
+- A subset query has no address to compute, so both sides scan. The coordinate
+  side decodes an integer, 1.4 ms; SQLite walks rows, 27.0 ms.
+- An index makes that subset 9.4 us. The price is both rows above it: about
+  8.6 MiB and half a second of build time for one index.
+- Five axes have 31 non-empty subsets. The two-index database covers 3 of them,
+  the three-index one covers 4.
+
+Why this is the fair comparison, and where it still is not.
+
+- Both sides are Rust in one process, with SQLite bundled through rusqlite.
+- Probe tuples are built before any timing, so neither side pays for generating
+  them inside the measured loop, and each SQLite measurement runs one warm query
+  first.
+- Insert and index build are reported apart, because the coordinate store has
+  no build step to compare against an index.
+- The coordinate array holds payload only; the axes are the address. SQLite
+  stores the key columns and the payload. That asymmetry is the claim, not a
+  measurement error, but a reader should see it stated.
+- The subset scan on the coordinate side walks 1,440,000 slots while SQLite
+  walks 828,000 rows, so the coordinate side does more work there and still
+  finishes sooner.
+- Figures are one run; they move a little.
 
 ## Recording the demo
 
-`asciinema` records a terminal session as text with real timing, so the
-recording replays what was typed and the commands stay copyable.
-
-`demo.sh` is the recording script: the case space, the same rules at study
-scale, the reproducible record, and the comparison with an indexed database.
-Four screens, about four seconds of compute.
+`demo.sh` records itself. Running it refreshes `demo.cast` next to the script
+and then plays the same steps, so the file and what you just watched are one
+run.
 
 ```bash
-brew install asciinema        # if it is missing
-asciinema rec --title "smr_cases" -c "./demo.sh" demo.cast
-asciinema play demo.cast      # local replay
-asciinema upload demo.cast    # prints a URL
+./demo.sh              # record, about 20 s, and refresh demo.cast
+./demo.sh --play       # the steps without recording
+DEMO_PAUSE=5 ./demo.sh # a slower beat between screens
 ```
 
-Check `asciinema rec --help` for the flag names in the installed version. An
-uploaded cast is readable by anyone with the link, so inspect it with
-`asciinema cat demo.cast` before sharing.
+`asciinema play demo.cast` replays it, `asciinema upload demo.cast` prints a
+URL, and `asciinema convert demo.cast demo.txt` writes a plain text transcript.
+An uploaded cast is readable by anyone with the link, so read it once before
+sharing. Inside a recording (`ASCIINEMA_REC` set) the script plays rather than
+records, so the call does not recurse, and an absent `asciinema` falls back to
+playing.
 
 ## What the record carries
 
@@ -221,8 +240,8 @@ origin, which is why two `--json` runs differ and two `--record` runs do not.
   set; the raw product is counted without enumeration.
 - The record is addressed by `spec_hash` and reproduces byte for byte; the
   counts are re-derivable from the spec the hash names.
-- An axis subset is read from the key, so no index is stored and the index count
-  for arbitrary subsets is zero.
+- An axis subset needs no stored index: the address carries the axes, so the
+  subset is a scan over addresses rather than over rows.
 
 ## What it does not establish
 

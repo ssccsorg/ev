@@ -13,6 +13,9 @@ default = ["targets"]
 targets = ["riscv"]
 # RISC-V layouts and the Spike backend.
 riscv = []
+# Builds examples/store_compare.rs, the coordinate store against SQLite. The
+# dependency is optional so a normal build carries no SQLite.
+store-compare = ["dep:rusqlite"]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
@@ -28,6 +31,7 @@ indicatif = "0.17"
 colored = "2"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
 hex = "0.4"
+rusqlite = { version = "0.32", features = ["bundled"], optional = true }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
@@ -38,3 +42,7 @@ tagma-core = { git = "https://github.com/ssccsorg/tagma", package = "tagma-core"
 [[bench]]
 name = "bench"
 harness = false
+
+[[example]]
+name = "store_compare"
+required-features = ["store-compare"]
