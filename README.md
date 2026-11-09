@@ -119,6 +119,7 @@ ev verify --target tests/fixtures/common/sample.xif.yaml --json
 ev synth --target tests/fixtures/common/all_pass.xif.yaml
 ev synth --design tests/fixtures/rtl/decode_demo.v --top decode_demo
 ev simulate --target tests/fixtures/common/all_pass.xif.yaml
+./examples/smr_cases/run.sh                     # Design-basis case space example
 cargo test --release
 ```
 

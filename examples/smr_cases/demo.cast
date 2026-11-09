@@ -1,0 +1,9 @@
+{"version":3,"term":{"cols":72,"rows":1,"type":"xterm-256color","theme":{"fg":"#f2f2f2","bg":"#1e2030","palette":"#444973:#ff757f:#4ed6be:#ffc777:#82aaff:#bf99ff:#86e1fc:#7982a9:#444973:#ff757f:#4ed6be:#ffc777:#82aaff:#bf99ff:#86e1fc:#828ab8"}},"timestamp":1794220138,"command":"./run.sh && SPEC=study.xif.yaml ./run.sh && ./run.sh --reproduce","title":"smr_cases","env":{"SHELL":"/bin/bash"}}
+[0.013, "o", "target: smr_nsss_case_space\r\nengine: ev/structural 0.1.0\r\nclaim:  exhaustive\r\ntotal:  1080\r\npassed: 594\r\nfailed: 486\r\n\r\n"]
+[0.000, "o", "exit:   1 (1 means the space contains a rejected combination)\r\n"]
+[0.005, "r", "72x9"]
+[0.082, "o", "\r\nrecord\r\n  spec_hash: dd108e8924cb308f5af9e0eca930358fd3b1487f42fa5127d026100a3f3a910a\r\n  points:    594\r\n"]
+[0.018, "r", "72x14"]
+[0.112, "o", "target: smr_nsss_study_space\r\nengine: ev/structural 0.1.0\r\nclaim:  exhaustive\r\ntotal:  1440000\r\npassed: 828000\r\nfailed: 612000\r\n\r\n"]
+[0.003, "o", "exit:   1 (1 means the space contains a rejected combination)\r\n"]
+[0.017, "r", "72x22"]

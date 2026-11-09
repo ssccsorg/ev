@@ -1,0 +1,84 @@
+# Synthetic design-basis case space for an NSSS component set.
+#
+# Role: show what `ev verify` produces on a design-basis matrix. The space is
+# declared, the combination rules are declared, and the record states the raw
+# count, the admissible count, and the identity of the spec that produced both.
+# The admissible set is the analysis case list.
+#
+# The field values and the rules model no code, component, or plant. The load
+# case names follow the Section III convention (Design, Service Levels A to D,
+# and the two pressure tests) so the space reads like a design-basis matrix.
+# The combinations below are the entries this space declares. They are not a
+# code table, and a real instance replaces them with the ones its plant design
+# specification states.
+#
+# Space: revision x load_case x region x material x method.
+#   revision   0..2   design revision (preliminary, final design, as-built)
+#   load_case  0..11  declared entries, named by service level and test
+#   region     0..4   nozzle, shell, head, support, flange
+#   material   0..2   SA-508 Gr.3 Cl.1, SA-533 Type B Cl.1, 316L
+#   method     0..1   design by formula, design by analysis
+# Raw: 3 x 12 x 5 x 3 x 2 = 1,080 combinations.
+#
+# Declared entries:
+#   0  design                 P_des + D
+#   1  Level A                P_o + D + T
+#   2  Level B                P_o + D + T + OBE
+#   3  Level C                P_o + D + T + SSE
+#   4  Level D                P_o + D + T + SSE faulted
+#   5  hydrostatic test       1.25 P_des
+#   6  pneumatic test         1.10 P_des
+#   7  Level A, fatigue       P_o + D + T + OBE, fatigue evaluation
+#   8  Level B, relief valve  P_o + D + T + OBE + SRV
+#   9  Level C, pipe break    P_o + D + T + SSE + pipe break
+#  10  Level D, pipe break    P_o + D + T + SSE faulted + pipe break
+#  11  design with OBE        P_des + D + OBE
+#
+# Rules, encoded into the enumeration so a rejected combination is never
+# emitted:
+#   region -> material   in this space a support is 316L only; a nozzle and a
+#                        flange take SA-508 or 316L; a shell and a head take
+#                        SA-508 or SA-533
+#   load_case -> method  in this space the hydrostatic and pneumatic test
+#                        entries require design by analysis; every other entry
+#                        admits both
+#
+# Admissible: 3 x (2+2+2+1+2) x (10 x 2 + 2 x 1) = 3 x 9 x 22 = 594.
+# Rejected:   1,080 - 594 = 486.
+#
+# Whether each admissible case was run and met its allowables is a separate
+# input. This spec carries the case list, not the analysis results.
+
+target: smr_nsss_case_space
+
+fields:
+  revision:
+    values: [0, 1, 2]
+  load_case:
+    values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+  region:
+    values: [0, 1, 2, 3, 4]
+  material:
+    values: [0, 1, 2]
+  method:
+    values: [0, 1]
+
+constraints:
+  - type: cross
+    field_a: "region"
+    field_b: "material"
+    mapping:
+      0: [0, 2]   # nozzle: SA-508 Gr.3 Cl.1, 316L
+      1: [0, 1]   # shell:  SA-508 Gr.3 Cl.1, SA-533 Type B Cl.1
+      2: [0, 1]   # head:   SA-508 Gr.3 Cl.1, SA-533 Type B Cl.1
+      3: [2]      # support: 316L in this space
+      4: [0, 2]   # flange: SA-508 Gr.3 Cl.1, 316L
+  - type: cross
+    field_a: "load_case"
+    field_b: "method"
+    mapping:
+      5: [1]      # hydrostatic test: design by analysis in this space
+      6: [1]      # pneumatic test:   design by analysis in this space
+
+projector:
+  type: sum
