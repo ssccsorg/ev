@@ -167,14 +167,15 @@ EV="./target/release/ev"
 
 # ── Step 5: Run channels ──────────────────────────────────────────────
 
-# Decode the Fact envelope that `ev verify --format json` prints. The payload
-# is an opaque byte vector carrying the VerificationReport JSON; each result
-# row contributes its projection, or REJECT when the combination failed.
+# Decode the Fact envelope that `ev verify --format json` prints. The payload is
+# base64 over the VerificationReport JSON; each result row contributes its
+# projection, or REJECT when the combination failed. The rows are opt-in, so the
+# run below asks for them.
 CHANNEL_ROWS=$(cat <<'PY'
-import json, sys
+import base64, json, sys
 
 fact = json.load(sys.stdin)
-report = json.loads(bytes(fact["payload"]).decode())
+report = json.loads(base64.b64decode(fact["payload"]))
 rows = [str(r["projection"]) if r["passed"] else "REJECT" for r in report["results"]]
 print(",".join(rows))
 PY
@@ -188,7 +189,7 @@ run_channel() {
 
     local output ev_fmt
     set +e
-    output=$("$EV" verify --target "$yaml" --format json 2>&1)
+    output=$("$EV" verify --target "$yaml" --format json --rows 2>&1)
     set -e
 
     ev_fmt=$(echo "$output" | python3 -c "$CHANNEL_ROWS" 2>/dev/null) || ev_fmt=""

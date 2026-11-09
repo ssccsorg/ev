@@ -116,7 +116,7 @@ verify_synth() {
     # Fact envelope must contain fact_type; status is inside payload
     grep -q '"fact_type": "synthesis_result"' "$tmpf" || { cat "$tmpe"; echo "FAILED: missing fact_type"; exit 1; }
     # Check that payload is non-empty and contains status='ok'
-    python3 -c "import json,sys; d=json.load(open('$tmpf')); p=json.loads(bytes(d['payload']).decode()); assert p['status']=='ok', f'status: {p[\"status\"]}'; assert p['gate_count'] is not None, 'gate_count is null (stat -json parsing)'" || { cat "$tmpe"; echo "FAILED: synthesis payload incomplete"; exit 1; }
+    python3 -c "import base64,json,sys; d=json.load(open('$tmpf')); p=json.loads(base64.b64decode(d['payload'])); assert p['status']=='ok', f'status: {p[\"status\"]}'; assert p['gate_count'] is not None, 'gate_count is null (stat -json parsing)'" || { cat "$tmpe"; echo "FAILED: synthesis payload incomplete"; exit 1; }
     echo "  ok"
     rm -f "$tmpf" "$tmpe"
 
@@ -206,7 +206,7 @@ verify_fixtures() {
     echo "=== json output ==="
     local json_out
     json_out=$($EV verify --target "$MIXED" --json 2>/dev/null || true)
-    echo "  $(echo "$json_out" | python3 -c "import sys,json; d=json.load(sys.stdin); p=json.loads(bytes(d['payload']).decode()); print('Total: %d, Passed: %d, Failed: %d' % (p['total'], p['passed'], p['failed']))" 2>/dev/null || echo 'parse error')"
+    echo "  $(echo "$json_out" | python3 -c "import base64,json,sys; d=json.load(sys.stdin); p=json.loads(base64.b64decode(d['payload'])); print('Total: %d, Passed: %d, Failed: %d' % (p['total'], p['passed'], p['failed']))" 2>/dev/null || echo 'parse error')"
 }
 
 # Time a command and print elapsed time.
