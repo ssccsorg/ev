@@ -1,5 +1,7 @@
 # Exhaustive verification by coordinate
 
+![Demo](./demo.gif)
+
 An example of exhaustive state-space verification read as coordinates instead of
 scanned. The space is declared (fields and domains), the rules are declared, and
 each admissible point is classified from its own coordinates; a rejected
