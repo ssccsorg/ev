@@ -387,6 +387,8 @@ Fixture Provenance table; keep the counts in step between the two.
 
 ## Documentation
 
+- Write for the reader the document is for, not as a report back to the team: no account of what was received, attempted, or is planned next, and no confession of process. State the subject, what it does, what it does not cover, and the evidence.
+
 Public documentation of record lives in the ssccs corpus,
 `ssccs/docs/projects/ev/`, published as https://docs.ssccs.org/projects/ev/.
 `ev/docs` holds private development notes only; see `docs/README.md`.
