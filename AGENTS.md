@@ -69,7 +69,7 @@ src/
                     feature = "riscv")
 benches/bench.rs    criterion reference, fixture table in the module doc
 tests/              integration tests, fixtures under tests/fixtures/
-docs/               private devlog only (see Documentation)
+docs/               the development record (see Documentation)
 ```
 
 The README carries the same tree in user-facing form. Keep the two in step
