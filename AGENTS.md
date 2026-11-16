@@ -391,7 +391,7 @@ Fixture Provenance table; keep the counts in step between the two.
 
 Public documentation of record lives in the ssccs corpus,
 `ssccs/docs/projects/ev/`, published as https://docs.ssccs.org/projects/ev/.
-`ev/docs` holds private development notes only; see `docs/README.md`.
+`ev/docs` holds the development record; see `docs/README.md`.
 Published numbers live in the corpus, not here.
 
 ## Dependency Note

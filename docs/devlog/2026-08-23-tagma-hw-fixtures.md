@@ -112,6 +112,6 @@ syllable (offset 11171, i 18, m 20, f 27).
 - ev issue #47: Tagma hw RTL fixture specs: feasible verification YAML specs and plan
 - ev issue #46: Tagma decoder execution path verification: ev as an independent channel
 - syntagma issue #48: hw: Tagma decoder RTL, FPGA verification, and standard cell synthesis report
-- syntagma verification devlog: `docs/devlogs/hw/2026-08-14-verification.md`
+- syntagma verification record, moved out of the public tree
 - golden anchor pattern: ev issues #25 and #28, `ssccs/poc/baremetal_riscv/sv`
 - Tagma whitepaper: https://doi.org/10.5281/zenodo.21302508

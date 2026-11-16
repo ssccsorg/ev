@@ -10,23 +10,22 @@ and what is now pinned.
 
 The public documentation of record for ev is now `ssccs/docs/projects/ev/`
 (`index.qmd`, `cva6.qmd`, `ibex.qmd`, `partnerships/exa-aws.qmd`), published
-as https://docs.ssccs.org/projects/ev/, and the Claude-readable artifact at
-`s3://ssccs-nexus-af/ev/docs` comes from that corpus.
+as https://docs.ssccs.org/projects/ev/.
 
 The ev repository kept the machinery of its own retired site, and the
 machinery no longer resolved:
 
 | Removed | Why |
 |---|---|
-| `.github/workflows/build-docs.yml` | Published `ev-docs` to Cloudflare Pages, synced artifacts to R2, and dispatched the nexus build, all for a site with no pages left in `docs/` |
+| `.github/workflows/build-docs.yml` | Published the docs site, synced artifacts to object storage, and dispatched the nexus build, all for a site with no pages left in `docs/` |
 | `docs/_quarto-website.yml` | Declared `site-url: https://ev.ssccs.org` and a sidebar whose first entry, `index.qmd`, had moved to the corpus |
 | `docs/_quarto.yml`, `docs/build.yml` | Site project and target configuration, including a pre-build step against a sibling `../poc/...` checkout that the CI workspace never provided |
 | `docs/build.sh`, `docs/_quarto_pre-render.py` | `sdb build` invocation and metadata pre-render for the retired site |
 | `docs/_include/` | Partials for the retired site; the corpus pages resolve their own `../../_include/` |
 | `docs/arch/generate.py` | Generated a site page that consumed the removed partials |
 
-`docs/README.md` now states the scope: private notes only, public
-documentation belongs to the corpus. `docs/devlog/` is unchanged.
+`docs/README.md` states the scope: this directory is the development record,
+and public documentation belongs to the corpus. `docs/devlog/` is unchanged.
 
 ## The synthetic fixture no longer claims to be Ibex hardware
 
