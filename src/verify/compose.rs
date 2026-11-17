@@ -596,8 +596,8 @@ impl StructuralEnum {
     /// Returns None if the product overflows usize.
     pub fn total_combinations(&self) -> Option<usize> {
         let mut total: usize = 1;
-        for i in 0..self.allowed.len() {
-            total = total.checked_mul(self.allowed[i].len())?;
+        for allowed in &self.allowed {
+            total = total.checked_mul(allowed.len())?;
         }
         Some(total)
     }
