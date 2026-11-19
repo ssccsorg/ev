@@ -33,8 +33,8 @@ RUN ln -sf /usr/bin/riscv64-linux-gnu-gcc /usr/local/bin/riscv64-unknown-elf-gcc
 # Verify cross-compiler
 RUN echo 'int main(){}' | riscv64-unknown-elf-gcc -x c - -o /tmp/test && rm /tmp/test
 
-# Spike from source
-RUN git clone https://github.com/riscv-software-src/riscv-isa-sim.git /tmp/spike \
+# Spike from source. The softfloat header Makefile needs comes from a submodule.
+RUN git clone --recurse-submodules https://github.com/riscv-software-src/riscv-isa-sim.git /tmp/spike \
     && cd /tmp/spike && mkdir build && cd build \
     && ../configure --prefix=/usr/local && make -j$(nproc) && make install \
     && rm -rf /tmp/spike
